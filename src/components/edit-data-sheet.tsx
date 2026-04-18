@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Upload, Download, CheckCircle2, XCircle, FileJson } from "lucide-react";
 import { type SalesData } from "@/lib/sales-data";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   onClose: () => void;
   onSave: (next: SalesData) => void;
 }
+
+type DropStatus = "idle" | "over" | "success" | "error";
 
 function Field({ label, value, onChange }: { label: string; value: string | number; onChange: (v: string) => void }) {
   return (
@@ -41,11 +44,76 @@ function JsonField({ label, value, onChange }: { label: string; value: unknown; 
 export function EditDataSheet({ open, data, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<SalesData>(data);
   const [saved, setSaved] = useState(false);
+  const [dropStatus, setDropStatus] = useState<DropStatus>("idle");
+  const [dropMessage, setDropMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (open) setDraft(data); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) { setDraft(data); setDropStatus("idle"); setDropMessage(""); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── File parsing ─────────────────────────────────────────────────────────────
+  const processFile = useCallback((file: File) => {
+    if (!file.name.endsWith(".json")) {
+      setDropStatus("error");
+      setDropMessage("Only .json files are supported. Download the template to get started.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = JSON.parse(e.target?.result as string) as SalesData;
+        // Basic shape check
+        if (!parsed.dashboard || !parsed.pipeline || !parsed.ads || !parsed.reps) {
+          throw new Error("Missing required sections");
+        }
+        setDraft(parsed);
+        setDropStatus("success");
+        setDropMessage(`"${file.name}" loaded — review and hit Save.`);
+      } catch {
+        setDropStatus("error");
+        setDropMessage("Couldn't parse that file. Make sure it matches the template format.");
+      }
+    };
+    reader.readAsText(file);
+  }, []);
+
+  // ── Drag handlers ─────────────────────────────────────────────────────────────
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDropStatus("over");
+  }
+  function onDragLeave() {
+    if (dropStatus === "over") setDropStatus("idle");
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }
+  function onFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+    e.target.value = "";
+  }
+
+  // ── Download current data as JSON ────────────────────────────────────────────
+  function handleDownload() {
+    const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sns-dashboard.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Save ─────────────────────────────────────────────────────────────────────
+  function handleSave() {
+    onSave(draft);
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 900);
+  }
 
   const n = (v: string) => parseFloat(v) || 0;
-
   const setD = (k: keyof SalesData["dashboard"], v: string) =>
     setDraft((d) => ({ ...d, dashboard: { ...d.dashboard, [k]: n(v) } }));
   const setP = (k: keyof SalesData["pipeline"], v: string) =>
@@ -61,22 +129,66 @@ export function EditDataSheet({ open, data, onClose, onSave }: Props) {
     } catch { /* ignore invalid JSON while typing */ }
   };
 
-  function handleSave() {
-    onSave(draft);
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 900);
-  }
+  // ── Drop zone styles ──────────────────────────────────────────────────────────
+  const dropBorder = {
+    idle:    "border-border hover:border-orange-500/50",
+    over:    "border-orange-500 bg-orange-500/5",
+    success: "border-emerald-500 bg-emerald-500/5",
+    error:   "border-red-500 bg-red-500/5",
+  }[dropStatus];
+
+  const dropIcon = {
+    idle:    <Upload className="h-5 w-5 text-muted-foreground" />,
+    over:    <FileJson className="h-5 w-5 text-orange-400" />,
+    success: <CheckCircle2 className="h-5 w-5 text-emerald-400" />,
+    error:   <XCircle className="h-5 w-5 text-red-400" />,
+  }[dropStatus];
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-lg bg-background border-border overflow-y-auto">
-        <SheetHeader className="mb-5">
+        <SheetHeader className="mb-4">
           <SheetTitle className="text-base font-bold">Edit Dashboard Data</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">
-            Update any numbers and hit Save — changes persist in your browser.
+            Drop a JSON file to update everything at once, or edit fields manually below.
           </SheetDescription>
         </SheetHeader>
 
+        {/* ── Drop Zone ── */}
+        <div
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`mb-5 rounded-xl border-2 border-dashed p-5 flex flex-col items-center gap-2 cursor-pointer transition-all duration-200 ${dropBorder}`}
+        >
+          <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={onFileInput} />
+          {dropIcon}
+          {dropStatus === "idle" && (
+            <>
+              <p className="text-xs font-medium text-foreground">Drop your JSON file here</p>
+              <p className="text-[11px] text-muted-foreground">or click to browse</p>
+            </>
+          )}
+          {dropStatus === "over" && (
+            <p className="text-xs font-medium text-orange-400">Release to load file</p>
+          )}
+          {dropStatus === "success" && (
+            <p className="text-xs font-medium text-emerald-400">{dropMessage}</p>
+          )}
+          {dropStatus === "error" && (
+            <p className="text-xs font-medium text-red-400 text-center">{dropMessage}</p>
+          )}
+        </div>
+
+        {/* ── Download template ── */}
+        <Button variant="outline" size="sm" onClick={handleDownload}
+          className="w-full mb-5 gap-2 text-xs border-border text-muted-foreground hover:text-foreground h-8">
+          <Download className="h-3.5 w-3.5" />
+          Download current data as template
+        </Button>
+
+        {/* ── Manual fields ── */}
         <Tabs defaultValue="dashboard">
           <TabsList className="bg-muted border border-border mb-5 h-8 w-full">
             {["dashboard", "pipeline", "ads", "reps"].map((t) => (
@@ -85,17 +197,17 @@ export function EditDataSheet({ open, data, onClose, onSave }: Props) {
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-3">
-            <Field label="Cash Collected MTD ($)"  value={draft.dashboard.cashCollectedMTD}    onChange={(v) => setD("cashCollectedMTD", v)} />
-            <Field label="Net Revenue MTD ($)"      value={draft.dashboard.netRevenueMTD}        onChange={(v) => setD("netRevenueMTD", v)} />
-            <Field label="Leads This Month"         value={draft.dashboard.leadsThisMonth}       onChange={(v) => setD("leadsThisMonth", v)} />
-            <Field label="Total Deals Closed"       value={draft.dashboard.totalDealsClosedMTD}  onChange={(v) => setD("totalDealsClosedMTD", v)} />
-            <Field label="Cost Per Close ($)"       value={draft.dashboard.costPerClose}         onChange={(v) => setD("costPerClose", v)} />
-            <Field label="MRR ($)"                  value={draft.dashboard.mrr}                  onChange={(v) => setD("mrr", v)} />
-            <Field label="Total Refund ($)"         value={draft.dashboard.totalRefund}          onChange={(v) => setD("totalRefund", v)} />
-            <Field label="Total Refund %"           value={draft.dashboard.totalRefundPct}       onChange={(v) => setD("totalRefundPct", v)} />
-            <JsonField label='Revenue Over Time — [{"date":"","amount":0}]'   value={draft.dashboard.revenueOverTime} onChange={(v) => setJson("dashboard", "revenueOverTime", v)} />
-            <JsonField label='Net by Product — [{"name":"","amount":0}]'      value={draft.dashboard.netByProduct}    onChange={(v) => setJson("dashboard", "netByProduct", v)} />
-            <JsonField label='Net by Processor — [{"name":"","amount":0}]'    value={draft.dashboard.netByProcessor}  onChange={(v) => setJson("dashboard", "netByProcessor", v)} />
+            <Field label="Cash Collected MTD ($)"  value={draft.dashboard.cashCollectedMTD}   onChange={(v) => setD("cashCollectedMTD", v)} />
+            <Field label="Net Revenue MTD ($)"      value={draft.dashboard.netRevenueMTD}       onChange={(v) => setD("netRevenueMTD", v)} />
+            <Field label="Leads This Month"         value={draft.dashboard.leadsThisMonth}      onChange={(v) => setD("leadsThisMonth", v)} />
+            <Field label="Total Deals Closed"       value={draft.dashboard.totalDealsClosedMTD} onChange={(v) => setD("totalDealsClosedMTD", v)} />
+            <Field label="Cost Per Close ($)"       value={draft.dashboard.costPerClose}        onChange={(v) => setD("costPerClose", v)} />
+            <Field label="MRR ($)"                  value={draft.dashboard.mrr}                 onChange={(v) => setD("mrr", v)} />
+            <Field label="Total Refund ($)"         value={draft.dashboard.totalRefund}         onChange={(v) => setD("totalRefund", v)} />
+            <Field label="Total Refund %"           value={draft.dashboard.totalRefundPct}      onChange={(v) => setD("totalRefundPct", v)} />
+            <JsonField label='Revenue Over Time — [{"date":"","amount":0}]'  value={draft.dashboard.revenueOverTime} onChange={(v) => setJson("dashboard", "revenueOverTime", v)} />
+            <JsonField label='Net by Product — [{"name":"","amount":0}]'     value={draft.dashboard.netByProduct}    onChange={(v) => setJson("dashboard", "netByProduct", v)} />
+            <JsonField label='Net by Processor — [{"name":"","amount":0}]'   value={draft.dashboard.netByProcessor}  onChange={(v) => setJson("dashboard", "netByProcessor", v)} />
           </TabsContent>
 
           <TabsContent value="pipeline" className="space-y-3">
@@ -123,9 +235,9 @@ export function EditDataSheet({ open, data, onClose, onSave }: Props) {
             <Field label="Impressions"        value={draft.ads.impressions}  onChange={(v) => setA("impressions", v)} />
             <Field label="Reach"              value={draft.ads.reach}        onChange={(v) => setA("reach", v)} />
             <Field label="Instagram CPL ($)"  value={draft.ads.instaCPL}     onChange={(v) => setA("instaCPL", v)} />
-            <JsonField label='Leads Over Time — [{"date":"","leads":0}]' value={draft.ads.leadsOverTime} onChange={(v) => setJson("ads", "leadsOverTime", v)} />
+            <JsonField label='Leads Over Time — [{"date":"","leads":0}]'       value={draft.ads.leadsOverTime}   onChange={(v) => setJson("ads", "leadsOverTime", v)} />
             <JsonField label='Leads by Campaign — [{"campaign":"","leads":0}]' value={draft.ads.leadsByCampaign} onChange={(v) => setJson("ads", "leadsByCampaign", v)} />
-            <JsonField label='Top Ads — [{"name":"","leads":0,"cpl":0,"roas":0}]' value={draft.ads.topAds} onChange={(v) => setJson("ads", "topAds", v)} />
+            <JsonField label='Top Ads — [{"name":"","leads":0,"cpl":0,"roas":0}]' value={draft.ads.topAds}      onChange={(v) => setJson("ads", "topAds", v)} />
           </TabsContent>
 
           <TabsContent value="reps" className="space-y-3">
