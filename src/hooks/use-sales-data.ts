@@ -19,8 +19,7 @@ export function useSalesData() {
   const [data, setData] = useState<SalesData>(loadLocal);
   const [loading, setLoading] = useState(true);
 
-  // Hydrate from KV on mount
-  useEffect(() => {
+  const fetchRemote = useCallback((isInitial = false) => {
     fetch("/api/data")
       .then((r) => r.json())
       .then((remote: SalesData) => {
@@ -28,8 +27,15 @@ export function useSalesData() {
         try { localStorage.setItem(LS_KEY, JSON.stringify(remote)); } catch { /* ignore */ }
       })
       .catch(() => { /* stay on local cache */ })
-      .finally(() => setLoading(false));
+      .finally(() => { if (isInitial) setLoading(false); });
   }, []);
+
+  // Hydrate on mount + poll every 30s for team sync
+  useEffect(() => {
+    fetchRemote(true);
+    const id = setInterval(() => fetchRemote(false), 30_000);
+    return () => clearInterval(id);
+  }, [fetchRemote]);
 
   const update = useCallback((next: SalesData) => {
     setData(next);
