@@ -35,13 +35,18 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 }
 
 export default function Dashboard() {
-  const { data, update, reset } = useSalesData();
+  const { data, update, reset, loading } = useSalesData();
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const { dashboard: d, pipeline: p, ads: a, reps: r } = data;
 
   return (
     <div className="min-h-screen bg-background">
+      {loading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="h-6 w-6 rounded-full border-2 border-orange-500 border-t-transparent animate-spin" />
+        </div>
+      )}
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
