@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, TrendingUp, RotateCcw, LogOut } from "lucide-react";
+import { Edit3, TrendingUp, RotateCcw, LogOut, Upload } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,22 @@ export default function Dashboard() {
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const { dashboard: d, pipeline: p, ads: a, reps: r } = data;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (!parsed.dashboard || !parsed.pipeline || !parsed.ads || !parsed.reps) return;
+        update(parsed);
+      } catch { /* bad file — silently ignore */ }
+    };
+    reader.readAsText(file);
+  }, [update]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -60,10 +76,16 @@ export default function Dashboard() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
             <Button size="sm" variant="ghost" onClick={reset}
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}
+              className="gap-1.5 text-xs h-8 px-3 border-orange-500/40 text-orange-400 hover:bg-orange-500/10 hover:text-orange-300">
+              <Upload className="h-3.5 w-3.5" />
+              Upload JSON
             </Button>
             <Button size="sm" onClick={() => setEditOpen(true)}
               className="gap-1.5 text-xs h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white">
