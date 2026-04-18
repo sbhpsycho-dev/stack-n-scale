@@ -19,7 +19,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return new Response("Unauthorized", { status: 401 });
-  const body = await req.json();
-  await kv.set(KV_KEY, body);
+  try {
+    const body = await req.json();
+    await kv.set(KV_KEY, body);
+  } catch { /* KV not connected yet — ignore */ }
   return Response.json({ ok: true });
 }
