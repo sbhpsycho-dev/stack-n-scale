@@ -1,4 +1,3 @@
-import { kv } from "@vercel/kv";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { SEED } from "@/lib/sales-data";
@@ -15,6 +14,7 @@ export async function GET() {
     : clientKey(session.user.clientId!);
 
   try {
+    const { kv } = await import("@vercel/kv");
     const data = (await kv.get(key)) ?? SEED;
     return Response.json(data);
   } catch {
@@ -31,6 +31,7 @@ export async function POST(req: Request) {
     : clientKey(session.user.clientId!);
 
   try {
+    const { kv } = await import("@vercel/kv");
     const body = await req.json();
     await kv.set(key, body);
   } catch { /* KV not connected — ignore */ }
