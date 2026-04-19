@@ -92,7 +92,7 @@ export default function Dashboard() {
       setSyncingSource(null);
     }
   }
-  const { dashboard: d, pipeline: p, ads: a, reps: r, clients } = data;
+  const { dashboard: d, pipeline: p, ads: a, reps: r, clients = [] } = data;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Manage Clients state (admin only)

@@ -5,7 +5,7 @@ const authMiddleware = withAuth({
   pages: { signIn: "/login" },
 });
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   return (authMiddleware as (req: NextRequest) => Response)(request);
 }
 
