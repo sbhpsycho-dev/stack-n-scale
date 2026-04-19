@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
