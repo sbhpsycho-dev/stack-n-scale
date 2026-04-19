@@ -198,12 +198,10 @@ export default function Dashboard() {
               <Upload className="h-3.5 w-3.5" />
               Upload JSON
             </Button>
-            {!isAdmin && (
-              <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}
-                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
-                <Settings className="h-3.5 w-3.5" />
-              </Button>
-            )}
+            <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
             <Button size="sm" onClick={() => setEditOpen(true)}
               className="gap-1.5 text-xs h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white">
               <Edit3 className="h-3.5 w-3.5" />
@@ -723,7 +721,7 @@ export default function Dashboard() {
 
       <EditDataSheet open={editOpen} data={data} onClose={() => setEditOpen(false)}
         onSave={(next) => { update(next); setEditOpen(false); }} />
-      {!isAdmin && <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

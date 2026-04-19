@@ -361,9 +361,39 @@ function ApiKeysTab() {
   );
 }
 
+// ─── Admin Settings View ─────────────────────────────────────────────────────
+function AdminSettingsView() {
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Account</p>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs text-muted-foreground">Role</Label>
+            <div className="mt-1">
+              <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-xs">Admin</Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Password</p>
+        <div className="bg-muted/50 border border-border rounded-xl p-4">
+          <p className="text-sm font-medium mb-1">Admin password is managed via environment variables</p>
+          <p className="text-xs text-muted-foreground">
+            To change it, update <code className="bg-muted px-1 py-0.5 rounded text-orange-400">SNS_PASSWORD</code> in your Vercel project settings under Environment Variables, then redeploy.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export function SettingsSheet({ open, onClose }: Props) {
   const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const clientId = session?.user?.clientId ?? "";
   const clientName = session?.user?.name ?? "";
 
@@ -380,29 +410,33 @@ export function SettingsSheet({ open, onClose }: Props) {
         </SheetHeader>
 
         <div className="px-5 py-4">
-          <Tabs defaultValue="account">
-            <TabsList className="bg-muted border border-border h-8 mb-5 w-full">
-              <TabsTrigger value="account" className="text-xs flex-1 gap-1">
-                <User className="h-3 w-3" /> Account
-              </TabsTrigger>
-              <TabsTrigger value="password" className="text-xs flex-1 gap-1">
-                <KeyRound className="h-3 w-3" /> Password
-              </TabsTrigger>
-              <TabsTrigger value="apikeys" className="text-xs flex-1 gap-1">
-                <Plug className="h-3 w-3" /> API Keys
-              </TabsTrigger>
-            </TabsList>
+          {isAdmin ? (
+            <AdminSettingsView />
+          ) : (
+            <Tabs defaultValue="account">
+              <TabsList className="bg-muted border border-border h-8 mb-5 w-full">
+                <TabsTrigger value="account" className="text-xs flex-1 gap-1">
+                  <User className="h-3 w-3" /> Account
+                </TabsTrigger>
+                <TabsTrigger value="password" className="text-xs flex-1 gap-1">
+                  <KeyRound className="h-3 w-3" /> Password
+                </TabsTrigger>
+                <TabsTrigger value="apikeys" className="text-xs flex-1 gap-1">
+                  <Plug className="h-3 w-3" /> API Keys
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="account">
-              <AccountTab clientId={clientId} initialName={clientName} />
-            </TabsContent>
-            <TabsContent value="password">
-              <PasswordTab />
-            </TabsContent>
-            <TabsContent value="apikeys">
-              <ApiKeysTab />
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="account">
+                <AccountTab clientId={clientId} initialName={clientName} />
+              </TabsContent>
+              <TabsContent value="password">
+                <PasswordTab />
+              </TabsContent>
+              <TabsContent value="apikeys">
+                <ApiKeysTab />
+              </TabsContent>
+            </Tabs>
+          )}
         </div>
       </SheetContent>
     </Sheet>
