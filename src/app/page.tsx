@@ -21,6 +21,7 @@ import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/c
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
 import { type ClientIntegrations } from "@/lib/integrations";
 import { SEED } from "@/lib/sales-data";
+import { SettingsSheet } from "@/components/settings-sheet";
 
 const tabAnim: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -47,6 +48,7 @@ export default function Dashboard() {
 
   const { data, update, reset, loading } = useSalesData(clientId);
   const [editOpen, setEditOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
 
   // Integrations state
@@ -197,10 +199,9 @@ export default function Dashboard() {
               Upload JSON
             </Button>
             {!isAdmin && (
-              <Button size="sm" variant="ghost" onClick={() => router.push("/setup")}
+              <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}
                 className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
                 <Settings className="h-3.5 w-3.5" />
-                Setup
               </Button>
             )}
             <Button size="sm" onClick={() => setEditOpen(true)}
@@ -722,6 +723,7 @@ export default function Dashboard() {
 
       <EditDataSheet open={editOpen} data={data} onClose={() => setEditOpen(false)}
         onSave={(next) => { update(next); setEditOpen(false); }} />
+      {!isAdmin && <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }
