@@ -1,4 +1,3 @@
-import { kv } from "@vercel/kv";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { NextAuthOptions } from "next-auth";
 import { type ClientMeta, SEED_REGISTRY } from "@/lib/sales-data";
@@ -19,8 +18,9 @@ export const authOptions: NextAuthOptions = {
           return { id: "admin", name: "Evan", role: "admin", clientId: null };
         }
 
-        // Client registry check
+        // Client registry check — lazy KV import avoids Invalid URL during static prerender
         try {
+          const { kv } = await import("@vercel/kv");
           const registry = (await kv.get<ClientMeta[]>("sns-clients")) ?? SEED_REGISTRY;
           const client = registry.find((c) => c.password === pw);
           if (client) {
