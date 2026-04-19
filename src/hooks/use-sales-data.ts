@@ -28,10 +28,26 @@ export function useSalesData(clientId: string | null) {
       fetch("/api/data")
         .then((r) => r.json())
         .then((remote: SalesData) => {
-          setData(remote);
-          try {
-            localStorage.setItem(lsKey(clientId), JSON.stringify(remote));
-          } catch { /* ignore */ }
+          const local = loadLocal(clientId);
+          const remoteIsBlank = remote.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD
+            && remote.dashboard.leadsThisMonth === SEED.dashboard.leadsThisMonth;
+          const localHasData = local.dashboard.cashCollectedMTD !== SEED.dashboard.cashCollectedMTD
+            || local.dashboard.leadsThisMonth !== SEED.dashboard.leadsThisMonth;
+
+          if (remoteIsBlank && localHasData) {
+            // KV has no real data but localStorage does — push local up to KV
+            fetch("/api/data", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(local),
+            }).catch(() => {});
+            setData(local);
+          } else {
+            setData(remote);
+            try {
+              localStorage.setItem(lsKey(clientId), JSON.stringify(remote));
+            } catch { /* ignore */ }
+          }
         })
         .catch(() => { /* stay on local cache */ })
         .finally(() => { if (isInitial) setLoading(false); });
