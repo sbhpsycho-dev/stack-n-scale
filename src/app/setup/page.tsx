@@ -74,6 +74,8 @@ export default function SetupPage() {
 
   function finish() {
     update(draft);
+    // Mark setup complete so the dashboard doesn't redirect back here
+    if (clientId) localStorage.setItem(`sns-setup-done-${clientId}`, "1");
     router.push("/");
   }
 

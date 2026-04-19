@@ -56,11 +56,13 @@ export default function Dashboard() {
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 
-  // Auto-redirect new (unseeded) clients to setup wizard
+  // Auto-redirect new clients to setup wizard (only if they haven't completed it)
   const redirectedRef = useRef(false);
   useEffect(() => {
     if (redirectedRef.current || loading || isAdmin || !clientId) return;
-    if (data.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD &&
+    const setupDone = localStorage.getItem(`sns-setup-done-${clientId}`) === "1";
+    if (!setupDone &&
+        data.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD &&
         data.dashboard.leadsThisMonth === SEED.dashboard.leadsThisMonth) {
       redirectedRef.current = true;
       router.push("/setup");
