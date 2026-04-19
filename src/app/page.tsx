@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, TrendingUp, RotateCcw, LogOut, Upload, TrendingDown, Minus } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { Edit3, TrendingUp, RotateCcw, LogOut, Upload, TrendingDown, Minus, UserPlus } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { MetricCard } from "@/components/metric-card";
 import { EditDataSheet } from "@/components/edit-data-sheet";
 import { useSalesData } from "@/hooks/use-sales-data";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart, CheckInTrendChart } from "@/components/charts/revenue-chart";
 import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/funnel-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
@@ -35,11 +37,45 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 }
 
 export default function Dashboard() {
-  const { data, update, reset, loading } = useSalesData();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+  const clientId = isAdmin ? "admin" : (session?.user?.clientId ?? null);
+
+  const { data, update, reset, loading } = useSalesData(clientId);
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const { dashboard: d, pipeline: p, ads: a, reps: r, clients } = data;
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Manage Clients state (admin only)
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientPassword, setNewClientPassword] = useState("");
+  const [clientSaving, setClientSaving] = useState(false);
+  const [clientMsg, setClientMsg] = useState("");
+
+  const addClient = useCallback(async () => {
+    if (!newClientName.trim() || !newClientPassword.trim()) return;
+    setClientSaving(true);
+    setClientMsg("");
+    const id = newClientName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name: newClientName.trim(), password: newClientPassword.trim() }),
+      });
+      if (res.ok) {
+        setClientMsg(`Client "${newClientName.trim()}" added. They can log in with: ${newClientPassword.trim()}`);
+        setNewClientName("");
+        setNewClientPassword("");
+      } else {
+        setClientMsg("Failed to save — check connection.");
+      }
+    } catch {
+      setClientMsg("Network error.");
+    }
+    setClientSaving(false);
+  }, [newClientName, newClientPassword]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,9 +125,11 @@ export default function Dashboard() {
             <div className="h-7 w-7 rounded-lg bg-orange-500 flex items-center justify-center">
               <TrendingUp className="h-4 w-4 text-white" />
             </div>
-            <span className="font-bold text-sm tracking-wide">Stack N Scale</span>
+            <span className="font-bold text-sm tracking-wide">
+              {isAdmin ? "Stack N Scale" : (session?.user?.name ?? "Dashboard")}
+            </span>
             <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">
-              Sales Pipeline
+              {isAdmin ? "Admin" : "Sales Pipeline"}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -127,7 +165,7 @@ export default function Dashboard() {
             <TabsTrigger value="pipeline"  className="text-xs px-4">Pipeline</TabsTrigger>
             <TabsTrigger value="ads"       className="text-xs px-4">Ads</TabsTrigger>
             <TabsTrigger value="reps"      className="text-xs px-4">Rep Leaderboard</TabsTrigger>
-            <TabsTrigger value="master"    className="text-xs px-4">Master</TabsTrigger>
+            {isAdmin && <TabsTrigger value="master" className="text-xs px-4">Master</TabsTrigger>}
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -451,6 +489,49 @@ export default function Dashboard() {
                     <MetricCard label="Clients Paid"         value={paidCount}                     variant="green"  index={1} />
                     <MetricCard label="Clients Pending"      value={pendingCount}                   variant="default" index={2} />
                   </div>
+
+                  {/* Add Client */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <UserPlus className="h-4 w-4 text-orange-400" />
+                        Manage Client Access
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Client Name</Label>
+                          <Input
+                            value={newClientName}
+                            onChange={(e) => setNewClientName(e.target.value)}
+                            placeholder="e.g. Alpha Coaching"
+                            className="h-8 text-sm bg-muted border-border"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Login Password</Label>
+                          <Input
+                            value={newClientPassword}
+                            onChange={(e) => setNewClientPassword(e.target.value)}
+                            placeholder="e.g. alpha2026"
+                            className="h-8 text-sm bg-muted border-border"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          disabled={clientSaving || !newClientName.trim() || !newClientPassword.trim()}
+                          onClick={addClient}
+                          className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs"
+                        >
+                          {clientSaving ? "Saving…" : "Add Client"}
+                        </Button>
+                      </div>
+                      {clientMsg && (
+                        <p className="text-xs text-emerald-400 mt-3">{clientMsg}</p>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   {/* Client Health Heatmap */}
                   <ChartCard title="Client Health Heatmap">

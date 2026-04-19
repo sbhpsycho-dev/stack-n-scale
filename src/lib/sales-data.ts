@@ -1,5 +1,17 @@
 // Stack N Scale — types + seed data from dashboard PDF
 
+export type ClientMeta = {
+  id: string;       // URL-safe slug, e.g. "alpha-coaching"
+  name: string;     // Display name, e.g. "Alpha Coaching"
+  password: string; // Login password for this client
+};
+
+export const SEED_REGISTRY: ClientMeta[] = [
+  { id: "alpha-coaching",   name: "Alpha Coaching",   password: "alpha2026"   },
+  { id: "peak-performance", name: "Peak Performance", password: "peak2026"    },
+  { id: "momentum-media",   name: "Momentum Media",   password: "momentum2026" },
+];
+
 export type TimePoint    = { date: string; amount: number };
 export type NameAmount   = { name: string; amount: number };
 export type FunnelWeek   = { week: string; callsMade: number; callsAnswered: number; demosSet: number; demosShowed: number; pitched: number; closed: number };
