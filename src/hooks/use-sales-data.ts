@@ -41,7 +41,10 @@ export function useSalesData(clientId: string | null) {
 
   // Re-hydrate whenever clientId becomes known, then poll every 30s
   useEffect(() => {
-    if (clientId === null) return;
+    if (clientId === null) {
+      setLoading(false);
+      return;
+    }
     // Load from localStorage for this client immediately
     setData(loadLocal(clientId));
     fetchRemote(true);
