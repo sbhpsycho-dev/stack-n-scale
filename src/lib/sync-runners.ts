@@ -114,13 +114,23 @@ export async function syncStripe(clientId: string): Promise<void> {
     .map(([date, amount]) => ({ date, amount: parseFloat(amount.toFixed(2)) }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  // Last month cash for trend calculation
+  const lastMonthStart = Math.floor(new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime() / 1000);
+  const lastMonthEnd = Math.floor(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).getTime() / 1000);
+  let cashCollectedLastMonth = 0;
+  const lastMonthTxns = await stripe.balanceTransactions.list({ created: { gte: lastMonthStart, lte: lastMonthEnd }, type: "charge", limit: 100 });
+  lastMonthTxns.data.forEach((t) => { cashCollectedLastMonth += t.net / 100; });
+
   const existing = await getClientData(clientId);
   const totalRefundPct = cashCollectedMTD > 0 ? totalRefund / cashCollectedMTD : 0;
+  const netRevenueMTD = parseFloat((cashCollectedMTD - totalRefund).toFixed(2));
   await saveClientData(clientId, {
     ...existing,
     dashboard: {
       ...existing.dashboard,
       cashCollectedMTD: parseFloat(cashCollectedMTD.toFixed(2)),
+      cashCollectedLastMonth: parseFloat(cashCollectedLastMonth.toFixed(2)),
+      netRevenueMTD,
       mrr: parseFloat(mrr.toFixed(2)),
       totalRefund: parseFloat(totalRefund.toFixed(2)),
       totalRefundPct: parseFloat(totalRefundPct.toFixed(4)),
@@ -153,6 +163,9 @@ export async function syncGHL(clientId: string): Promise<void> {
   const totalOpps = opps.length;
   const closeRate = totalOpps > 0 ? parseFloat(((closed / totalOpps) * 100).toFixed(2)) : 0;
 
+  const existing = await getClientData(clientId);
+  const existingLeaderboard = existing.reps.leaderboard ?? [];
+
   const repMap: Record<string, { cashCollected: number; dealsClosed: number }> = {};
   opps.forEach((o) => {
     const rep = o.assignedTo ?? "Unassigned";
@@ -160,15 +173,39 @@ export async function syncGHL(clientId: string): Promise<void> {
     if (o.status === "won") { repMap[rep].dealsClosed += 1; repMap[rep].cashCollected += o.monetaryValue ?? 0; }
   });
   const leaderboard: Rep[] = Object.entries(repMap)
-    .map(([name, s]) => ({ name, callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, dealsClosed: s.dealsClosed, cashCollected: s.cashCollected, answerRate: 0 }))
+    .map(([name, s]) => {
+      const prev = existingLeaderboard.find((r) => r.name === name);
+      return {
+        name,
+        callsMade: prev?.callsMade ?? 0,
+        callsAnswered: prev?.callsAnswered ?? 0,
+        demosSet: prev?.demosSet ?? 0,
+        demosShowed: prev?.demosShowed ?? 0,
+        pitched: prev?.pitched ?? 0,
+        dealsClosed: s.dealsClosed,
+        cashCollected: s.cashCollected,
+        answerRate: prev?.answerRate ?? 0,
+      };
+    })
     .sort((a, b) => b.cashCollected - a.cashCollected);
 
-  const existing = await getClientData(clientId);
+  const topRepCash = leaderboard[0]?.cashCollected ?? existing.reps.topRepCash;
+  const totalRepCash = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
+  const totalRepDeals = leaderboard.reduce((s, r) => s + r.dealsClosed, 0);
+  const avgDealSize = totalRepDeals > 0 ? Math.round(totalRepCash / totalRepDeals) : existing.reps.avgDealSize;
+
   await saveClientData(clientId, {
     ...existing,
     dashboard: { ...existing.dashboard, leadsThisMonth, totalDealsClosedMTD: closed },
     pipeline: { ...existing.pipeline, closed, closeRate, demoToClose: closeRate, stageBreakdown },
-    reps: { ...existing.reps, dealClose: closed, ...(leaderboard.length > 0 ? { leaderboard } : {}) },
+    reps: {
+      ...existing.reps,
+      dealClose: closed,
+      closeRatePct: closeRate,
+      topRepCash,
+      avgDealSize,
+      ...(leaderboard.length > 0 ? { leaderboard } : {}),
+    },
   });
 }
 
@@ -192,22 +229,47 @@ export async function syncSheets(clientId: string): Promise<void> {
 
   type Setter = (d: SalesData, v: number) => SalesData;
   const FIELD_MAP: Record<string, Setter> = {
-    cashcollectedmtd: (d, v) => ({ ...d, dashboard: { ...d.dashboard, cashCollectedMTD: v } }),
-    netrevenuemtd: (d, v) => ({ ...d, dashboard: { ...d.dashboard, netRevenueMTD: v } }),
-    leadsthismonth: (d, v) => ({ ...d, dashboard: { ...d.dashboard, leadsThisMonth: v } }),
-    totaldealsclosedmtd: (d, v) => ({ ...d, dashboard: { ...d.dashboard, totalDealsClosedMTD: v } }),
-    mrr: (d, v) => ({ ...d, dashboard: { ...d.dashboard, mrr: v } }),
-    totalrefund: (d, v) => ({ ...d, dashboard: { ...d.dashboard, totalRefund: v } }),
-    monthlygoal: (d, v) => ({ ...d, dashboard: { ...d.dashboard, monthlyGoal: v } }),
-    callsmade: (d, v) => ({ ...d, pipeline: { ...d.pipeline, callsMade: v } }),
-    callsanswered: (d, v) => ({ ...d, pipeline: { ...d.pipeline, callsAnswered: v } }),
-    demosset: (d, v) => ({ ...d, pipeline: { ...d.pipeline, demosSet: v } }),
-    closed: (d, v) => ({ ...d, pipeline: { ...d.pipeline, closed: v } }),
+    // Dashboard
+    cashcollectedmtd:        (d, v) => ({ ...d, dashboard: { ...d.dashboard, cashCollectedMTD: v } }),
+    cashcollectedlastmonth:  (d, v) => ({ ...d, dashboard: { ...d.dashboard, cashCollectedLastMonth: v } }),
+    netrevenuemtd:           (d, v) => ({ ...d, dashboard: { ...d.dashboard, netRevenueMTD: v } }),
+    leadsthismonth:          (d, v) => ({ ...d, dashboard: { ...d.dashboard, leadsThisMonth: v } }),
+    totaldealsclosedmtd:     (d, v) => ({ ...d, dashboard: { ...d.dashboard, totalDealsClosedMTD: v } }),
+    mrr:                     (d, v) => ({ ...d, dashboard: { ...d.dashboard, mrr: v } }),
+    totalrefund:             (d, v) => ({ ...d, dashboard: { ...d.dashboard, totalRefund: v } }),
+    monthlygoal:             (d, v) => ({ ...d, dashboard: { ...d.dashboard, monthlyGoal: v } }),
+    costperclose:            (d, v) => ({ ...d, dashboard: { ...d.dashboard, costPerClose: v } }),
+    avgleadresponsemin:      (d, v) => ({ ...d, dashboard: { ...d.dashboard, avgLeadResponseTimeMin: v } }),
+    // Pipeline
+    callsmade:    (d, v) => ({ ...d, pipeline: { ...d.pipeline, callsMade: v } }),
+    callsanswered:(d, v) => ({ ...d, pipeline: { ...d.pipeline, callsAnswered: v } }),
+    demosset:     (d, v) => ({ ...d, pipeline: { ...d.pipeline, demosSet: v } }),
+    demosshowed:  (d, v) => ({ ...d, pipeline: { ...d.pipeline, demosShowed: v } }),
+    pitched:      (d, v) => ({ ...d, pipeline: { ...d.pipeline, pitched: v } }),
+    closed:       (d, v) => ({ ...d, pipeline: { ...d.pipeline, closed: v } }),
+    answerrate:   (d, v) => ({ ...d, pipeline: { ...d.pipeline, answerRate: v } }),
+    showrate:     (d, v) => ({ ...d, pipeline: { ...d.pipeline, showRate: v } }),
+    closerate:    (d, v) => ({ ...d, pipeline: { ...d.pipeline, closeRate: v } }),
+    demotoclose:  (d, v) => ({ ...d, pipeline: { ...d.pipeline, demoToClose: v } }),
+    // Ads
     totaladspend: (d, v) => ({ ...d, ads: { ...d.ads, totalAdSpend: v } }),
-    totalleads: (d, v) => ({ ...d, ads: { ...d.ads, totalLeads: v } }),
-    cpl: (d, v) => ({ ...d, ads: { ...d.ads, cpl: v } }),
-    roas: (d, v) => ({ ...d, ads: { ...d.ads, roas: v } }),
-    ctr: (d, v) => ({ ...d, ads: { ...d.ads, ctr: v } }),
+    totalleads:   (d, v) => ({ ...d, ads: { ...d.ads, totalLeads: v } }),
+    cpl:          (d, v) => ({ ...d, ads: { ...d.ads, cpl: v } }),
+    roas:         (d, v) => ({ ...d, ads: { ...d.ads, roas: v } }),
+    ctr:          (d, v) => ({ ...d, ads: { ...d.ads, ctr: v } }),
+    cpc:          (d, v) => ({ ...d, ads: { ...d.ads, cpc: v } }),
+    impressions:  (d, v) => ({ ...d, ads: { ...d.ads, impressions: v } }),
+    reach:        (d, v) => ({ ...d, ads: { ...d.ads, reach: v } }),
+    instacpl:     (d, v) => ({ ...d, ads: { ...d.ads, instaCPL: v } }),
+    // Reps
+    cashcollectedweek: (d, v) => ({ ...d, reps: { ...d.reps, cashCollectedWeek: v } }),
+    dealclose:         (d, v) => ({ ...d, reps: { ...d.reps, dealClose: v } }),
+    callsmadeweek:     (d, v) => ({ ...d, reps: { ...d.reps, callsMadeWeek: v } }),
+    rateof:            (d, v) => ({ ...d, reps: { ...d.reps, rateOf: v } }),
+    closeratepct:      (d, v) => ({ ...d, reps: { ...d.reps, closeRatePct: v } }),
+    showratepct:       (d, v) => ({ ...d, reps: { ...d.reps, showRatePct: v } }),
+    avgdealsize:       (d, v) => ({ ...d, reps: { ...d.reps, avgDealSize: v } }),
+    toprepcash:        (d, v) => ({ ...d, reps: { ...d.reps, topRepCash: v } }),
   };
 
   const existing = await getClientData(clientId);
@@ -225,6 +287,18 @@ export async function syncSheets(clientId: string): Promise<void> {
 
 export async function syncAll(clientId: string): Promise<void> {
   await Promise.allSettled([syncMeta(clientId), syncStripe(clientId), syncGHL(clientId), syncSheets(clientId)]);
+
+  // Derive costPerClose from merged data (requires both Meta spend and GHL closed count)
+  const merged = await getClientData(clientId);
+  const adSpend = merged.ads.totalAdSpend;
+  const dealsClosed = merged.dashboard.totalDealsClosedMTD;
+  if (adSpend > 0 && dealsClosed > 0) {
+    await saveClientData(clientId, {
+      ...merged,
+      dashboard: { ...merged.dashboard, costPerClose: parseFloat((adSpend / dealsClosed).toFixed(2)) },
+    });
+  }
+
   const integrations = await getIntegrations(clientId);
   await saveIntegrations(clientId, { ...integrations, lastSyncedAt: new Date().toISOString() });
 }
