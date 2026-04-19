@@ -58,24 +58,17 @@ export default function Dashboard() {
     setClientSaving(true);
     setClientMsg("");
     const id = newClientName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    try {
-      const res = await fetch("/api/clients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name: newClientName.trim(), password: newClientPassword.trim() }),
-      });
-      if (res.ok) {
-        setClientMsg(`Client "${newClientName.trim()}" added. They can log in with: ${newClientPassword.trim()}`);
-        setNewClientName("");
-        setNewClientPassword("");
-      } else {
-        setClientMsg("Failed to save — check connection.");
-      }
-    } catch {
-      setClientMsg("Network error.");
-    }
+    const newEntry = { id, name: newClientName.trim(), password: newClientPassword.trim() };
+    const existing = data.clientRegistry ?? [];
+    const updated = existing.some((c) => c.id === id)
+      ? existing.map((c) => (c.id === id ? newEntry : c))
+      : [...existing, newEntry];
+    update({ ...data, clientRegistry: updated });
+    setClientMsg(`Client "${newClientName.trim()}" added. Password: ${newClientPassword.trim()}`);
+    setNewClientName("");
+    setNewClientPassword("");
     setClientSaving(false);
-  }, [newClientName, newClientPassword]);
+  }, [newClientName, newClientPassword, data, update]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -18,10 +18,11 @@ export const authOptions: NextAuthOptions = {
           return { id: "admin", name: "Evan", role: "admin", clientId: null };
         }
 
-        // Client registry check — lazy KV import avoids Invalid URL during static prerender
+        // Client registry — read from admin's SalesData (same key as all other data)
         try {
           const { kv } = await import("@vercel/kv");
-          const registry = (await kv.get<ClientMeta[]>("sns-clients")) ?? SEED_REGISTRY;
+          const adminData = await kv.get<{ clientRegistry?: ClientMeta[] }>("sns-dashboard-v1");
+          const registry = adminData?.clientRegistry ?? SEED_REGISTRY;
           const client = registry.find((c) => c.password === pw);
           if (client) {
             return { id: client.id, name: client.name, role: "client", clientId: client.id };

@@ -112,6 +112,7 @@ export type SalesData = {
     leaderboard: Rep[];
   };
   clients: Client[];
+  clientRegistry: ClientMeta[];
 };
 
 export const SEED: SalesData = {
@@ -270,4 +271,5 @@ export const SEED: SalesData = {
       checkInScore: 3,
     },
   ],
+  clientRegistry: SEED_REGISTRY,
 };
