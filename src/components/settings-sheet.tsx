@@ -361,32 +361,188 @@ function ApiKeysTab() {
   );
 }
 
+// ─── Admin API Keys Tab ───────────────────────────────────────────────────────
+function AdminApiKeysTab() {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [integrations, setIntegrations] = useState<ClientIntegrations>({});
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveErr, setSaveErr] = useState("");
+  const [loadingClient, setLoadingClient] = useState(false);
+
+  // Load client registry from admin data
+  useEffect(() => {
+    fetch("/api/data")
+      .then((r) => r.json())
+      .then((d) => {
+        const registry = d?.clientRegistry ?? [];
+        setClients(registry.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load integrations when client selection changes
+  useEffect(() => {
+    if (!selectedId) return;
+    setLoadingClient(true);
+    fetch(`/api/admin/integrations?clientId=${selectedId}`)
+      .then((r) => r.json())
+      .then((d) => { if (d && typeof d === "object") setIntegrations(d); })
+      .catch(() => {})
+      .finally(() => setLoadingClient(false));
+  }, [selectedId]);
+
+  async function save() {
+    if (!selectedId) return;
+    setSaveState("saving"); setSaveErr("");
+    try {
+      const res = await fetch(`/api/admin/integrations?clientId=${selectedId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(integrations),
+      });
+      const json = await res.json();
+      if (json.ok) { setSaveState("ok"); setTimeout(() => setSaveState("idle"), 3000); }
+      else { setSaveState("error"); setSaveErr("Failed to save"); }
+    } catch {
+      setSaveState("error"); setSaveErr("Network error");
+    }
+  }
+
+  const meta = integrations.meta ?? { accessToken: "", adAccountId: "" };
+  const ghl = integrations.ghl ?? { apiKey: "", locationId: "" };
+  const stripe = integrations.stripe ?? { secretKey: "" };
+  const sheets = integrations.sheets ?? { sheetUrl: "" };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label className="text-xs text-muted-foreground">Select Client</Label>
+        <select
+          value={selectedId}
+          onChange={(e) => { setSelectedId(e.target.value); setIntegrations({}); setSaveState("idle"); }}
+          className="mt-1 w-full h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-orange-500"
+        >
+          <option value="">— choose a client —</option>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+
+      {selectedId && (
+        loadingClient ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Meta */}
+            <div className={`border rounded-xl p-3 ${meta.accessToken && meta.adAccountId ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                {meta.accessToken && meta.adAccountId ? <CheckCircle2 className="h-3.5 w-3.5 text-orange-400" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="text-xs font-semibold">Meta / Facebook Ads</span>
+              </div>
+              <div className="space-y-2">
+                <div><Label className="text-[10px] text-muted-foreground">Access Token</Label>
+                  <Input type="password" value={meta.accessToken} onChange={(e) => setIntegrations((i) => ({ ...i, meta: { ...meta, accessToken: e.target.value } }))}
+                    placeholder="EAAxxxx…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                <div><Label className="text-[10px] text-muted-foreground">Ad Account ID</Label>
+                  <Input value={meta.adAccountId} onChange={(e) => setIntegrations((i) => ({ ...i, meta: { ...meta, adAccountId: e.target.value } }))}
+                    placeholder="123456789" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+              </div>
+            </div>
+
+            {/* GHL */}
+            <div className={`border rounded-xl p-3 ${ghl.apiKey && ghl.locationId ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                {ghl.apiKey && ghl.locationId ? <CheckCircle2 className="h-3.5 w-3.5 text-orange-400" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="text-xs font-semibold">GoHighLevel (GHL)</span>
+              </div>
+              <div className="space-y-2">
+                <div><Label className="text-[10px] text-muted-foreground">API Key</Label>
+                  <Input type="password" value={ghl.apiKey} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, apiKey: e.target.value } }))}
+                    placeholder="your-api-key" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                <div><Label className="text-[10px] text-muted-foreground">Location ID</Label>
+                  <Input value={ghl.locationId} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, locationId: e.target.value } }))}
+                    placeholder="location-id" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+              </div>
+            </div>
+
+            {/* Stripe */}
+            <div className={`border rounded-xl p-3 ${stripe.secretKey ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                {stripe.secretKey ? <CheckCircle2 className="h-3.5 w-3.5 text-orange-400" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="text-xs font-semibold">Stripe</span>
+              </div>
+              <div><Label className="text-[10px] text-muted-foreground">Secret Key</Label>
+                <Input type="password" value={stripe.secretKey} onChange={(e) => setIntegrations((i) => ({ ...i, stripe: { secretKey: e.target.value } }))}
+                  placeholder="sk_live_…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+            </div>
+
+            {/* Sheets */}
+            <div className={`border rounded-xl p-3 ${sheets.sheetUrl ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                {sheets.sheetUrl ? <CheckCircle2 className="h-3.5 w-3.5 text-orange-400" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="text-xs font-semibold">Google Sheets</span>
+              </div>
+              <div><Label className="text-[10px] text-muted-foreground">Sheet URL (publicly viewable)</Label>
+                <Input value={sheets.sheetUrl} onChange={(e) => setIntegrations((i) => ({ ...i, sheets: { sheetUrl: e.target.value } }))}
+                  placeholder="https://docs.google.com/spreadsheets/d/…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button size="sm" onClick={save} disabled={saveState === "saving"}
+                className="bg-orange-500 hover:bg-orange-600 text-white text-xs h-8">
+                {saveState === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save API Keys"}
+              </Button>
+              <StatusMsg state={saveState} error={saveErr} />
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 // ─── Admin Settings View ─────────────────────────────────────────────────────
 function AdminSettingsView() {
   return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Account</p>
-        <div className="space-y-3">
+    <Tabs defaultValue="account">
+      <TabsList className="bg-muted border border-border h-8 mb-5 w-full">
+        <TabsTrigger value="account" className="text-xs flex-1 gap-1">
+          <User className="h-3 w-3" /> Account
+        </TabsTrigger>
+        <TabsTrigger value="apikeys" className="text-xs flex-1 gap-1">
+          <Plug className="h-3 w-3" /> API Keys
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="account">
+        <div className="space-y-5">
           <div>
-            <Label className="text-xs text-muted-foreground">Role</Label>
-            <div className="mt-1">
-              <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-xs">Admin</Badge>
+            <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Account</p>
+            <div>
+              <Label className="text-xs text-muted-foreground">Role</Label>
+              <div className="mt-1">
+                <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-xs">Admin</Badge>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-border pt-4">
+            <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Password</p>
+            <div className="bg-muted/50 border border-border rounded-xl p-4">
+              <p className="text-sm font-medium mb-1">Managed via environment variables</p>
+              <p className="text-xs text-muted-foreground">
+                Update <code className="bg-muted px-1 py-0.5 rounded text-orange-400">SNS_PASSWORD</code> in Vercel → Environment Variables, then redeploy.
+              </p>
             </div>
           </div>
         </div>
-      </div>
+      </TabsContent>
 
-      <div className="border-t border-border pt-4">
-        <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Password</p>
-        <div className="bg-muted/50 border border-border rounded-xl p-4">
-          <p className="text-sm font-medium mb-1">Admin password is managed via environment variables</p>
-          <p className="text-xs text-muted-foreground">
-            To change it, update <code className="bg-muted px-1 py-0.5 rounded text-orange-400">SNS_PASSWORD</code> in your Vercel project settings under Environment Variables, then redeploy.
-          </p>
-        </div>
-      </div>
-    </div>
+      <TabsContent value="apikeys">
+        <AdminApiKeysTab />
+      </TabsContent>
+    </Tabs>
   );
 }
 
