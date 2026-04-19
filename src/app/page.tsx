@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, TrendingUp, RotateCcw, LogOut, Upload } from "lucide-react";
+import { Edit3, TrendingUp, RotateCcw, LogOut, Upload, TrendingDown, Minus } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { MetricCard } from "@/components/metric-card";
 import { EditDataSheet } from "@/components/edit-data-sheet";
 import { useSalesData } from "@/hooks/use-sales-data";
-import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart } from "@/components/charts/revenue-chart";
+import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart, CheckInTrendChart } from "@/components/charts/revenue-chart";
 import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/funnel-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
@@ -38,7 +38,7 @@ export default function Dashboard() {
   const { data, update, reset, loading } = useSalesData();
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
-  const { dashboard: d, pipeline: p, ads: a, reps: r } = data;
+  const { dashboard: d, pipeline: p, ads: a, reps: r, clients } = data;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,6 +55,25 @@ export default function Dashboard() {
     };
     reader.readAsText(file);
   }, [update]);
+
+  // Revenue trend vs last month
+  const trendPct = d.cashCollectedLastMonth > 0
+    ? ((d.cashCollectedMTD - d.cashCollectedLastMonth) / d.cashCollectedLastMonth * 100)
+    : 0;
+  const trendUp = trendPct > 0;
+  const trendFlat = trendPct === 0;
+
+  // Goal progress
+  const goalPct = Math.min((d.cashCollectedMTD / d.monthlyGoal) * 100, 100);
+
+  // Lead response time color
+  const leadRespVariant = d.avgLeadResponseTimeMin < 5 ? "green" : d.avgLeadResponseTimeMin <= 60 ? "orange" : "default";
+
+  // Master tab computed values
+  const totalCumulativeRevenue = clients.reduce((s, c) => s + c.cumulativeRevenue, 0);
+  const totalRevShareOwed = clients.reduce((s, c) => s + c.cashCollectedMTD * (c.revSharePct / 100), 0);
+  const paidCount = clients.filter(c => c.revSharePaid).length;
+  const pendingCount = clients.length - paidCount;
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,6 +127,7 @@ export default function Dashboard() {
             <TabsTrigger value="pipeline"  className="text-xs px-4">Pipeline</TabsTrigger>
             <TabsTrigger value="ads"       className="text-xs px-4">Ads</TabsTrigger>
             <TabsTrigger value="reps"      className="text-xs px-4">Rep Leaderboard</TabsTrigger>
+            <TabsTrigger value="master"    className="text-xs px-4">Master</TabsTrigger>
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -116,8 +136,23 @@ export default function Dashboard() {
             {tab === "dashboard" && (
               <TabsContent value="dashboard">
                 <motion.div key="dashboard" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
+
+                  {/* Top KPI row — cash collected with trend badge */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <MetricCard label="Cash Collected MTD" value={d.cashCollectedMTD} prefix="$" variant="green"   index={0} />
+                    <div className="relative">
+                      <MetricCard label="Cash Collected MTD" value={d.cashCollectedMTD} prefix="$" variant="green" index={0} />
+                      {!trendFlat && (
+                        <div className={`absolute bottom-2 right-2 flex items-center gap-0.5 text-[10px] font-semibold ${trendUp ? "text-emerald-400" : "text-red-400"}`}>
+                          {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          {trendUp ? "+" : ""}{trendPct.toFixed(1)}%
+                        </div>
+                      )}
+                      {trendFlat && (
+                        <div className="absolute bottom-2 right-2 flex items-center gap-0.5 text-[10px] font-semibold text-muted-foreground">
+                          <Minus className="h-3 w-3" /> 0%
+                        </div>
+                      )}
+                    </div>
                     <MetricCard label="Net Revenue MTD"    value={d.netRevenueMTD}    prefix="$" variant="orange"  index={1} />
                     <MetricCard label="Leads This Month"   value={d.leadsThisMonth}              variant="default" index={2} />
                     <MetricCard label="Total Deals Closed" value={d.totalDealsClosedMTD}         variant="orange"  index={3} />
@@ -125,10 +160,56 @@ export default function Dashboard() {
                     <MetricCard label="MRR"                value={d.mrr}              prefix="$" variant="black"   index={5} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <MetricCard label="Total Refund MTD" value={d.totalRefund}    prefix="$" variant="orange" index={6} />
-                    <MetricCard label="Total Refund %"   value={d.totalRefundPct} suffix="%" variant="green"  index={7} decimals={2} />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <MetricCard label="Total Refund MTD"    value={d.totalRefund}               prefix="$" variant="orange" index={6} />
+                    <MetricCard label="Total Refund %"      value={d.totalRefundPct}            suffix="%" variant="green"  index={7} decimals={2} />
+                    <MetricCard label="Avg Lead Response"   value={d.avgLeadResponseTimeMin}    suffix=" min" variant={leadRespVariant} index={8} decimals={1} />
+                    <MetricCard label="Cost Per Close"      value={d.costPerClose}              prefix="$" variant="default" index={9} />
                   </div>
+
+                  {/* Monthly Goal Progress */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">Monthly Goal Progress</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-3">
+                      <div className="flex items-end justify-between">
+                        <span className="text-2xl font-bold text-foreground">
+                          ${d.cashCollectedMTD.toLocaleString()}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          of ${d.monthlyGoal.toLocaleString()} goal
+                        </span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                        <div
+                          className="h-full bg-orange-500 rounded-full transition-all duration-700"
+                          style={{ width: `${goalPct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{goalPct.toFixed(1)}% complete</span>
+                        <span>${(d.monthlyGoal - d.cashCollectedMTD).toLocaleString()} remaining</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Reactivation Campaign */}
+                  <ChartCard title="Reactivation Campaign">
+                    <div className="grid grid-cols-4 gap-4 py-2">
+                      {[
+                        { label: "Contacted", value: d.reactivation.contacted, color: "text-muted-foreground" },
+                        { label: "Replied",   value: d.reactivation.replied,   color: "text-blue-400" },
+                        { label: "Booked",    value: d.reactivation.booked,    color: "text-orange-400" },
+                        { label: "Closed",    value: d.reactivation.closed,    color: "text-emerald-400" },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="text-center space-y-1">
+                          <div className={`text-2xl font-bold ${color}`}>{value}</div>
+                          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </ChartCard>
 
                   <ChartCard title="Revenue Over Time">
                     <RevenueOverTimeChart data={d.revenueOverTime} />
@@ -142,6 +223,11 @@ export default function Dashboard() {
                       <NetByProcessorChart data={d.netByProcessor} />
                     </ChartCard>
                   </div>
+
+                  <ChartCard title="Client Pulse (Check-In Scores)">
+                    <CheckInTrendChart data={d.checkInScores} />
+                  </ChartCard>
+
                 </motion.div>
               </TabsContent>
             )}
@@ -335,6 +421,90 @@ export default function Dashboard() {
                       prefix="$" variant="green" index={8} />
                     <MetricCard label="Avg Deal Size" value={r.avgDealSize} prefix="$" variant="default" index={9} />
                   </div>
+                </motion.div>
+              </TabsContent>
+            )}
+
+            {/* ══════════════ MASTER OVERVIEW ══════════════ */}
+            {tab === "master" && (
+              <TabsContent value="master">
+                <motion.div key="master" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
+
+                  {/* Cumulative Revenue Banner */}
+                  <Card className="bg-orange-500/5 border-orange-500/20">
+                    <CardContent className="px-6 py-5 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest text-orange-400 font-semibold mb-1">
+                          Total Revenue Generated Across All Clients
+                        </p>
+                        <p className="text-3xl font-bold text-foreground">
+                          ${totalCumulativeRevenue.toLocaleString()}
+                        </p>
+                      </div>
+                      <TrendingUp className="h-10 w-10 text-orange-500/40" />
+                    </CardContent>
+                  </Card>
+
+                  {/* Rev Share Summary Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <MetricCard label="Rev Share Owed (MTD)" value={totalRevShareOwed} prefix="$" variant="orange" index={0} />
+                    <MetricCard label="Clients Paid"         value={paidCount}                     variant="green"  index={1} />
+                    <MetricCard label="Clients Pending"      value={pendingCount}                   variant="default" index={2} />
+                  </div>
+
+                  {/* Client Health Heatmap */}
+                  <ChartCard title="Client Health Heatmap">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm min-w-[640px]">
+                        <thead>
+                          <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                            {["Client", "Cash MTD", "Check-In", "Health", "Rev Share Owed", "Rev Share", "ROI Status"].map(h => (
+                              <th key={h} className="pb-2 pr-4 font-medium whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clients.map((client, i) => {
+                            const score = client.checkInScore;
+                            const healthLabel = score >= 7 ? "On Track" : score >= 4 ? "Needs Attention" : "At Risk";
+                            const healthClass = score >= 7
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : score >= 4
+                              ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                              : "bg-red-500/10 text-red-400 border-red-500/20";
+                            const revOwed = client.cashCollectedMTD * (client.revSharePct / 100);
+                            const roiRecovered = client.cumulativeRevenue >= client.setupFee;
+                            const roiGap = client.setupFee - client.cumulativeRevenue;
+                            return (
+                              <tr key={i} className="border-b border-border/30 last:border-0 hover:bg-muted/40 transition-colors">
+                                <td className="py-3 pr-4 font-semibold whitespace-nowrap">{client.name}</td>
+                                <td className="py-3 pr-4 text-foreground">${client.cashCollectedMTD.toLocaleString()}</td>
+                                <td className="py-3 pr-4 text-muted-foreground">{score}/10</td>
+                                <td className="py-3 pr-4">
+                                  <Badge className={`text-[10px] ${healthClass}`}>{healthLabel}</Badge>
+                                </td>
+                                <td className="py-3 pr-4 text-foreground">${revOwed.toLocaleString()}</td>
+                                <td className="py-3 pr-4">
+                                  <Badge className={client.revSharePaid
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
+                                    : "bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]"}>
+                                    {client.revSharePaid ? "Paid" : "Pending"}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 pr-4">
+                                  {roiRecovered
+                                    ? <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Recovered</Badge>
+                                    : <span className="text-xs text-muted-foreground">${roiGap.toLocaleString()} to go</span>
+                                  }
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </ChartCard>
+
                 </motion.div>
               </TabsContent>
             )}

@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, Cell,
 } from "recharts";
-import type { TimePoint, NameAmount } from "@/lib/sales-data";
+import type { TimePoint, NameAmount, CheckInScore } from "@/lib/sales-data";
 
 const TT = { contentStyle: { background: "#141414", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }, labelStyle: { color: "#aaa" } };
 const fmt = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`;
@@ -64,6 +64,26 @@ export function NetByProcessorChart({ data }: { data: NameAmount[] }) {
           {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
         </Bar>
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+const ORANGE = "#f97316";
+
+export function CheckInTrendChart({ data }: { data: CheckInScore[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+        <XAxis dataKey="week" tick={{ fill: "#777", fontSize: 11 }} tickLine={false} axisLine={false} />
+        <YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={{ fill: "#777", fontSize: 11 }} tickLine={false} axisLine={false} />
+        <Tooltip {...TT} formatter={(v) => [`${v}/10`, "Check-In Score"]} />
+        <ReferenceLine y={7} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" label={{ value: "Healthy", fill: "#555", fontSize: 10, position: "insideTopRight" }} />
+        <Line type="monotone" dataKey="score" stroke={ORANGE} strokeWidth={2.5}
+          dot={{ fill: ORANGE, r: 4, strokeWidth: 0 }}
+          activeDot={{ r: 6, strokeWidth: 0 }}
+          animationDuration={900} animationBegin={100} />
+      </LineChart>
     </ResponsiveContainer>
   );
 }

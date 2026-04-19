@@ -191,20 +191,29 @@ export function EditDataSheet({ open, data, onClose, onSave }: Props) {
         {/* ── Manual fields ── */}
         <Tabs defaultValue="dashboard">
           <TabsList className="bg-muted border border-border mb-5 h-8 w-full">
-            {["dashboard", "pipeline", "ads", "reps"].map((t) => (
+            {["dashboard", "pipeline", "ads", "reps", "clients"].map((t) => (
               <TabsTrigger key={t} value={t} className="text-[11px] flex-1 capitalize">{t}</TabsTrigger>
             ))}
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-3">
-            <Field label="Cash Collected MTD ($)"  value={draft.dashboard.cashCollectedMTD}   onChange={(v) => setD("cashCollectedMTD", v)} />
-            <Field label="Net Revenue MTD ($)"      value={draft.dashboard.netRevenueMTD}       onChange={(v) => setD("netRevenueMTD", v)} />
-            <Field label="Leads This Month"         value={draft.dashboard.leadsThisMonth}      onChange={(v) => setD("leadsThisMonth", v)} />
-            <Field label="Total Deals Closed"       value={draft.dashboard.totalDealsClosedMTD} onChange={(v) => setD("totalDealsClosedMTD", v)} />
-            <Field label="Cost Per Close ($)"       value={draft.dashboard.costPerClose}        onChange={(v) => setD("costPerClose", v)} />
-            <Field label="MRR ($)"                  value={draft.dashboard.mrr}                 onChange={(v) => setD("mrr", v)} />
-            <Field label="Total Refund ($)"         value={draft.dashboard.totalRefund}         onChange={(v) => setD("totalRefund", v)} />
-            <Field label="Total Refund %"           value={draft.dashboard.totalRefundPct}      onChange={(v) => setD("totalRefundPct", v)} />
+            <Field label="Cash Collected MTD ($)"    value={draft.dashboard.cashCollectedMTD}      onChange={(v) => setD("cashCollectedMTD", v)} />
+            <Field label="Net Revenue MTD ($)"       value={draft.dashboard.netRevenueMTD}          onChange={(v) => setD("netRevenueMTD", v)} />
+            <Field label="Leads This Month"          value={draft.dashboard.leadsThisMonth}         onChange={(v) => setD("leadsThisMonth", v)} />
+            <Field label="Total Deals Closed"        value={draft.dashboard.totalDealsClosedMTD}    onChange={(v) => setD("totalDealsClosedMTD", v)} />
+            <Field label="Cost Per Close ($)"        value={draft.dashboard.costPerClose}           onChange={(v) => setD("costPerClose", v)} />
+            <Field label="MRR ($)"                   value={draft.dashboard.mrr}                    onChange={(v) => setD("mrr", v)} />
+            <Field label="Total Refund ($)"          value={draft.dashboard.totalRefund}            onChange={(v) => setD("totalRefund", v)} />
+            <Field label="Total Refund %"            value={draft.dashboard.totalRefundPct}         onChange={(v) => setD("totalRefundPct", v)} />
+            <Field label="Monthly Goal ($)"          value={draft.dashboard.monthlyGoal}            onChange={(v) => setD("monthlyGoal", v)} />
+            <Field label="Cash Collected Last Month ($)" value={draft.dashboard.cashCollectedLastMonth} onChange={(v) => setD("cashCollectedLastMonth", v)} />
+            <Field label="Avg Lead Response Time (min)"  value={draft.dashboard.avgLeadResponseTimeMin} onChange={(v) => setD("avgLeadResponseTimeMin", v)} />
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground pt-1 font-semibold">Reactivation Campaign</p>
+            <Field label="Contacted" value={draft.dashboard.reactivation.contacted} onChange={(v) => setDraft((d) => ({ ...d, dashboard: { ...d.dashboard, reactivation: { ...d.dashboard.reactivation, contacted: n(v) } } }))} />
+            <Field label="Replied"   value={draft.dashboard.reactivation.replied}   onChange={(v) => setDraft((d) => ({ ...d, dashboard: { ...d.dashboard, reactivation: { ...d.dashboard.reactivation, replied:   n(v) } } }))} />
+            <Field label="Booked"    value={draft.dashboard.reactivation.booked}    onChange={(v) => setDraft((d) => ({ ...d, dashboard: { ...d.dashboard, reactivation: { ...d.dashboard.reactivation, booked:    n(v) } } }))} />
+            <Field label="Closed"    value={draft.dashboard.reactivation.closed}    onChange={(v) => setDraft((d) => ({ ...d, dashboard: { ...d.dashboard, reactivation: { ...d.dashboard.reactivation, closed:    n(v) } } }))} />
+            <JsonField label='Check-In Scores — [{"week":"","score":0}]'     value={draft.dashboard.checkInScores}   onChange={(v) => setJson("dashboard", "checkInScores", v)} />
             <JsonField label='Revenue Over Time — [{"date":"","amount":0}]'  value={draft.dashboard.revenueOverTime} onChange={(v) => setJson("dashboard", "revenueOverTime", v)} />
             <JsonField label='Net by Product — [{"name":"","amount":0}]'     value={draft.dashboard.netByProduct}    onChange={(v) => setJson("dashboard", "netByProduct", v)} />
             <JsonField label='Net by Processor — [{"name":"","amount":0}]'   value={draft.dashboard.netByProcessor}  onChange={(v) => setJson("dashboard", "netByProcessor", v)} />
@@ -254,6 +263,82 @@ export function EditDataSheet({ open, data, onClose, onSave }: Props) {
               label='Rep Leaderboard — [{"name":"","callsMade":0,"callsAnswered":0,"demosSet":0,"demosShowed":0,"pitched":0,"dealsClosed":0,"cashCollected":0,"answerRate":0}]'
               value={draft.reps.leaderboard}
               onChange={(v) => setJson("reps", "leaderboard", v)} />
+          </TabsContent>
+
+          <TabsContent value="clients" className="space-y-4">
+            {draft.clients.map((client, i) => (
+              <div key={i} className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-foreground">{client.name || `Client ${i + 1}`}</p>
+                  <Button size="sm" variant="ghost"
+                    className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    onClick={() => setDraft((d) => ({ ...d, clients: d.clients.filter((_, idx) => idx !== i) }))}>
+                    Remove
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[11px] text-muted-foreground">Name</Label>
+                  <Input value={client.name} onChange={(e) => setDraft((d) => {
+                    const clients = [...d.clients];
+                    clients[i] = { ...clients[i], name: e.target.value };
+                    return { ...d, clients };
+                  })} className="h-8 text-sm bg-muted border-border" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[11px] text-muted-foreground">Go-Live Date (YYYY-MM-DD)</Label>
+                  <Input value={client.goLiveDate} onChange={(e) => setDraft((d) => {
+                    const clients = [...d.clients];
+                    clients[i] = { ...clients[i], goLiveDate: e.target.value };
+                    return { ...d, clients };
+                  })} className="h-8 text-sm bg-muted border-border" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["Setup Fee ($)",        "setupFee"],
+                    ["Rev Share %",          "revSharePct"],
+                    ["Cash Collected MTD ($)","cashCollectedMTD"],
+                    ["Cumulative Revenue ($)","cumulativeRevenue"],
+                    ["Check-In Score (1-10)","checkInScore"],
+                  ] as [string, keyof typeof client][]).map(([label, key]) => (
+                    <div key={key} className="flex flex-col gap-1">
+                      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+                      <Input type="number" value={client[key] as number} onChange={(e) => setDraft((d) => {
+                        const clients = [...d.clients];
+                        clients[i] = { ...clients[i], [key]: parseFloat(e.target.value) || 0 };
+                        return { ...d, clients };
+                      })} className="h-8 text-sm bg-muted border-border" />
+                    </div>
+                  ))}
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-[11px] text-muted-foreground">Rev Share Paid?</Label>
+                    <div className="flex items-center gap-2 h-8">
+                      <input type="checkbox" checked={client.revSharePaid} onChange={(e) => setDraft((d) => {
+                        const clients = [...d.clients];
+                        clients[i] = { ...clients[i], revSharePaid: e.target.checked };
+                        return { ...d, clients };
+                      })} className="h-4 w-4 accent-orange-500" />
+                      <span className="text-xs text-muted-foreground">{client.revSharePaid ? "Paid" : "Pending"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button size="sm" variant="outline" className="w-full text-xs border-border text-muted-foreground hover:text-foreground"
+              onClick={() => setDraft((d) => ({
+                ...d,
+                clients: [...d.clients, {
+                  name: "New Client",
+                  goLiveDate: new Date().toISOString().slice(0, 10),
+                  setupFee: 3000,
+                  revSharePct: 10,
+                  revSharePaid: false,
+                  cashCollectedMTD: 0,
+                  cumulativeRevenue: 0,
+                  checkInScore: 7,
+                }],
+              }))}>
+              + Add Client
+            </Button>
           </TabsContent>
         </Tabs>
 

@@ -9,6 +9,7 @@ export type CampaignLead = { campaign: string; leads: number };
 export type AdSetCPL     = { adSet: string; cpl: number };
 export type TopAd        = { name: string; leads: number; cpl: number; roas: number };
 export type SpendSplit   = { platform: string; pct: number };
+export type CheckInScore = { week: string; score: number };
 export type Rep = {
   name: string;
   callsMade: number;
@@ -21,6 +22,17 @@ export type Rep = {
   answerRate: number;
 };
 
+export type Client = {
+  name: string;
+  goLiveDate: string;
+  setupFee: number;
+  revSharePct: number;
+  revSharePaid: boolean;
+  cashCollectedMTD: number;
+  cumulativeRevenue: number;
+  checkInScore: number;
+};
+
 export type SalesData = {
   dashboard: {
     cashCollectedMTD: number;
@@ -31,6 +43,16 @@ export type SalesData = {
     mrr: number;
     totalRefund: number;
     totalRefundPct: number;
+    monthlyGoal: number;
+    cashCollectedLastMonth: number;
+    avgLeadResponseTimeMin: number;
+    reactivation: {
+      contacted: number;
+      replied: number;
+      booked: number;
+      closed: number;
+    };
+    checkInScores: CheckInScore[];
     revenueOverTime: TimePoint[];
     netByProduct: NameAmount[];
     netByProcessor: NameAmount[];
@@ -77,6 +99,7 @@ export type SalesData = {
     avgDealSize: number;
     leaderboard: Rep[];
   };
+  clients: Client[];
 };
 
 export const SEED: SalesData = {
@@ -89,6 +112,24 @@ export const SEED: SalesData = {
     mrr: 13750,
     totalRefund: 500,
     totalRefundPct: 0.02,
+    monthlyGoal: 70000,
+    cashCollectedLastMonth: 16200,
+    avgLeadResponseTimeMin: 4.2,
+    reactivation: {
+      contacted: 142,
+      replied: 38,
+      booked: 12,
+      closed: 5,
+    },
+    checkInScores: [
+      { week: "Mar 3",  score: 6 },
+      { week: "Mar 10", score: 7 },
+      { week: "Mar 17", score: 7 },
+      { week: "Mar 24", score: 8 },
+      { week: "Mar 31", score: 8 },
+      { week: "Apr 7",  score: 9 },
+      { week: "Apr 14", score: 9 },
+    ],
     revenueOverTime: [
       { date: "Jun 3 2024", amount: 1200 },
       { date: "Jun 4 2024", amount: 3500 },
@@ -185,4 +226,36 @@ export const SEED: SalesData = {
       { name: "Evan Bautista", callsMade: 42, callsAnswered: 28, demosSet: 10, demosShowed: 8,  pitched: 7,  dealsClosed: 3, cashCollected: 0,     answerRate: 66.7 },
     ],
   },
+  clients: [
+    {
+      name: "Alpha Coaching",
+      goLiveDate: "2026-02-01",
+      setupFee: 3000,
+      revSharePct: 10,
+      revSharePaid: true,
+      cashCollectedMTD: 18500,
+      cumulativeRevenue: 54200,
+      checkInScore: 9,
+    },
+    {
+      name: "Peak Performance",
+      goLiveDate: "2026-03-10",
+      setupFee: 2500,
+      revSharePct: 8,
+      revSharePaid: false,
+      cashCollectedMTD: 9200,
+      cumulativeRevenue: 14700,
+      checkInScore: 6,
+    },
+    {
+      name: "Momentum Media",
+      goLiveDate: "2026-04-01",
+      setupFee: 4000,
+      revSharePct: 12,
+      revSharePaid: false,
+      cashCollectedMTD: 3100,
+      cumulativeRevenue: 3100,
+      checkInScore: 3,
+    },
+  ],
 };
