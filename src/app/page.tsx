@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MetricCard } from "@/components/metric-card";
+import Image from "next/image";
 import { EditDataSheet } from "@/components/edit-data-sheet";
 import { useSalesData } from "@/hooks/use-sales-data";
 import { Input } from "@/components/ui/input";
@@ -171,7 +172,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Stack N Scale" className="h-8 w-8 object-contain" />
+            <Image src="/logo.png" alt="Stack N Scale" width={32} height={32} className="object-contain" />
             <span className="font-bold text-sm tracking-wide">
               {isAdmin ? "Stack N Scale" : (session?.user?.name ?? "Dashboard")}
             </span>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +48,7 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <img src="/logo.png" alt="Stack N Scale" className="h-14 w-14 object-contain" />
+          <Image src="/logo.png" alt="Stack N Scale" width={56} height={56} className="object-contain" />
           <div className="text-center">
             <h1 className="text-xl font-bold tracking-tight">Stack N Scale</h1>
             <p className="text-sm text-muted-foreground mt-0.5">Sales Pipeline Dashboard</p>
