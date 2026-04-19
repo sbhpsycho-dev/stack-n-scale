@@ -34,6 +34,8 @@ export async function POST(req: Request) {
     const { kv } = await import("@vercel/kv");
     const body = await req.json();
     await kv.set(key, body);
-  } catch { /* KV not connected — ignore */ }
-  return Response.json({ ok: true });
+    return Response.json({ ok: true, persisted: true });
+  } catch {
+    return Response.json({ ok: true, persisted: false });
+  }
 }

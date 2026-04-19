@@ -63,12 +63,27 @@ export default function Dashboard() {
     const updated = existing.some((c) => c.id === id)
       ? existing.map((c) => (c.id === id ? newEntry : c))
       : [...existing, newEntry];
-    update({ ...data, clientRegistry: updated });
-    setClientMsg(`Client "${newClientName.trim()}" added. Password: ${newClientPassword.trim()}`);
-    setNewClientName("");
-    setNewClientPassword("");
+    const newData = { ...data, clientRegistry: updated };
+    // Explicitly await the save so we know it persisted before showing success
+    try {
+      const res = await fetch("/api/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newData),
+      });
+      const json = await res.json();
+      if (json.persisted) {
+        setClientMsg(`✓ "${newClientName.trim()}" added. Login password: ${newClientPassword.trim()}`);
+        setNewClientName("");
+        setNewClientPassword("");
+      } else {
+        setClientMsg("Saved locally only — connect Vercel KV for client logins to work.");
+      }
+    } catch {
+      setClientMsg("Network error — could not save.");
+    }
     setClientSaving(false);
-  }, [newClientName, newClientPassword, data, update]);
+  }, [newClientName, newClientPassword, data]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
