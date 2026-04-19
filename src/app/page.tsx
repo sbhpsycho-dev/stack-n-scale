@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, TrendingUp, RotateCcw, LogOut, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -171,9 +171,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-7 w-7 rounded-lg bg-orange-500 flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 text-white" />
-            </div>
+            <img src="/logo.png" alt="Stack N Scale" className="h-8 w-8 object-contain" />
             <span className="font-bold text-sm tracking-wide">
               {isAdmin ? "Stack N Scale" : (session?.user?.name ?? "Dashboard")}
             </span>
