@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, TrendingUp, RotateCcw, LogOut, Upload, TrendingDown, Minus, UserPlus } from "lucide-react";
+import { Edit3, TrendingUp, RotateCcw, LogOut, Upload, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,8 @@ import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart, CheckInTr
 import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/funnel-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
+import { type ClientIntegrations } from "@/lib/integrations";
+import { SEED } from "@/lib/sales-data";
 
 const tabAnim: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -38,12 +41,53 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 export default function Dashboard() {
   const { data: session } = useSession();
+  const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
   const clientId = isAdmin ? "admin" : (session?.user?.clientId ?? null);
 
   const { data, update, reset, loading } = useSalesData(clientId);
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
+
+  // Integrations state
+  const [integrations, setIntegrations] = useState<ClientIntegrations>({});
+  const [syncingSource, setSyncingSource] = useState<string | null>(null);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
+
+  // Auto-redirect new (unseeded) clients to setup wizard
+  const redirectedRef = useRef(false);
+  useEffect(() => {
+    if (redirectedRef.current || loading || isAdmin || !clientId) return;
+    if (data.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD &&
+        data.dashboard.leadsThisMonth === SEED.dashboard.leadsThisMonth) {
+      redirectedRef.current = true;
+      router.push("/setup");
+    }
+  }, [loading, data, isAdmin, clientId, router]);
+
+  // Load integrations for client
+  useEffect(() => {
+    if (isAdmin || !clientId) return;
+    fetch("/api/integrations")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d === "object") {
+          setIntegrations(d);
+          if (d.lastSyncedAt) setLastSynced(d.lastSyncedAt);
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin, clientId]);
+
+  async function syncSource(source: string) {
+    setSyncingSource(source);
+    try {
+      await fetch(`/api/sync/${source}`, { method: "POST" });
+      setLastSynced(new Date().toISOString());
+    } finally {
+      setSyncingSource(null);
+    }
+  }
   const { dashboard: d, pipeline: p, ads: a, reps: r, clients } = data;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +196,13 @@ export default function Dashboard() {
               <Upload className="h-3.5 w-3.5" />
               Upload JSON
             </Button>
+            {!isAdmin && (
+              <Button size="sm" variant="ghost" onClick={() => router.push("/setup")}
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
+                <Settings className="h-3.5 w-3.5" />
+                Setup
+              </Button>
+            )}
             <Button size="sm" onClick={() => setEditOpen(true)}
               className="gap-1.5 text-xs h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white">
               <Edit3 className="h-3.5 w-3.5" />
@@ -173,6 +224,7 @@ export default function Dashboard() {
             <TabsTrigger value="pipeline"  className="text-xs px-4">Pipeline</TabsTrigger>
             <TabsTrigger value="ads"       className="text-xs px-4">Ads</TabsTrigger>
             <TabsTrigger value="reps"      className="text-xs px-4">Rep Leaderboard</TabsTrigger>
+            {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
             {isAdmin && <TabsTrigger value="master" className="text-xs px-4">Master</TabsTrigger>}
           </TabsList>
 
@@ -467,6 +519,72 @@ export default function Dashboard() {
                       prefix="$" variant="green" index={8} />
                     <MetricCard label="Avg Deal Size" value={r.avgDealSize} prefix="$" variant="default" index={9} />
                   </div>
+                </motion.div>
+              </TabsContent>
+            )}
+
+            {/* ══════════════ INTEGRATIONS ══════════════ */}
+            {tab === "integrations" && !isAdmin && (
+              <TabsContent value="integrations">
+                <motion.div key="integrations" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-4 max-w-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-bold">Data Integrations</h2>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Connect your tools — data syncs automatically every morning.
+                        {lastSynced && ` Last synced: ${new Date(lastSynced).toLocaleString()}`}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline"
+                      onClick={async () => { setSyncingSource("all"); try { await fetch("/api/sync/all", { method: "POST" }); setLastSynced(new Date().toISOString()); } finally { setSyncingSource(null); } }}
+                      disabled={syncingSource === "all"}
+                      className="gap-1.5 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10">
+                      {syncingSource === "all" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Sync All
+                    </Button>
+                  </div>
+
+                  {(["meta", "ghl", "stripe", "sheets"] as const).map((source) => {
+                    const labels: Record<string, { title: string; desc: string }> = {
+                      meta:   { title: "Meta / Facebook Ads", desc: "Auto-pulls ad spend, leads, CPL, ROAS, CTR" },
+                      ghl:    { title: "GoHighLevel (GHL)",   desc: "Auto-pulls pipeline stages, rep leaderboard, leads" },
+                      stripe: { title: "Stripe",              desc: "Auto-pulls cash collected, MRR, refunds" },
+                      sheets: { title: "Google Sheets",       desc: "Maps spreadsheet columns to dashboard fields" },
+                    };
+                    const connected =
+                      (source === "meta" && !!(integrations.meta?.accessToken && integrations.meta?.adAccountId)) ||
+                      (source === "ghl" && !!(integrations.ghl?.apiKey && integrations.ghl?.locationId)) ||
+                      (source === "stripe" && !!integrations.stripe?.secretKey) ||
+                      (source === "sheets" && !!integrations.sheets?.sheetUrl);
+                    return (
+                      <Card key={source} className={`border ${connected ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
+                        <CardContent className="px-4 py-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              {connected
+                                ? <CheckCircle2 className="h-4 w-4 text-orange-400 shrink-0" />
+                                : <Circle className="h-4 w-4 text-muted-foreground shrink-0" />}
+                              <p className="text-sm font-semibold">{labels[source].title}</p>
+                              {connected && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Connected</Badge>}
+                            </div>
+                            {connected && (
+                              <Button size="sm" variant="ghost" onClick={() => syncSource(source)} disabled={!!syncingSource}
+                                className="h-7 gap-1 text-orange-400 hover:text-orange-300 text-xs">
+                                {syncingSource === source ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                Sync
+                              </Button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground ml-6">{labels[source].desc}</p>
+                          {!connected && (
+                            <p className="text-xs text-orange-400/70 mt-2 ml-6 italic">
+                              Go to <button onClick={() => router.push("/setup")} className="underline hover:text-orange-400">Setup</button> to connect this integration.
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </motion.div>
               </TabsContent>
             )}
