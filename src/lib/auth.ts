@@ -18,11 +18,13 @@ export const authOptions: NextAuthOptions = {
           return { id: "admin", name: "Evan", role: "admin", clientId: null };
         }
 
-        // Client registry — read from admin's SalesData (same key as all other data)
+        // Client registry — read from dedicated sns-registry key first,
+        // then fall back to embedded registry in admin SalesData, then SEED
         try {
           const { kv } = await import("@vercel/kv");
+          const dedicated = await kv.get<ClientMeta[]>("sns-registry");
           const adminData = await kv.get<{ clientRegistry?: ClientMeta[] }>("sns-dashboard-v1");
-          const registry = adminData?.clientRegistry ?? SEED_REGISTRY;
+          const registry = dedicated ?? adminData?.clientRegistry ?? SEED_REGISTRY;
           const client = registry.find((c) => c.password === pw);
           if (client) {
             return { id: client.id, name: client.name, role: "client", clientId: client.id };

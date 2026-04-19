@@ -110,20 +110,30 @@ export default function Dashboard() {
       ? existing.map((c) => (c.id === id ? newEntry : c))
       : [...existing, newEntry];
     const newData = { ...data, clientRegistry: updated };
-    // Explicitly await the save so we know it persisted before showing success
     try {
-      const res = await fetch("/api/data", {
+      // Save full SalesData (includes clientRegistry for backwards compat)
+      const dataRes = await fetch("/api/data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newData),
       });
-      const json = await res.json();
-      if (json.persisted) {
+      const dataJson = await dataRes.json();
+
+      // Also write to dedicated sns-registry key so auth can always find clients
+      const regRes = await fetch("/api/registry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+      const regJson = await regRes.json();
+
+      if (dataJson.persisted && regJson.ok) {
+        update(newData);
         setClientMsg(`✓ "${newClientName.trim()}" added. Login password: ${newClientPassword.trim()}`);
         setNewClientName("");
         setNewClientPassword("");
       } else {
-        setClientMsg("Saved locally only — connect Vercel KV for client logins to work.");
+        setClientMsg("Saved locally only — KV may not be configured. Client login may not work.");
       }
     } catch {
       setClientMsg("Network error — could not save.");
