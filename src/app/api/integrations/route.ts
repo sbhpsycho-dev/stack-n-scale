@@ -4,17 +4,19 @@ import { getIntegrations, saveIntegrations } from "@/lib/integrations";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "admin") return new Response("Unauthorized", { status: 401 });
+  if (!session) return new Response("Unauthorized", { status: 401 });
 
-  const data = await getIntegrations(session.user.clientId!);
+  const clientId = session.user.role === "admin" ? "admin" : session.user.clientId!;
+  const data = await getIntegrations(clientId);
   return Response.json(data);
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "admin") return new Response("Unauthorized", { status: 401 });
+  if (!session) return new Response("Unauthorized", { status: 401 });
 
+  const clientId = session.user.role === "admin" ? "admin" : session.user.clientId!;
   const body = await req.json();
-  await saveIntegrations(session.user.clientId!, body);
+  await saveIntegrations(clientId, body);
   return Response.json({ ok: true });
 }

@@ -12,9 +12,12 @@ export async function GET(req: Request) {
     const adminData = (await kv.get<SalesData>("sns-dashboard-v1")) ?? SEED;
     const registry = adminData.clientRegistry ?? [];
 
-    await Promise.allSettled(registry.map((client) => syncAll(client.id)));
+    await Promise.allSettled([
+      syncAll("admin"),
+      ...registry.map((client) => syncAll(client.id)),
+    ]);
 
-    return Response.json({ ok: true, synced: registry.length });
+    return Response.json({ ok: true, synced: registry.length + 1 });
   } catch (err) {
     return Response.json({ ok: false, error: String(err) }, { status: 500 });
   }

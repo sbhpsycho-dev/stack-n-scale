@@ -511,8 +511,11 @@ function AdminSettingsView() {
         <TabsTrigger value="account" className="text-xs flex-1 gap-1">
           <User className="h-3 w-3" /> Account
         </TabsTrigger>
-        <TabsTrigger value="apikeys" className="text-xs flex-1 gap-1">
-          <Plug className="h-3 w-3" /> API Keys
+        <TabsTrigger value="integrations" className="text-xs flex-1 gap-1">
+          <Plug className="h-3 w-3" /> My Integrations
+        </TabsTrigger>
+        <TabsTrigger value="clientkeys" className="text-xs flex-1 gap-1">
+          <KeyRound className="h-3 w-3" /> Client Keys
         </TabsTrigger>
       </TabsList>
 
@@ -539,7 +542,11 @@ function AdminSettingsView() {
         </div>
       </TabsContent>
 
-      <TabsContent value="apikeys">
+      <TabsContent value="integrations">
+        <ApiKeysTab />
+      </TabsContent>
+
+      <TabsContent value="clientkeys">
         <AdminApiKeysTab />
       </TabsContent>
     </Tabs>

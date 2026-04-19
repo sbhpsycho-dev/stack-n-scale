@@ -2,7 +2,7 @@ import { kv } from "@vercel/kv";
 import { SEED, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint } from "@/lib/sales-data";
 import { getIntegrations, saveIntegrations } from "@/lib/integrations";
 
-const clientKey = (id: string) => `sns-client-${id}`;
+const clientKey = (id: string) => id === "admin" ? "sns-dashboard-v1" : `sns-client-${id}`;
 
 async function getClientData(clientId: string): Promise<SalesData> {
   try {
