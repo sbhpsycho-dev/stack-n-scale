@@ -1,5 +1,5 @@
 import { kv } from "@vercel/kv";
-import { SEED, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint } from "@/lib/sales-data";
+import { SEED, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint, type NameAmount } from "@/lib/sales-data";
 import { getIntegrations, saveIntegrations } from "@/lib/integrations";
 
 const clientKey = (id: string) => id === "admin" ? "sns-dashboard-v1" : `sns-client-${id}`;
@@ -85,8 +85,8 @@ export async function syncStripe(clientId: string): Promise<void> {
   const startTs = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000);
 
   let cashCollectedMTD = 0;
-  const txns = await stripe.balanceTransactions.list({ created: { gte: startTs }, type: "charge", limit: 100 });
-  txns.data.forEach((t) => { cashCollectedMTD += t.net / 100; });
+  const txns = await stripe.balanceTransactions.list({ created: { gte: startTs }, type: "charge", limit: 100 }).autoPagingToArray({ limit: 2000 });
+  txns.forEach((t) => { cashCollectedMTD += t.net / 100; });
 
   let mrr = 0;
   const subs = await stripe.subscriptions.list({ status: "active", limit: 100 });
@@ -102,11 +102,11 @@ export async function syncStripe(clientId: string): Promise<void> {
   });
 
   let totalRefund = 0;
-  const refunds = await stripe.refunds.list({ created: { gte: startTs }, limit: 100 });
-  refunds.data.forEach((r) => { totalRefund += r.amount / 100; });
+  const refunds = await stripe.refunds.list({ created: { gte: startTs }, limit: 100 }).autoPagingToArray({ limit: 2000 });
+  refunds.forEach((r) => { totalRefund += r.amount / 100; });
 
   const dailyMap: Record<string, number> = {};
-  txns.data.forEach((t) => {
+  txns.forEach((t) => {
     const date = new Date(t.created * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     dailyMap[date] = (dailyMap[date] ?? 0) + t.net / 100;
   });
@@ -118,8 +118,8 @@ export async function syncStripe(clientId: string): Promise<void> {
   const lastMonthStart = Math.floor(new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime() / 1000);
   const lastMonthEnd = Math.floor(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).getTime() / 1000);
   let cashCollectedLastMonth = 0;
-  const lastMonthTxns = await stripe.balanceTransactions.list({ created: { gte: lastMonthStart, lte: lastMonthEnd }, type: "charge", limit: 100 });
-  lastMonthTxns.data.forEach((t) => { cashCollectedLastMonth += t.net / 100; });
+  const lastMonthTxns = await stripe.balanceTransactions.list({ created: { gte: lastMonthStart, lte: lastMonthEnd }, type: "charge", limit: 100 }).autoPagingToArray({ limit: 2000 });
+  lastMonthTxns.forEach((t) => { cashCollectedLastMonth += t.net / 100; });
 
   const existing = await getClientData(clientId);
   const totalRefundPct = cashCollectedMTD > 0 ? totalRefund / cashCollectedMTD : 0;
@@ -197,7 +197,7 @@ export async function syncGHL(clientId: string): Promise<void> {
   await saveClientData(clientId, {
     ...existing,
     dashboard: { ...existing.dashboard, leadsThisMonth, totalDealsClosedMTD: closed },
-    pipeline: { ...existing.pipeline, closed, closeRate, demoToClose: closeRate, stageBreakdown },
+    pipeline: { ...existing.pipeline, closed, closeRate, stageBreakdown },
     reps: {
       ...existing.reps,
       dealClose: closed,
@@ -266,6 +266,7 @@ export async function syncSheets(clientId: string): Promise<void> {
     dealclose:         (d, v) => ({ ...d, reps: { ...d.reps, dealClose: v } }),
     callsmadeweek:     (d, v) => ({ ...d, reps: { ...d.reps, callsMadeWeek: v } }),
     rateof:            (d, v) => ({ ...d, reps: { ...d.reps, rateOf: v } }),
+    closerateweek:     (d, v) => ({ ...d, reps: { ...d.reps, closeRateWeek: v } }),
     closeratepct:      (d, v) => ({ ...d, reps: { ...d.reps, closeRatePct: v } }),
     showratepct:       (d, v) => ({ ...d, reps: { ...d.reps, showRatePct: v } }),
     avgdealsize:       (d, v) => ({ ...d, reps: { ...d.reps, avgDealSize: v } }),
@@ -282,23 +283,109 @@ export async function syncSheets(clientId: string): Promise<void> {
     }
   });
 
+  // gid=1 — Revenue Log: columns Date, Amount, Processor, Product
+  const revRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=1`);
+  if (revRes.ok) {
+    const revCsv = await revRes.text();
+    const revLines = revCsv.split("\n").filter(Boolean);
+    if (revLines.length >= 2) {
+      const revHeaders = revLines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, ""));
+      const dateIdx = revHeaders.indexOf("date");
+      const amountIdx = revHeaders.indexOf("amount");
+      const processorIdx = revHeaders.indexOf("processor");
+      const productIdx = revHeaders.indexOf("product");
+
+      const revenueOverTime: TimePoint[] = [];
+      const processorMap: Record<string, number> = {};
+      const productMap: Record<string, number> = {};
+
+      for (const line of revLines.slice(1)) {
+        const cols = line.split(",").map((v) => v.trim().replace(/['"$,]/g, ""));
+        const date = dateIdx >= 0 ? cols[dateIdx] : "";
+        const amount = amountIdx >= 0 ? parseFloat(cols[amountIdx] ?? "0") : 0;
+        const processor = processorIdx >= 0 ? cols[processorIdx] : "";
+        const product = productIdx >= 0 ? cols[productIdx] : "";
+        if (!date || isNaN(amount)) continue;
+        revenueOverTime.push({ date, amount });
+        if (processor) processorMap[processor] = (processorMap[processor] ?? 0) + amount;
+        if (product) productMap[product] = (productMap[product] ?? 0) + amount;
+      }
+
+      const netByProcessor: NameAmount[] = Object.entries(processorMap).map(([name, amount]) => ({ name, amount: parseFloat(amount.toFixed(2)) }));
+      const netByProduct: NameAmount[] = Object.entries(productMap).map(([name, amount]) => ({ name, amount: parseFloat(amount.toFixed(2)) }));
+
+      updated = {
+        ...updated,
+        dashboard: {
+          ...updated.dashboard,
+          ...(revenueOverTime.length > 0 ? { revenueOverTime } : {}),
+          ...(netByProcessor.length > 0 ? { netByProcessor } : {}),
+          ...(netByProduct.length > 0 ? { netByProduct } : {}),
+        },
+      };
+    }
+  }
+
+  // gid=2 — DM/Calls Production: columns Rep Name, Calls Made, Calls Answered, Demos Set, Demos Showed, Pitched, Deals Closed, Cash Collected
+  const repsRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=2`);
+  if (repsRes.ok) {
+    const repsCsv = await repsRes.text();
+    const repsLines = repsCsv.split("\n").filter(Boolean);
+    if (repsLines.length >= 2) {
+      const repsHeaders = repsLines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, ""));
+      const col = (name: string) => repsHeaders.indexOf(name);
+
+      const leaderboard: Rep[] = repsLines.slice(1).map((line) => {
+        const cols = line.split(",").map((v) => v.trim().replace(/['"$,]/g, ""));
+        const get = (idx: number) => idx >= 0 ? parseFloat(cols[idx] ?? "0") || 0 : 0;
+        const name = col("repname") >= 0 ? cols[col("repname")] : cols[0] ?? "Unknown";
+        const callsMade = get(col("callsmade"));
+        const callsAnswered = get(col("callsanswered"));
+        const demosSet = get(col("demosset"));
+        const demosShowed = get(col("demosshowed"));
+        const pitched = get(col("pitched"));
+        const dealsClosed = get(col("dealsclosed"));
+        const cashCollected = get(col("cashcollected"));
+        const answerRate = callsMade > 0 ? parseFloat(((callsAnswered / callsMade) * 100).toFixed(2)) : 0;
+        return { name, callsMade, callsAnswered, demosSet, demosShowed, pitched, dealsClosed, cashCollected, answerRate };
+      }).filter((r) => r.name && r.name !== "Unknown");
+
+      if (leaderboard.length > 0) {
+        updated = { ...updated, reps: { ...updated.reps, leaderboard } };
+      }
+    }
+  }
+
   await saveClientData(clientId, updated);
 }
 
 export async function syncAll(clientId: string): Promise<void> {
-  await Promise.allSettled([syncMeta(clientId), syncStripe(clientId), syncGHL(clientId), syncSheets(clientId)]);
+  const results = await Promise.allSettled([syncMeta(clientId), syncStripe(clientId), syncGHL(clientId), syncSheets(clientId)]);
+  const anyOk = results.some(r => r.status === "fulfilled");
 
-  // Derive costPerClose from merged data (requires both Meta spend and GHL closed count)
+  // Derive cross-source metrics from fully merged data
   const merged = await getClientData(clientId);
   const adSpend = merged.ads.totalAdSpend;
   const dealsClosed = merged.dashboard.totalDealsClosedMTD;
+  const demosShowed = merged.pipeline.demosShowed;
+
+  const dashboardPatch: Partial<typeof merged.dashboard> = {};
   if (adSpend > 0 && dealsClosed > 0) {
-    await saveClientData(clientId, {
-      ...merged,
-      dashboard: { ...merged.dashboard, costPerClose: parseFloat((adSpend / dealsClosed).toFixed(2)) },
-    });
+    dashboardPatch.costPerClose = parseFloat((adSpend / dealsClosed).toFixed(2));
   }
 
-  const integrations = await getIntegrations(clientId);
-  await saveIntegrations(clientId, { ...integrations, lastSyncedAt: new Date().toISOString() });
+  const demoToClose = demosShowed > 0
+    ? parseFloat(((merged.pipeline.closed / demosShowed) * 100).toFixed(2))
+    : merged.pipeline.demoToClose;
+
+  await saveClientData(clientId, {
+    ...merged,
+    dashboard: { ...merged.dashboard, ...dashboardPatch },
+    pipeline: { ...merged.pipeline, demoToClose },
+  });
+
+  if (anyOk) {
+    const integrations = await getIntegrations(clientId);
+    await saveIntegrations(clientId, { ...integrations, lastSyncedAt: new Date().toISOString() });
+  }
 }

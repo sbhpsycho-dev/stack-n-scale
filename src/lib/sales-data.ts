@@ -115,6 +115,34 @@ export type SalesData = {
   clientRegistry: ClientMeta[];
 };
 
+export const BLANK: SalesData = {
+  dashboard: {
+    cashCollectedMTD: 0, leadsThisMonth: 0, totalDealsClosedMTD: 0,
+    netRevenueMTD: 0, costPerClose: 0, mrr: 0, totalRefund: 0,
+    totalRefundPct: 0, monthlyGoal: 0, cashCollectedLastMonth: 0,
+    avgLeadResponseTimeMin: 0,
+    reactivation: { contacted: 0, replied: 0, booked: 0, closed: 0 },
+    checkInScores: [], revenueOverTime: [], netByProduct: [], netByProcessor: [],
+  },
+  pipeline: {
+    callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0,
+    pitched: 0, closed: 0, answerRate: 0, showRate: 0, closeRate: 0,
+    demoToClose: 0, funnelByWeek: [], stageBreakdown: [],
+  },
+  ads: {
+    totalAdSpend: 0, totalLeads: 0, cpl: 0, roas: 0, ctr: 0,
+    cpc: 0, impressions: 0, reach: 0, instaCPL: 0,
+    leadsOverTime: [], leadsByCampaign: [], cplByAdSet: [], topAds: [], spendSplit: [],
+  },
+  reps: {
+    cashCollectedWeek: 0, dealClose: 0, callsMadeWeek: 0, rateOf: 0,
+    closeRateWeek: 0, topRepCash: 0, showRatePct: 0, closeRatePct: 0,
+    avgDealSize: 0, leaderboard: [],
+  },
+  clients: [],
+  clientRegistry: [],
+};
+
 export const SEED: SalesData = {
   dashboard: {
     cashCollectedMTD: 20001,

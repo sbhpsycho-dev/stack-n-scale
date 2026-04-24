@@ -28,7 +28,10 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return new Response("Unauthorized", { status: 401 });
 
-  const key = session.user.role === "admin"
+  const target = new URL(req.url).searchParams.get("target");
+  const key = session.user.role === "admin" && target
+    ? clientKey(target)
+    : session.user.role === "admin"
     ? ADMIN_KEY
     : clientKey(session.user.clientId!);
 
@@ -38,6 +41,6 @@ export async function POST(req: Request) {
     await kv.set(key, body);
     return Response.json({ ok: true, persisted: true });
   } catch {
-    return Response.json({ ok: true, persisted: false });
+    return Response.json({ ok: false, persisted: false });
   }
 }

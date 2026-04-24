@@ -71,6 +71,11 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
   async function syncIntegration(source: string) {
     setStatus((s) => ({ ...s, [source]: "syncing" }));
     try {
+      await fetch("/api/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(integrations),
+      });
       await fetch(`/api/sync/${source}`, { method: "POST" });
       setStatus((s) => ({ ...s, [source]: "done" }));
     } catch {

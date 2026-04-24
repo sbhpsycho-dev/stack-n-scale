@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -22,7 +22,7 @@ import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/fu
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
 import { type ClientIntegrations } from "@/lib/integrations";
-import { SEED } from "@/lib/sales-data";
+import { SEED, BLANK } from "@/lib/sales-data";
 import { SettingsSheet } from "@/components/settings-sheet";
 
 const tabAnim: Variants = {
@@ -105,6 +105,8 @@ export default function Dashboard() {
   const [newClientPassword, setNewClientPassword] = useState("");
   const [clientSaving, setClientSaving] = useState(false);
   const [clientMsg, setClientMsg] = useState("");
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [editingClientName, setEditingClientName] = useState("");
 
   const addClient = useCallback(async () => {
     if (!newClientName.trim() || !newClientPassword.trim()) return;
@@ -135,6 +137,12 @@ export default function Dashboard() {
       const regJson = await regRes.json();
 
       if (dataJson.persisted && regJson.ok) {
+        // Zero-initialize the new client's dashboard so they never see seed/demo data
+        await fetch(`/api/data?target=${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(BLANK),
+        }).catch(() => {});
         update(newData);
         setClientMsg(`✓ "${newClientName.trim()}" added. Login password: ${newClientPassword.trim()}`);
         setNewClientName("");
@@ -147,6 +155,18 @@ export default function Dashboard() {
     }
     setClientSaving(false);
   }, [newClientName, newClientPassword, data]);
+
+  const saveClientName = useCallback(async (id: string) => {
+    const name = editingClientName.trim();
+    if (!name) return;
+    setEditingClientId(null);
+    await fetch("/api/registry", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name }),
+    }).catch(() => {});
+    update({ ...data, clientRegistry: (data.clientRegistry ?? []).map((c) => c.id === id ? { ...c, name } : c) });
+  }, [editingClientName, data, update]);
 
   // Revenue trend vs last month
   const trendPct = d.cashCollectedLastMonth > 0
@@ -629,11 +649,37 @@ export default function Dashboard() {
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {(data.clientRegistry ?? []).map((c) => (
-                            <Link key={c.id} href={`/admin/client/${c.id}`}>
-                              <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
-                                {c.name}
-                              </Badge>
-                            </Link>
+                            editingClientId === c.id ? (
+                              <div key={c.id} className="flex items-center gap-1">
+                                <Input
+                                  autoFocus
+                                  value={editingClientName}
+                                  onChange={(e) => setEditingClientName(e.target.value)}
+                                  className="h-7 text-xs w-36 bg-muted border-orange-500/40"
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") saveClientName(c.id);
+                                    if (e.key === "Escape") setEditingClientId(null);
+                                  }}
+                                />
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-400" onClick={() => saveClientName(c.id)}><Check className="h-3 w-3" /></Button>
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingClientId(null)}><X className="h-3 w-3" /></Button>
+                              </div>
+                            ) : (
+                              <div key={c.id} className="flex items-center gap-1 group">
+                                <Link href={`/admin/client/${c.id}`}>
+                                  <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
+                                    {c.name}
+                                  </Badge>
+                                </Link>
+                                <Button
+                                  size="icon" variant="ghost"
+                                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
+                                  onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )
                           ))}
                         </div>
                       )}
