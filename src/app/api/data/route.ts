@@ -5,13 +5,15 @@ import { SEED } from "@/lib/sales-data";
 const ADMIN_KEY = "sns-dashboard-v1";
 const clientKey = (id: string) => `sns-client-${id}`;
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return new Response("Unauthorized", { status: 401 });
 
-  const key = session.user.role === "admin"
-    ? ADMIN_KEY
-    : clientKey(session.user.clientId!);
+  const target = new URL(req.url).searchParams.get("target");
+  const key =
+    session.user.role === "admin" && target ? clientKey(target)
+    : session.user.role === "admin"          ? ADMIN_KEY
+    :                                          clientKey(session.user.clientId!);
 
   try {
     const { kv } = await import("@vercel/kv");

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MetricCard } from "@/components/metric-card";
 import Image from "next/image";
+import Link from "next/link";
 import { EditDataSheet } from "@/components/edit-data-sheet";
 import { useSalesData } from "@/hooks/use-sales-data";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,11 @@ export default function Dashboard() {
   const [editOpen, setEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
+
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t) setTab(t);
+  }, []);
 
   // Integrations state
   const [integrations, setIntegrations] = useState<ClientIntegrations>({});
@@ -181,6 +187,12 @@ export default function Dashboard() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Link href="/onboarding"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
+                Onboarding
+              </Link>
+            )}
             <Button size="sm" variant="ghost" onClick={reset}
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
               <RotateCcw className="h-3.5 w-3.5" />
@@ -602,6 +614,31 @@ export default function Dashboard() {
                     <MetricCard label="Clients Paid"         value={paidCount}                     variant="green"  index={1} />
                     <MetricCard label="Clients Pending"      value={pendingCount}                   variant="default" index={2} />
                   </div>
+
+                  {/* Client Dashboards */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Users className="h-4 w-4 text-orange-400" />
+                        Client Dashboards
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      {(data.clientRegistry ?? []).length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No clients added yet.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {(data.clientRegistry ?? []).map((c) => (
+                            <Link key={c.id} href={`/admin/client/${c.id}`}>
+                              <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
+                                {c.name}
+                              </Badge>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   {/* Add Client */}
                   <Card className="bg-card border-border">
