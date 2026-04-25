@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -27,6 +27,7 @@ import { SettingsSheet } from "@/components/settings-sheet";
 import { type DashboardConfig, DEFAULT_CONFIG, BUSINESS_PRESETS, type BusinessType } from "@/lib/dashboard-config";
 import { type Resource, type ResourceType } from "@/lib/resources";
 import { Switch } from "@/components/ui/switch";
+import { type DailyEntry } from "@/app/api/replog/route";
 
 const tabAnim: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -93,6 +94,31 @@ export default function Dashboard() {
   const deleteResource = async (id: string) => {
     await fetch("/api/resources", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     setResources(prev => prev.filter(r => r.id !== id));
+  };
+
+  // Rep log (My Performance tab)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [replog, setReplog] = useState<DailyEntry[]>([]);
+  const [replogEntry, setReplogEntry] = useState<DailyEntry>({ date: todayStr, callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, closed: 0, cashCollected: 0 });
+  const [replogSaving, setReplogSaving] = useState(false);
+  useEffect(() => {
+    fetch("/api/replog").then(r => r.json()).then((entries) => {
+      if (Array.isArray(entries)) {
+        setReplog(entries);
+        const todayEntry = entries.find((e: DailyEntry) => e.date === todayStr);
+        if (todayEntry) setReplogEntry(todayEntry);
+      }
+    }).catch(() => {});
+  }, [todayStr]);
+  const saveReplogEntry = async () => {
+    setReplogSaving(true);
+    await fetch("/api/replog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replogEntry) }).catch(() => {});
+    setReplog(prev => prev.some(e => e.date === replogEntry.date) ? prev.map(e => e.date === replogEntry.date ? replogEntry : e) : [replogEntry, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
+    setReplogSaving(false);
+  };
+  const deleteReplogEntry = async (date: string) => {
+    await fetch("/api/replog", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date }) }).catch(() => {});
+    setReplog(prev => prev.filter(e => e.date !== date));
   };
 
   // Auto-redirect new clients to setup wizard (only if they haven't completed it)
@@ -286,6 +312,7 @@ export default function Dashboard() {
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
             {config.tabs.resources  && <TabsTrigger value="resources"    className="text-xs px-4">Resources</TabsTrigger>}
+            {!isAdmin && <TabsTrigger value="my-performance" className="text-xs px-4"><BarChart2 className="h-3 w-3 mr-1" />My Performance</TabsTrigger>}
             {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
             <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
             {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
@@ -865,6 +892,154 @@ export default function Dashboard() {
                       </CardContent>
                     </Card>
                   ))}
+                </motion.div>
+              </TabsContent>
+            )}
+
+            {/* ══════════════ MY PERFORMANCE ══════════════ */}
+            {tab === "my-performance" && !isAdmin && (
+              <TabsContent value="my-performance">
+                <motion.div key="my-performance" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5 max-w-3xl">
+                  <div>
+                    <h2 className="text-base font-bold flex items-center gap-2"><BarChart2 className="h-4 w-4 text-orange-400" />My Performance</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Log your daily numbers and track your personal stats over time.</p>
+                  </div>
+
+                  {/* Daily entry form */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-orange-400" />
+                        Log Today&apos;s Numbers
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-[11px] text-muted-foreground uppercase tracking-wider shrink-0">Date</Label>
+                        <Input type="date" value={replogEntry.date}
+                          onChange={e => setReplogEntry(p => ({ ...p, date: e.target.value }))}
+                          className="h-7 text-xs bg-muted border-border w-36" />
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {([
+                          ["callsMade",     "Calls Made"],
+                          ["callsAnswered", "Calls Answered"],
+                          ["demosSet",      "Demos Set"],
+                          ["demosShowed",   "Demos Showed"],
+                          ["pitched",       "Pitched"],
+                          ["closed",        "Closed"],
+                          ["cashCollected", "Cash Collected ($)"],
+                        ] as [keyof DailyEntry, string][]).filter(([k]) => k !== "date").map(([key, label]) => (
+                          <div key={key} className="flex flex-col gap-1">
+                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</Label>
+                            <Input type="number" min={0} value={replogEntry[key] as number}
+                              onChange={e => setReplogEntry(p => ({ ...p, [key]: parseFloat(e.target.value) || 0 }))}
+                              className="h-8 text-sm bg-muted border-border" />
+                          </div>
+                        ))}
+                      </div>
+                      <Button size="sm" onClick={saveReplogEntry} disabled={replogSaving}
+                        className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs gap-1.5">
+                        {replogSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        {replogSaving ? "Saving…" : "Save Entry"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Running totals */}
+                  {replog.length > 0 && (() => {
+                    const totals = replog.reduce((acc, e) => ({
+                      callsMade:     acc.callsMade     + e.callsMade,
+                      callsAnswered: acc.callsAnswered + e.callsAnswered,
+                      demosSet:      acc.demosSet      + e.demosSet,
+                      demosShowed:   acc.demosShowed   + e.demosShowed,
+                      pitched:       acc.pitched       + e.pitched,
+                      closed:        acc.closed        + e.closed,
+                      cashCollected: acc.cashCollected + e.cashCollected,
+                    }), { callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, closed: 0, cashCollected: 0 });
+                    const answerRate = totals.callsMade > 0 ? ((totals.callsAnswered / totals.callsMade) * 100).toFixed(1) : "0";
+                    const closeRate  = totals.demosShowed > 0 ? ((totals.closed / totals.demosShowed) * 100).toFixed(1) : "0";
+                    return (
+                      <Card className="bg-orange-500/5 border-orange-500/20">
+                        <CardHeader className="pb-2 pt-4 px-4">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-orange-400" />
+                            All-Time Totals ({replog.length} {replog.length === 1 ? "day" : "days"} logged)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <MetricCard label="Calls Made"     value={totals.callsMade}     variant="default" index={0} />
+                            <MetricCard label="Calls Answered" value={totals.callsAnswered} variant="default" index={1} />
+                            <MetricCard label="Answer Rate"    value={parseFloat(answerRate)} suffix="%" variant="orange" index={2} decimals={1} />
+                            <MetricCard label="Demos Set"      value={totals.demosSet}      variant="default" index={3} />
+                            <MetricCard label="Demos Showed"   value={totals.demosShowed}   variant="default" index={4} />
+                            <MetricCard label="Pitched"        value={totals.pitched}       variant="default" index={5} />
+                            <MetricCard label="Closed"         value={totals.closed}        variant="orange"  index={6} />
+                            <MetricCard label="Close Rate"     value={parseFloat(closeRate)} suffix="%" variant="green" index={7} decimals={1} />
+                          </div>
+                          <div className="mt-3">
+                            <MetricCard label="Total Cash Collected" value={totals.cashCollected} prefix="$" variant="green" index={8} />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
+
+                  {/* History log */}
+                  {replog.length > 0 && (
+                    <Card className="bg-card border-border">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold">Entry History</CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm min-w-[600px]">
+                            <thead>
+                              <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                                {["Date", "Calls", "Answered", "Set", "Showed", "Pitched", "Closed", "Cash", ""].map(h => (
+                                  <th key={h} className="pb-2 pr-3 font-medium whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {replog.map((entry) => (
+                                <tr key={entry.date} className="border-b border-border/30 last:border-0 hover:bg-muted/40 transition-colors group">
+                                  <td className="py-2.5 pr-3 font-medium whitespace-nowrap text-orange-400">
+                                    {new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.callsMade}</td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.callsAnswered}</td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.demosSet}</td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.demosShowed}</td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.pitched}</td>
+                                  <td className="py-2.5 pr-3 text-muted-foreground">{entry.closed}</td>
+                                  <td className="py-2.5 pr-3">
+                                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">
+                                      ${entry.cashCollected.toLocaleString()}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2.5">
+                                    <Button size="icon" variant="ghost"
+                                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
+                                      onClick={() => deleteReplogEntry(entry.date)}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {replog.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground text-sm">
+                      No entries yet. Log your first day above to start tracking.
+                    </div>
+                  )}
                 </motion.div>
               </TabsContent>
             )}
