@@ -3,8 +3,6 @@ import { kv } from "@vercel/kv";
 import { createContact, getContactByEmail, addTag } from "@/lib/ghl";
 import { triggerEmail } from "@/lib/email";
 
-export const config = { api: { bodyParser: false } };
-
 function stripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-03-25.dahlia" });
 }
