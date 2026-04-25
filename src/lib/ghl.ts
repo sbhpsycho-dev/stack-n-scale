@@ -1,9 +1,10 @@
-const GHL_BASE = "https://rest.gohighlevel.com/v1";
+const GHL_BASE = "https://services.leadconnectorhq.com";
 
 function headers() {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${process.env.GHL_API_KEY}`,
+    Version: "2021-07-28",
   };
 }
 
@@ -35,7 +36,7 @@ export async function createContact(data: {
 
 export async function getContactByEmail(email: string): Promise<GHLContact | null> {
   const res = await fetch(
-    `${GHL_BASE}/contacts/?locationId=${process.env.GHL_LOCATION_ID}&email=${encodeURIComponent(email)}`,
+    `${GHL_BASE}/contacts/?locationId=${process.env.GHL_LOCATION_ID}&query=${encodeURIComponent(email)}&limit=1`,
     { headers: headers() }
   );
   if (!res.ok) return null;
@@ -51,7 +52,7 @@ export async function updateContactField(
   const res = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
     method: "PUT",
     headers: headers(),
-    body: JSON.stringify({ customField: [{ id: field, value }] }),
+    body: JSON.stringify({ customFields: [{ id: field, value }] }),
   });
   if (!res.ok) throw new Error(`GHL updateContactField: ${res.status} ${await res.text()}`);
 }
