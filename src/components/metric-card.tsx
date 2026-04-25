@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { motion, useMotionValue, useTransform, animate, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
 
 type Variant = "green" | "orange" | "black" | "default";
 
@@ -29,6 +30,9 @@ interface MetricCardProps {
   index?: number;
   decimals?: number;
   wide?: boolean;
+  onClick?: () => void;
+  selected?: boolean;
+  hint?: string;
 }
 
 function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }: {
@@ -48,14 +52,29 @@ function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 0 }: {
   return <motion.span>{display}</motion.span>;
 }
 
-export function MetricCard({ label, value, prefix = "", suffix = "", variant = "default", index = 0, decimals = 0, wide = false }: MetricCardProps) {
+export function MetricCard({
+  label, value, prefix = "", suffix = "", variant = "default",
+  index = 0, decimals = 0, wide = false, onClick, selected, hint,
+}: MetricCardProps) {
   const reduced = useReducedMotion();
+  const interactive = !!onClick;
+
   return (
     <motion.div
       initial={reduced ? false : { opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.05, ease: "easeOut" }}
-      className={cn("rounded-xl border p-4 flex flex-col gap-1.5", bg[variant], wide && "col-span-2")}
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border p-4 flex flex-col gap-1.5 relative",
+        bg[variant],
+        wide && "col-span-2",
+        interactive && "cursor-pointer transition-all duration-150",
+        interactive && variant === "default" && "hover:border-orange-500/50 hover:bg-muted/60",
+        interactive && variant !== "default" && "hover:opacity-90",
+        selected && variant === "default" && "border-orange-500/70 ring-1 ring-orange-500/30",
+        selected && variant !== "default" && "ring-2 ring-white/40",
+      )}
     >
       <span className={cn("text-[11px] font-semibold uppercase tracking-wider leading-none", sub[variant])}>
         {label}
@@ -65,6 +84,18 @@ export function MetricCard({ label, value, prefix = "", suffix = "", variant = "
           ? <AnimatedNumber value={value} prefix={prefix} suffix={suffix} decimals={decimals} />
           : `${prefix}${value}${suffix}`}
       </span>
+      {hint && !selected && (
+        <span className={cn("text-[10px] leading-none mt-0.5", sub[variant])}>{hint}</span>
+      )}
+      {interactive && (
+        <motion.div
+          animate={{ rotate: selected ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className={cn("absolute bottom-2 right-2 opacity-40", sub[variant])}
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </motion.div>
+      )}
     </motion.div>
   );
 }

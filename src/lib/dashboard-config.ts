@@ -1,7 +1,31 @@
 export type BusinessType = "coaching" | "agency" | "ecommerce" | "saas" | "custom";
 
+export type KpiCardKey =
+  | "cashCollectedMTD" | "netRevenueMTD" | "leadsThisMonth"
+  | "totalDealsClosedMTD" | "costPerClose" | "mrr"
+  | "totalRefund" | "totalRefundPct" | "avgLeadResponse";
+
+export const KPI_CARD_LABELS: Record<KpiCardKey, string> = {
+  cashCollectedMTD:     "Cash Collected MTD",
+  netRevenueMTD:        "Net Revenue MTD",
+  leadsThisMonth:       "Leads This Month",
+  totalDealsClosedMTD:  "Total Deals Closed",
+  costPerClose:         "Cost Per Close",
+  mrr:                  "MRR",
+  totalRefund:          "Total Refund MTD",
+  totalRefundPct:       "Total Refund %",
+  avgLeadResponse:      "Avg Lead Response",
+};
+
+export const DEFAULT_KPI_VISIBILITY: Record<KpiCardKey, boolean> = {
+  cashCollectedMTD: true, netRevenueMTD: true, leadsThisMonth: true,
+  totalDealsClosedMTD: true, costPerClose: true, mrr: true,
+  totalRefund: true, totalRefundPct: true, avgLeadResponse: true,
+};
+
 export type DashboardConfig = {
   businessType: BusinessType;
+  kpiCardVisibility?: Partial<Record<KpiCardKey, boolean>>;
   tabs: {
     dashboard: boolean;
     pipeline: boolean;

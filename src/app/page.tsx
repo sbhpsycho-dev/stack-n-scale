@@ -24,7 +24,7 @@ import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/compo
 import { type ClientIntegrations } from "@/lib/integrations";
 import { SEED, BLANK } from "@/lib/sales-data";
 import { SettingsSheet } from "@/components/settings-sheet";
-import { type DashboardConfig, DEFAULT_CONFIG, BUSINESS_PRESETS, type BusinessType } from "@/lib/dashboard-config";
+import { type DashboardConfig, DEFAULT_CONFIG, BUSINESS_PRESETS, type BusinessType, type KpiCardKey, KPI_CARD_LABELS, DEFAULT_KPI_VISIBILITY } from "@/lib/dashboard-config";
 import { type Resource, type ResourceType } from "@/lib/resources";
 import { Switch } from "@/components/ui/switch";
 import { type DailyEntry } from "@/app/api/replog/route";
@@ -76,6 +76,9 @@ export default function Dashboard() {
     setConfig(next);
     fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) }).catch(() => {});
   };
+  const kpiVisible = (key: KpiCardKey) => config.kpiCardVisibility?.[key] ?? DEFAULT_KPI_VISIBILITY[key];
+  const [expandedCard, setExpandedCard] = useState<KpiCardKey | null>(null);
+  const toggleCard = (key: KpiCardKey) => setExpandedCard(prev => prev === key ? null : key);
 
   // Resources
   const [resources, setResources] = useState<Resource[]>([]);
@@ -325,36 +328,189 @@ export default function Dashboard() {
               <TabsContent value="dashboard">
                 <motion.div key="dashboard" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
 
-                  {/* Top KPI row */}
+                  {/* Last synced */}
+                  {lastSynced && (
+                    <p className="text-[10px] text-muted-foreground -mt-3">
+                      Last synced {new Date(lastSynced).toLocaleString()}
+                    </p>
+                  )}
+
+                  {/* Empty state */}
+                  {d.cashCollectedMTD === 0 && d.leadsThisMonth === 0 && d.mrr === 0 && !loading && (
+                    <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-orange-400">No data yet</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Connect your integrations to start seeing live metrics.</p>
+                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => setTab("integrations")}
+                        className="text-xs h-7 shrink-0 text-orange-400 hover:text-orange-300 border border-orange-500/30">
+                        Set up integrations
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Top KPI row — individually togglable + clickable for detail */}
                   {config.widgets.kpiCards && (
                     <>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <div className="relative">
-                          <MetricCard label="Cash Collected MTD" value={d.cashCollectedMTD} prefix="$" variant="green" index={0} />
-                          {!trendFlat && (
-                            <div className={`absolute bottom-2 right-2 flex items-center gap-0.5 text-[10px] font-semibold ${trendUp ? "text-emerald-400" : "text-red-400"}`}>
-                              {trendUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                              {trendUp ? "+" : ""}{trendPct.toFixed(1)}%
-                            </div>
-                          )}
-                          {trendFlat && (
-                            <div className="absolute bottom-2 right-2 flex items-center gap-0.5 text-[10px] font-semibold text-muted-foreground">
-                              <Minus className="h-3 w-3" /> 0%
-                            </div>
-                          )}
-                        </div>
-                        <MetricCard label="Net Revenue MTD"    value={d.netRevenueMTD}    prefix="$" variant="orange"  index={1} />
-                        <MetricCard label="Leads This Month"   value={d.leadsThisMonth}              variant="default" index={2} />
-                        <MetricCard label="Total Deals Closed" value={d.totalDealsClosedMTD}         variant="orange"  index={3} />
-                        <MetricCard label="Cost Per Close"     value={d.costPerClose}     prefix="$" variant="default" index={4} />
-                        <MetricCard label="MRR"                value={d.mrr}              prefix="$" variant="black"   index={5} />
+                        {kpiVisible("cashCollectedMTD") && (
+                          <MetricCard label="Cash Collected MTD" value={d.cashCollectedMTD} prefix="$" variant="green" index={0}
+                            hint={trendFlat ? "vs last month" : `${trendUp ? "+" : ""}${trendPct.toFixed(1)}% vs last month`}
+                            onClick={() => toggleCard("cashCollectedMTD")} selected={expandedCard === "cashCollectedMTD"} />
+                        )}
+                        {kpiVisible("netRevenueMTD") && (
+                          <MetricCard label="Net Revenue MTD" value={d.netRevenueMTD} prefix="$" variant="orange" index={1}
+                            onClick={() => toggleCard("netRevenueMTD")} selected={expandedCard === "netRevenueMTD"} />
+                        )}
+                        {kpiVisible("leadsThisMonth") && (
+                          <MetricCard label="Leads This Month" value={d.leadsThisMonth} variant="default" index={2}
+                            onClick={() => toggleCard("leadsThisMonth")} selected={expandedCard === "leadsThisMonth"} />
+                        )}
+                        {kpiVisible("totalDealsClosedMTD") && (
+                          <MetricCard label="Total Deals Closed" value={d.totalDealsClosedMTD} variant="orange" index={3}
+                            onClick={() => toggleCard("totalDealsClosedMTD")} selected={expandedCard === "totalDealsClosedMTD"} />
+                        )}
+                        {kpiVisible("costPerClose") && (
+                          <MetricCard label="Cost Per Close" value={d.costPerClose} prefix="$" variant="default" index={4}
+                            onClick={() => toggleCard("costPerClose")} selected={expandedCard === "costPerClose"} />
+                        )}
+                        {kpiVisible("mrr") && (
+                          <MetricCard label="MRR" value={d.mrr} prefix="$" variant="black" index={5}
+                            onClick={() => toggleCard("mrr")} selected={expandedCard === "mrr"} />
+                        )}
                       </div>
+
+                      {/* Expandable detail panels for top row */}
+                      <AnimatePresence>
+                        {expandedCard && ["cashCollectedMTD","netRevenueMTD","leadsThisMonth","totalDealsClosedMTD","costPerClose","mrr"].includes(expandedCard) && (
+                          <motion.div key={`detail-${expandedCard}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25 }}>
+                            <Card className="bg-muted/40 border-orange-500/20">
+                              <CardContent className="px-4 py-4">
+                                {expandedCard === "cashCollectedMTD" && (
+                                  <div className="space-y-3">
+                                    <p className="text-xs font-semibold text-orange-400">Cash Collected MTD — Revenue Trend</p>
+                                    <div className="grid grid-cols-3 gap-3 text-center text-xs mb-3">
+                                      <div><p className="text-muted-foreground">This Month</p><p className="font-bold text-foreground">${d.cashCollectedMTD.toLocaleString()}</p></div>
+                                      <div><p className="text-muted-foreground">Last Month</p><p className="font-bold text-foreground">${d.cashCollectedLastMonth.toLocaleString()}</p></div>
+                                      <div><p className="text-muted-foreground">Change</p><p className={`font-bold ${trendUp ? "text-emerald-400" : trendFlat ? "text-muted-foreground" : "text-red-400"}`}>{trendUp ? "+" : ""}{trendPct.toFixed(1)}%</p></div>
+                                    </div>
+                                    <RevenueOverTimeChart data={d.revenueOverTime} />
+                                  </div>
+                                )}
+                                {expandedCard === "netRevenueMTD" && (
+                                  <div className="space-y-3">
+                                    <p className="text-xs font-semibold text-orange-400">Net Revenue — By Product & Processor</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">By Product</p><NetByProductChart data={d.netByProduct} /></div>
+                                      <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">By Processor</p><NetByProcessorChart data={d.netByProcessor} /></div>
+                                    </div>
+                                  </div>
+                                )}
+                                {expandedCard === "leadsThisMonth" && (
+                                  <div className="space-y-3">
+                                    <p className="text-xs font-semibold text-orange-400">Leads — Campaign Breakdown</p>
+                                    <LeadsByCampaignChart data={a.leadsByCampaign} />
+                                  </div>
+                                )}
+                                {expandedCard === "totalDealsClosedMTD" && (
+                                  <div className="space-y-3">
+                                    <p className="text-xs font-semibold text-orange-400">Deals Closed — Pipeline Stage Breakdown</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3 text-center text-xs">
+                                      <div><p className="text-muted-foreground">Close Rate</p><p className="font-bold text-emerald-400">{p.closeRate.toFixed(1)}%</p></div>
+                                      <div><p className="text-muted-foreground">Demo→Close</p><p className="font-bold text-foreground">{p.demoToClose.toFixed(1)}%</p></div>
+                                      <div><p className="text-muted-foreground">Pitched</p><p className="font-bold text-foreground">{p.pitched}</p></div>
+                                      <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{p.closed}</p></div>
+                                    </div>
+                                    <StageBreakdownChart data={p.stageBreakdown} />
+                                  </div>
+                                )}
+                                {expandedCard === "costPerClose" && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-orange-400">Cost Per Close — Calculation</p>
+                                    <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                                      <div><p className="text-muted-foreground">Ad Spend</p><p className="font-bold text-foreground">${a.totalAdSpend.toLocaleString()}</p></div>
+                                      <div><p className="text-muted-foreground text-lg">÷</p></div>
+                                      <div><p className="text-muted-foreground">Deals Closed</p><p className="font-bold text-foreground">{d.totalDealsClosedMTD}</p></div>
+                                    </div>
+                                    <div className="text-center pt-2">
+                                      <p className="text-[10px] text-muted-foreground">= Cost Per Close</p>
+                                      <p className="text-2xl font-bold text-orange-400">${d.costPerClose.toLocaleString()}</p>
+                                      <p className="text-[10px] text-muted-foreground mt-1">Lower is better. Industry benchmark: $50–$150 for coaching.</p>
+                                    </div>
+                                  </div>
+                                )}
+                                {expandedCard === "mrr" && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-orange-400">Monthly Recurring Revenue</p>
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                      <div><p className="text-muted-foreground">MRR</p><p className="font-bold text-foreground text-xl">${d.mrr.toLocaleString()}</p></div>
+                                      <div><p className="text-muted-foreground">ARR (projected)</p><p className="font-bold text-foreground text-xl">${(d.mrr * 12).toLocaleString()}</p></div>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground">Pulled from active Stripe subscriptions. Syncs when you hit Sync → Stripe.</p>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <MetricCard label="Total Refund MTD"    value={d.totalRefund}             prefix="$" variant="orange" index={6} />
-                        <MetricCard label="Total Refund %"      value={d.totalRefundPct}          suffix="%" variant="green"  index={7} decimals={2} />
-                        <MetricCard label="Avg Lead Response"   value={d.avgLeadResponseTimeMin}  suffix=" min" variant={leadRespVariant} index={8} decimals={1} />
-                        <MetricCard label="Cost Per Close"      value={d.costPerClose}            prefix="$" variant="default" index={9} />
+                        {kpiVisible("totalRefund") && (
+                          <MetricCard label="Total Refund MTD" value={d.totalRefund} prefix="$" variant="orange" index={6}
+                            onClick={() => toggleCard("totalRefund")} selected={expandedCard === "totalRefund"} />
+                        )}
+                        {kpiVisible("totalRefundPct") && (
+                          <MetricCard label="Total Refund %" value={d.totalRefundPct} suffix="%" variant="green" index={7} decimals={2}
+                            onClick={() => toggleCard("totalRefundPct")} selected={expandedCard === "totalRefundPct"} />
+                        )}
+                        {kpiVisible("avgLeadResponse") && (
+                          <MetricCard label="Avg Lead Response" value={d.avgLeadResponseTimeMin} suffix=" min" variant={leadRespVariant} index={8} decimals={1}
+                            hint={d.avgLeadResponseTimeMin < 5 ? "Excellent" : d.avgLeadResponseTimeMin <= 60 ? "Acceptable" : "Needs improvement"}
+                            onClick={() => toggleCard("avgLeadResponse")} selected={expandedCard === "avgLeadResponse"} />
+                        )}
                       </div>
+
+                      {/* Expandable detail for bottom row */}
+                      <AnimatePresence>
+                        {expandedCard && ["totalRefund","totalRefundPct","avgLeadResponse"].includes(expandedCard) && (
+                          <motion.div key={`detail-bottom-${expandedCard}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25 }}>
+                            <Card className="bg-muted/40 border-orange-500/20">
+                              <CardContent className="px-4 py-4 text-xs space-y-2">
+                                {expandedCard === "totalRefund" && (
+                                  <>
+                                    <p className="font-semibold text-orange-400">Total Refunds MTD</p>
+                                    <div className="grid grid-cols-3 gap-3 text-center">
+                                      <div><p className="text-muted-foreground">Refunded</p><p className="font-bold text-foreground">${d.totalRefund.toLocaleString()}</p></div>
+                                      <div><p className="text-muted-foreground">Refund Rate</p><p className="font-bold text-foreground">{(d.totalRefundPct * 100).toFixed(2)}%</p></div>
+                                      <div><p className="text-muted-foreground">Net Revenue</p><p className="font-bold text-foreground">${d.netRevenueMTD.toLocaleString()}</p></div>
+                                    </div>
+                                    <p className="text-muted-foreground">Healthy refund rate: below 5%. Above 10% indicates fulfillment or expectation issues.</p>
+                                  </>
+                                )}
+                                {expandedCard === "totalRefundPct" && (
+                                  <>
+                                    <p className="font-semibold text-orange-400">Refund % Breakdown</p>
+                                    <p className="text-muted-foreground">Refund % = Total Refunded ÷ Cash Collected MTD. Currently: ${d.totalRefund.toLocaleString()} ÷ ${d.cashCollectedMTD.toLocaleString()} = {(d.totalRefundPct * 100).toFixed(2)}%</p>
+                                    <p className="text-muted-foreground">Target: keep below 5%.</p>
+                                  </>
+                                )}
+                                {expandedCard === "avgLeadResponse" && (
+                                  <>
+                                    <p className="font-semibold text-orange-400">Lead Response Time</p>
+                                    <p className="text-muted-foreground">Current: {d.avgLeadResponseTimeMin.toFixed(1)} minutes avg response time.</p>
+                                    <div className="grid grid-cols-3 gap-2 text-center mt-1">
+                                      <div className={`rounded-lg p-2 ${d.avgLeadResponseTimeMin < 5 ? "bg-emerald-500/20 text-emerald-400" : "bg-muted text-muted-foreground"}`}><p className="font-bold">&lt;5 min</p><p>Excellent</p></div>
+                                      <div className={`rounded-lg p-2 ${d.avgLeadResponseTimeMin >= 5 && d.avgLeadResponseTimeMin <= 60 ? "bg-orange-500/20 text-orange-400" : "bg-muted text-muted-foreground"}`}><p className="font-bold">5–60 min</p><p>Acceptable</p></div>
+                                      <div className={`rounded-lg p-2 ${d.avgLeadResponseTimeMin > 60 ? "bg-red-500/20 text-red-400" : "bg-muted text-muted-foreground"}`}><p className="font-bold">&gt;60 min</p><p>Too slow</p></div>
+                                    </div>
+                                  </>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </>
                   )}
 
@@ -892,6 +1048,27 @@ export default function Dashboard() {
                       </CardContent>
                     </Card>
                   ))}
+
+                  {/* Per-card KPI toggles — only shown when kpiCards widget is enabled */}
+                  {config.widgets.kpiCards && (
+                    <Card className="bg-card border-border">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold">Individual KPI Cards</CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4 space-y-3">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Show or hide specific metric cards</p>
+                        {(Object.entries(KPI_CARD_LABELS) as [KpiCardKey, string][]).map(([key, label]) => (
+                          <div key={key} className="flex items-center justify-between">
+                            <span className="text-sm text-foreground">{label}</span>
+                            <Switch
+                              checked={kpiVisible(key)}
+                              onCheckedChange={v => saveConfig({ ...config, kpiCardVisibility: { ...config.kpiCardVisibility, [key]: v } })}
+                            />
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
                 </motion.div>
               </TabsContent>
             )}

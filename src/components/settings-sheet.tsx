@@ -66,11 +66,11 @@ function AccountTab({ clientId, initialName }: { clientId: string; initialName: 
             />
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground">Client ID</Label>
+            <Label className="text-xs text-muted-foreground">Account ID</Label>
             <div className="mt-1">
-              <Badge className="bg-muted text-muted-foreground border-border font-mono text-xs">{clientId}</Badge>
+              <Badge className="bg-muted text-muted-foreground border-border text-xs">{clientId}</Badge>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">This is your unique identifier and cannot be changed.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Your unique account identifier.</p>
           </div>
         </div>
       </div>
@@ -258,7 +258,7 @@ function ApiKeysTab() {
           <div>
             <Label className="text-[10px] text-muted-foreground">Access Token</Label>
             <Input type="password" value={meta.accessToken} onChange={(e) => setIntegrations((i) => ({ ...i, meta: { ...meta, accessToken: e.target.value } }))}
-              placeholder="EAAxxxx…" className="bg-muted border-border h-8 text-xs mt-0.5" />
+              placeholder="Paste your access token" className="bg-muted border-border h-8 text-xs mt-0.5" />
           </div>
           <div>
             <Label className="text-[10px] text-muted-foreground">Ad Account ID</Label>
@@ -278,12 +278,12 @@ function ApiKeysTab() {
           <div>
             <Label className="text-[10px] text-muted-foreground">API Key</Label>
             <Input type="password" value={ghl.apiKey} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, apiKey: e.target.value } }))}
-              placeholder="your-api-key" className="bg-muted border-border h-8 text-xs mt-0.5" />
+              placeholder="Paste your API key" className="bg-muted border-border h-8 text-xs mt-0.5" />
           </div>
           <div>
             <Label className="text-[10px] text-muted-foreground">Location ID</Label>
             <Input value={ghl.locationId} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, locationId: e.target.value } }))}
-              placeholder="location-id" className="bg-muted border-border h-8 text-xs mt-0.5" />
+              placeholder="Paste your location ID" className="bg-muted border-border h-8 text-xs mt-0.5" />
           </div>
         </>
       ),
@@ -444,7 +444,7 @@ function AdminApiKeysTab() {
               <div className="space-y-2">
                 <div><Label className="text-[10px] text-muted-foreground">Access Token</Label>
                   <Input type="password" value={meta.accessToken} onChange={(e) => setIntegrations((i) => ({ ...i, meta: { ...meta, accessToken: e.target.value } }))}
-                    placeholder="EAAxxxx…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                    placeholder="Paste your access token" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
                 <div><Label className="text-[10px] text-muted-foreground">Ad Account ID</Label>
                   <Input value={meta.adAccountId} onChange={(e) => setIntegrations((i) => ({ ...i, meta: { ...meta, adAccountId: e.target.value } }))}
                     placeholder="123456789" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
@@ -460,10 +460,10 @@ function AdminApiKeysTab() {
               <div className="space-y-2">
                 <div><Label className="text-[10px] text-muted-foreground">API Key</Label>
                   <Input type="password" value={ghl.apiKey} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, apiKey: e.target.value } }))}
-                    placeholder="your-api-key" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                    placeholder="Paste your API key" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
                 <div><Label className="text-[10px] text-muted-foreground">Location ID</Label>
                   <Input value={ghl.locationId} onChange={(e) => setIntegrations((i) => ({ ...i, ghl: { ...ghl, locationId: e.target.value } }))}
-                    placeholder="location-id" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                    placeholder="Paste your location ID" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
               </div>
             </div>
 
@@ -475,7 +475,7 @@ function AdminApiKeysTab() {
               </div>
               <div><Label className="text-[10px] text-muted-foreground">Secret Key</Label>
                 <Input type="password" value={stripe.secretKey} onChange={(e) => setIntegrations((i) => ({ ...i, stripe: { secretKey: e.target.value } }))}
-                  placeholder="sk_live_…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                  placeholder="Paste your secret key" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
             </div>
 
             {/* Sheets */}
@@ -486,7 +486,7 @@ function AdminApiKeysTab() {
               </div>
               <div><Label className="text-[10px] text-muted-foreground">Sheet URL (publicly viewable)</Label>
                 <Input value={sheets.sheetUrl} onChange={(e) => setIntegrations((i) => ({ ...i, sheets: { sheetUrl: e.target.value } }))}
-                  placeholder="https://docs.google.com/spreadsheets/d/…" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
+                  placeholder="Paste your Google Sheet URL" className="bg-muted border-border h-8 text-xs mt-0.5" /></div>
             </div>
 
             <div className="flex items-center gap-3 pt-1">
@@ -532,12 +532,7 @@ function AdminSettingsView() {
           </div>
           <div className="border-t border-border pt-4">
             <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Password</p>
-            <div className="bg-muted/50 border border-border rounded-xl p-4">
-              <p className="text-sm font-medium mb-1">Managed via environment variables</p>
-              <p className="text-xs text-muted-foreground">
-                Update <code className="bg-muted px-1 py-0.5 rounded text-orange-400">SNS_PASSWORD</code> in Vercel → Environment Variables, then redeploy.
-              </p>
-            </div>
+            <PasswordTab />
           </div>
         </div>
       </TabsContent>
