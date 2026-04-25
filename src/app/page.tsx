@@ -168,6 +168,8 @@ export default function Dashboard() {
   const [clientMsg, setClientMsg] = useState("");
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [editingClientName, setEditingClientName] = useState("");
+  const [editingRepIdx, setEditingRepIdx] = useState<number | null>(null);
+  const [editingRepName, setEditingRepName] = useState("");
 
   const addClient = useCallback(async () => {
     if (!newClientName.trim() || !newClientPassword.trim()) return;
@@ -216,6 +218,14 @@ export default function Dashboard() {
     }
     setClientSaving(false);
   }, [newClientName, newClientPassword, data]);
+
+  const saveRepName = useCallback((idx: number) => {
+    const name = editingRepName.trim();
+    if (!name) return;
+    setEditingRepIdx(null);
+    const updated = r.leaderboard.map((rep, j) => j === idx ? { ...rep, name } : rep);
+    update({ ...data, reps: { ...r, leaderboard: updated } });
+  }, [editingRepName, data, r, update]);
 
   const saveClientName = useCallback(async (id: string) => {
     const name = editingClientName.trim();
@@ -795,7 +805,27 @@ export default function Dashboard() {
                               {r.leaderboard.map((rep, i) => (
                                 <tr key={i} className="border-b border-border/30 last:border-0 hover:bg-muted/40 transition-colors">
                                   <td className="py-2.5 pr-3 text-muted-foreground">{i + 1}</td>
-                                  <td className="py-2.5 pr-3 font-semibold whitespace-nowrap">{rep.name}</td>
+                                  <td className="py-2.5 pr-3 font-semibold whitespace-nowrap">
+                                    {editingRepIdx === i ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input autoFocus value={editingRepName}
+                                          onChange={e => setEditingRepName(e.target.value)}
+                                          className="h-6 text-xs w-28 bg-muted border-orange-500/40"
+                                          onKeyDown={e => { if (e.key === "Enter") saveRepName(i); if (e.key === "Escape") setEditingRepIdx(null); }} />
+                                        <Button size="icon" variant="ghost" className="h-5 w-5 text-emerald-400" onClick={() => saveRepName(i)}><Check className="h-3 w-3" /></Button>
+                                        <Button size="icon" variant="ghost" className="h-5 w-5 text-muted-foreground" onClick={() => setEditingRepIdx(null)}><X className="h-3 w-3" /></Button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1">
+                                        <span>{rep.name}</span>
+                                        <Button size="icon" variant="ghost"
+                                          className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
+                                          onClick={() => { setEditingRepIdx(i); setEditingRepName(rep.name); }}>
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </td>
                                   <td className="py-2.5 pr-3 text-muted-foreground">{rep.callsMade}</td>
                                   <td className="py-2.5 pr-3 text-muted-foreground">{rep.callsAnswered}</td>
                                   <td className="py-2.5 pr-3 text-muted-foreground">{rep.demosSet}</td>
@@ -1344,7 +1374,7 @@ export default function Dashboard() {
                                 <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingClientId(null)}><X className="h-3 w-3" /></Button>
                               </div>
                             ) : (
-                              <div key={c.id} className="flex items-center gap-1 group">
+                              <div key={c.id} className="flex items-center gap-1">
                                 <Link href={`/admin/client/${c.id}`}>
                                   <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
                                     {c.name}
@@ -1352,7 +1382,7 @@ export default function Dashboard() {
                                 </Link>
                                 <Button
                                   size="icon" variant="ghost"
-                                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
+                                  className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
                                   onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
                                 >
                                   <Pencil className="h-3 w-3" />
