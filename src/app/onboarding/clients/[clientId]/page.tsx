@@ -25,11 +25,36 @@ const STATUS_COLORS: Record<string, string> = {
   alumni: "bg-muted text-muted-foreground border-border",
 };
 
+type FormResponse = {
+  name: string;
+  email: string;
+  motivation: string;
+  whySNS: string;
+  goal30Days: string;
+  goal3Months: string;
+  goal6Months: string;
+  goal1Year: string;
+  biggestChallenge: string;
+  successIn90Days: string;
+  additionalNotes?: string;
+  submittedAt: string;
+};
+
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</p>
       <p className="text-sm mt-0.5">{value || <span className="text-muted-foreground/50 italic">—</span>}</p>
+    </div>
+  );
+}
+
+function ResponseField({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] uppercase tracking-widest text-orange-400/80 font-semibold">{label}</p>
+      <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{value}</p>
     </div>
   );
 }
@@ -40,6 +65,7 @@ export default function ClientDetail() {
   const params = useParams();
   const email = decodeURIComponent(params.clientId as string);
   const [client, setClient] = useState<CoachingClient | null>(null);
+  const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,14 +75,18 @@ export default function ClientDetail() {
 
   useEffect(() => {
     if (status !== "authenticated") return;
-    fetch("/api/onboarding/clients")
-      .then((r) => r.json())
-      .then((d: CoachingClient[]) => {
-        const found = (Array.isArray(d) ? d : []).find((c) => c.email === email);
-        setClient(found ?? null);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch("/api/onboarding/clients")
+        .then((r) => r.json())
+        .then((d: CoachingClient[]) => (Array.isArray(d) ? d : []).find((c) => c.email === email) ?? null),
+      fetch(`/api/onboarding/form-response?email=${encodeURIComponent(email)}`)
+        .then((r) => r.json())
+        .catch(() => null),
+    ]).then(([found, form]) => {
+      setClient(found);
+      setFormResponse(form);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [status, email]);
 
   if (loading) {
@@ -149,6 +179,42 @@ export default function ClientDetail() {
             ))}
           </CardContent>
         </Card>
+
+        {/* Onboarding Form Responses */}
+        {formResponse ? (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold">Onboarding Questionnaire</CardTitle>
+              <span className="text-[10px] text-muted-foreground">
+                Submitted {new Date(formResponse.submittedAt).toLocaleDateString()}
+              </span>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-5">
+              <ResponseField label="What motivated you to get started?" value={formResponse.motivation} />
+              <ResponseField label="Why Stack N Scale Enterprises?" value={formResponse.whySNS} />
+              <div className="border-t border-border/40 pt-4">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-3">Goals</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ResponseField label="30-Day Goal" value={formResponse.goal30Days} />
+                  <ResponseField label="3-Month Goal" value={formResponse.goal3Months} />
+                  <ResponseField label="6-Month Goal" value={formResponse.goal6Months} />
+                  <ResponseField label="1-Year Goal" value={formResponse.goal1Year} />
+                </div>
+              </div>
+              <ResponseField label="Biggest Challenge" value={formResponse.biggestChallenge} />
+              <ResponseField label="Success in 90 Days" value={formResponse.successIn90Days} />
+              {formResponse.additionalNotes && (
+                <ResponseField label="Additional Notes" value={formResponse.additionalNotes} />
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-card border-border border-dashed">
+            <CardContent className="px-4 py-6 text-center">
+              <p className="text-sm text-muted-foreground">No onboarding questionnaire submitted yet.</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-card border-border">
           <CardContent className="px-4 py-4 flex items-center justify-between">

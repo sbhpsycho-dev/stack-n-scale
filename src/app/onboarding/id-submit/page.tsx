@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const gold = "#c8902a";
 
@@ -37,11 +37,133 @@ function FileField({ label, name, onChange, accept = "image/*" }: {
   );
 }
 
+function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasSignature, setHasSignature] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.strokeStyle = "#f5f0e8";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
+  function getPos(e: React.MouseEvent | React.TouchEvent) {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY,
+      };
+    }
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  }
+
+  function startDraw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    const { x, y } = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    drawing.current = true;
+  }
+
+  function draw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    const { x, y } = getPos(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    if (!hasSignature) {
+      setHasSignature(true);
+      onSign(canvas.toDataURL("image/png"));
+    } else {
+      onSign(canvas.toDataURL("image/png"));
+    }
+  }
+
+  function stopDraw() {
+    drawing.current = false;
+  }
+
+  function clear() {
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+    onSign(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <label style={{ fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: gold, fontFamily: "Georgia, serif" }}>
+          Signature <span style={{ color: "#a09070", marginLeft: 4 }}>*</span>
+        </label>
+        {hasSignature && (
+          <button
+            type="button"
+            onClick={clear}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 11, letterSpacing: "2px", textTransform: "uppercase",
+              color: "#6a5a40", fontFamily: "Georgia, serif",
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={560}
+        height={120}
+        onMouseDown={startDraw}
+        onMouseMove={draw}
+        onMouseUp={stopDraw}
+        onMouseLeave={stopDraw}
+        onTouchStart={startDraw}
+        onTouchMove={draw}
+        onTouchEnd={stopDraw}
+        style={{
+          background: "#0a0a0a",
+          border: `1px solid ${hasSignature ? gold : "#2a2a2a"}`,
+          borderRadius: 4,
+          width: "100%",
+          height: 120,
+          cursor: "crosshair",
+          touchAction: "none",
+          display: "block",
+        }}
+      />
+      <p style={{ margin: 0, fontSize: 11, color: "#4a3a20", fontFamily: "Georgia, serif" }}>
+        Sign above using your mouse or finger
+      </p>
+    </div>
+  );
+}
+
 export default function IdSubmitPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [idFront, setIdFront] = useState<File | null>(null);
   const [selfie, setSelfie] = useState<File | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [consented, setConsented] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -49,6 +171,9 @@ export default function IdSubmitPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!idFront || !selfie) { setError("Please attach both files."); return; }
+    if (!signature) { setError("Please provide your signature."); return; }
+    if (!consented) { setError("You must check the consent box to proceed."); return; }
+
     setSubmitting(true);
     setError("");
 
@@ -57,6 +182,7 @@ export default function IdSubmitPage() {
     fd.append("email", email);
     fd.append("idFront", idFront);
     fd.append("selfie", selfie);
+    fd.append("signature", signature);
 
     try {
       const res = await fetch("/api/onboarding/id-submit", { method: "POST", body: fd });
@@ -80,7 +206,7 @@ export default function IdSubmitPage() {
 
   const cardStyle: React.CSSProperties = {
     background: "#111111", border: "1px solid #1e1e1e", borderRadius: 4,
-    width: "100%", maxWidth: 580, overflow: "hidden",
+    width: "100%", maxWidth: 620, overflow: "hidden",
   };
 
   if (done) {
@@ -170,6 +296,45 @@ export default function IdSubmitPage() {
 
           <FileField label="Photo ID (front)" name="idFront" onChange={setIdFront} />
           <FileField label="Selfie holding your ID" name="selfie" onChange={setSelfie} />
+
+          <SignatureCanvas onSign={setSignature} />
+
+          {/* Consent checkbox */}
+          <div
+            style={{
+              padding: "20px 24px", background: "#0f0f0f",
+              border: `1px solid ${consented ? gold : "#1e1e1e"}`, borderRadius: 4,
+              transition: "border-color 0.15s",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: "pointer" }}>
+              <div style={{ position: "relative", flexShrink: 0, marginTop: 2 }}>
+                <input
+                  type="checkbox"
+                  checked={consented}
+                  onChange={e => setConsented(e.target.checked)}
+                  style={{ position: "absolute", opacity: 0, width: 18, height: 18, cursor: "pointer", margin: 0 }}
+                />
+                <div style={{
+                  width: 18, height: 18, border: `1px solid ${consented ? gold : "#3a3a3a"}`,
+                  borderRadius: 2, background: consented ? gold : "#0a0a0a",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}>
+                  {consented && (
+                    <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                      <path d="M1 4L4 7.5L10 1" stroke="#0a0a0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <span style={{ fontSize: 13, color: "#a09070", lineHeight: 1.8, fontFamily: "Georgia, serif" }}>
+                I confirm that the documents submitted are genuine and unaltered. I consent to identity
+                verification as part of the onboarding process for Stack N Scale Enterprises and
+                acknowledge that my submission will be reviewed by the Stack N Scale team.
+              </span>
+            </label>
+          </div>
 
           {error && (
             <p style={{ margin: 0, fontSize: 13, color: "#ef4444", textAlign: "center" }}>{error}</p>

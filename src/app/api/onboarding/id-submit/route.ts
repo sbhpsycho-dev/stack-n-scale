@@ -31,13 +31,19 @@ async function getClientChannel(firstName: string): Promise<string | null> {
   return match?.id ?? null;
 }
 
+function base64ToBuffer(dataUrl: string): Buffer {
+  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
+  return Buffer.from(base64, "base64");
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
-    const name     = (formData.get("name") as string | null)?.trim() ?? "";
-    const email    = (formData.get("email") as string | null)?.trim().toLowerCase() ?? "";
-    const idFront  = formData.get("idFront") as File | null;
-    const selfie   = formData.get("selfie") as File | null;
+    const name      = (formData.get("name") as string | null)?.trim() ?? "";
+    const email     = (formData.get("email") as string | null)?.trim().toLowerCase() ?? "";
+    const idFront   = formData.get("idFront") as File | null;
+    const selfie    = formData.get("selfie") as File | null;
+    const signature = formData.get("signature") as string | null;
 
     if (!name || !email || !idFront || !selfie) {
       return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
@@ -56,7 +62,10 @@ export async function POST(req: Request) {
 
     // Store submission record
     await kv.set(`sns:onboarding:id-submit:${email}`, {
-      name, email, submittedAt: new Date().toISOString(),
+      name, email,
+      submittedAt: new Date().toISOString(),
+      consentGiven: true,
+      hasSig: !!signature,
     });
 
     // Post to Discord
@@ -64,21 +73,26 @@ export async function POST(req: Request) {
       try {
         const firstName = name.split(" ")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
 
-        // Prefer their private channel, fall back to DM
         let channelId = await getClientChannel(firstName).catch(() => null);
         if (!channelId) channelId = await getOrCreateDmChannel();
 
         const caption = [
           `🪪 **ID Verification Submitted — ${name}**`,
           `📧 ${email}`,
+          `✅ Consent confirmed · Signature attached`,
           ``,
-          `Attached: government ID (front) + selfie holding ID.`,
+          `Attached: government ID (front) + selfie holding ID + signature.`,
         ].join("\n");
 
         const body = new FormData();
         body.append("content", caption);
         body.append("files[0]", new Blob([await idFront.arrayBuffer()], { type: idFront.type }), idFront.name || "id-front.jpg");
         body.append("files[1]", new Blob([await selfie.arrayBuffer()], { type: selfie.type }), selfie.name || "selfie.jpg");
+
+        if (signature) {
+          const sigBuffer = base64ToBuffer(signature);
+          body.append("files[2]", new Blob([sigBuffer], { type: "image/png" }), "signature.png");
+        }
 
         await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
           method: "POST",

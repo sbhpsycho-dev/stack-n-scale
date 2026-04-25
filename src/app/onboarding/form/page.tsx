@@ -63,7 +63,8 @@ function TextArea({ label, name, value, onChange, required = true, placeholder =
 export default function OnboardingForm() {
   const [form, setForm] = useState({
     name: "", email: "", motivation: "", whySNS: "",
-    goals: "", biggestChallenge: "", successIn90Days: "", additionalNotes: "",
+    goal30Days: "", goal3Months: "", goal6Months: "", goal1Year: "",
+    biggestChallenge: "", successIn90Days: "", additionalNotes: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -183,13 +184,42 @@ export default function OnboardingForm() {
             placeholder="What stood out to you about us specifically..."
           />
 
-          <TextArea
-            label="What are your primary goals?"
-            name="goals"
-            value={form.goals}
-            onChange={set("goals")}
-            placeholder="Income targets, timelines, lifestyle goals..."
-          />
+          {/* Goal fields */}
+          <div>
+            <p style={{ margin: "0 0 16px", fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: gold }}>
+              Your Goals
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <TextArea
+                label="30-Day Goal"
+                name="goal30Days"
+                value={form.goal30Days}
+                onChange={set("goal30Days")}
+                placeholder="What do you want to achieve in the next 30 days?"
+              />
+              <TextArea
+                label="3-Month Goal"
+                name="goal3Months"
+                value={form.goal3Months}
+                onChange={set("goal3Months")}
+                placeholder="Where do you want to be in 3 months?"
+              />
+              <TextArea
+                label="6-Month Goal"
+                name="goal6Months"
+                value={form.goal6Months}
+                onChange={set("goal6Months")}
+                placeholder="What does the 6-month mark look like for you?"
+              />
+              <TextArea
+                label="1-Year Goal"
+                name="goal1Year"
+                value={form.goal1Year}
+                onChange={set("goal1Year")}
+                placeholder="Paint the full picture — where are you in a year?"
+              />
+            </div>
+          </div>
 
           <TextArea
             label="What is your biggest challenge right now?"

@@ -25,14 +25,24 @@ async function discordRequest(path: string, method: string, body: unknown) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, email, motivation, whySNS, goals, biggestChallenge, successIn90Days, additionalNotes } = body;
+    const {
+      name, email, motivation, whySNS,
+      goal30Days, goal3Months, goal6Months, goal1Year,
+      biggestChallenge, successIn90Days, additionalNotes,
+    } = body;
 
-    if (!name || !email || !motivation || !whySNS || !goals || !biggestChallenge || !successIn90Days) {
+    if (!name || !email || !motivation || !whySNS || !goal30Days || !goal3Months || !goal6Months || !goal1Year || !biggestChallenge || !successIn90Days) {
       return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
     }
 
     const submittedAt = new Date().toISOString();
-    const formData = { name, email, motivation, whySNS, goals, biggestChallenge, successIn90Days, additionalNotes: additionalNotes ?? "", submittedAt };
+    const formData = {
+      name, email, motivation, whySNS,
+      goal30Days, goal3Months, goal6Months, goal1Year,
+      biggestChallenge, successIn90Days,
+      additionalNotes: additionalNotes ?? "",
+      submittedAt,
+    };
 
     // 1. Save form response to KV
     await kv.set(`sns:onboarding:form:${email.toLowerCase()}`, formData);
@@ -76,8 +86,17 @@ export async function POST(req: Request) {
           `**Why Stack N Scale Enterprises?**`,
           whySNS,
           ``,
-          `**Primary Goals**`,
-          goals,
+          `**30-Day Goal**`,
+          goal30Days,
+          ``,
+          `**3-Month Goal**`,
+          goal3Months,
+          ``,
+          `**6-Month Goal**`,
+          goal6Months,
+          ``,
+          `**1-Year Goal**`,
+          goal1Year,
           ``,
           `**Biggest Challenge**`,
           biggestChallenge,
@@ -99,7 +118,6 @@ export async function POST(req: Request) {
         inviteUrl = `https://discord.gg/${invite.code}`;
       } catch (discordErr) {
         console.error("Discord error:", discordErr);
-        // Don't fail the whole request if Discord fails
       }
     }
 
