@@ -48,6 +48,11 @@ export async function POST(req: Request) {
     // 1. Save form response to KV
     await kv.set(`sns:onboarding:form:${email.toLowerCase()}`, formData);
 
+    // 1b. Persist signature separately (base64 kept out of main record to stay lean)
+    if (signature) {
+      await kv.set(`sns:onboarding:sig:form:${email.toLowerCase()}`, signature);
+    }
+
     // 2. Update coaching client status if they exist in the pipeline
     const clientKey = `sns:coaching:client:${email.toLowerCase()}`;
     const existing = await kv.get<CoachingClient>(clientKey);

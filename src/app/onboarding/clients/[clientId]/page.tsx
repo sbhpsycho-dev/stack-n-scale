@@ -38,6 +38,16 @@ type FormResponse = {
   successIn90Days: string;
   additionalNotes?: string;
   submittedAt: string;
+  signature?: string | null;
+};
+
+type IdSubmission = {
+  name: string;
+  email: string;
+  submittedAt: string;
+  consentGiven: boolean;
+  hasSig: boolean;
+  signature?: string | null;
 };
 
 function Field({ label, value }: { label: string; value?: string | null }) {
@@ -66,6 +76,7 @@ export default function ClientDetail() {
   const email = decodeURIComponent(params.clientId as string);
   const [client, setClient] = useState<CoachingClient | null>(null);
   const [formResponse, setFormResponse] = useState<FormResponse | null>(null);
+  const [idSubmission, setIdSubmission] = useState<IdSubmission | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -82,9 +93,13 @@ export default function ClientDetail() {
       fetch(`/api/onboarding/form-response?email=${encodeURIComponent(email)}`)
         .then((r) => r.json())
         .catch(() => null),
-    ]).then(([found, form]) => {
+      fetch(`/api/onboarding/id-submission?email=${encodeURIComponent(email)}`)
+        .then((r) => r.json())
+        .catch(() => null),
+    ]).then(([found, form, idSub]) => {
       setClient(found);
       setFormResponse(form);
+      setIdSubmission(idSub);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [status, email]);
@@ -162,6 +177,12 @@ export default function ClientDetail() {
             <CardTitle className="text-sm font-semibold">Onboarding Progress</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
+            {client.idVerification === "rejected" && client.rejectionReason && (
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 mb-1">
+                <p className="text-[10px] uppercase tracking-widest text-red-400 font-semibold mb-1">ID Rejected</p>
+                <p className="text-xs text-red-300/80">{client.rejectionReason}</p>
+              </div>
+            )}
             {[
               { label: "Payment", done: true },
               { label: "ID Verification", done: client.idVerification === "approved" },
@@ -179,6 +200,44 @@ export default function ClientDetail() {
             ))}
           </CardContent>
         </Card>
+
+        {/* ID Verification Submission */}
+        {idSubmission ? (
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold">Identity Verification Submission</CardTitle>
+              <span className="text-[10px] text-muted-foreground">
+                Submitted {new Date(idSubmission.submittedAt).toLocaleDateString()}
+              </span>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="text-xs text-muted-foreground">Consent confirmed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${idSubmission.hasSig ? "bg-emerald-400" : "bg-border"}`} />
+                  <span className="text-xs text-muted-foreground">Signature {idSubmission.hasSig ? "on file" : "not provided"}</span>
+                </div>
+              </div>
+              {idSubmission.signature && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-orange-400/80 font-semibold mb-2">Signature</p>
+                  <div className="rounded border border-border bg-black/40 p-3 inline-block">
+                    <img src={idSubmission.signature} alt="Client signature" className="max-h-24 w-auto" />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-card border-border border-dashed">
+            <CardContent className="px-4 py-6 text-center">
+              <p className="text-sm text-muted-foreground">No ID verification submitted yet.</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Onboarding Form Responses */}
         {formResponse ? (
@@ -205,6 +264,14 @@ export default function ClientDetail() {
               <ResponseField label="Success in 90 Days" value={formResponse.successIn90Days} />
               {formResponse.additionalNotes && (
                 <ResponseField label="Additional Notes" value={formResponse.additionalNotes} />
+              )}
+              {formResponse.signature && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-orange-400/80 font-semibold mb-2">Signature</p>
+                  <div className="rounded border border-border bg-black/40 p-3 inline-block">
+                    <img src={formResponse.signature} alt="Client signature" className="max-h-24 w-auto" />
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

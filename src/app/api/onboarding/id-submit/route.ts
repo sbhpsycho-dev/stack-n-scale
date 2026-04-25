@@ -72,6 +72,11 @@ export async function POST(req: Request) {
       hasSig: !!signature,
     });
 
+    // Persist signature separately
+    if (signature) {
+      await kv.set(`sns:onboarding:sig:id:${email}`, signature);
+    }
+
     // Post to Discord
     if (BOT_TOKEN && CAELUM_ID) {
       try {
