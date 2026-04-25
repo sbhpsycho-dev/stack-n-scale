@@ -3,6 +3,19 @@ import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { type ClientMeta, type SalesData } from "@/lib/sales-data";
 
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session || session.user.role !== "admin") {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const registry = await req.json() as ClientMeta[];
+  if (!Array.isArray(registry)) return Response.json({ ok: false, error: "expected array" }, { status: 400 });
+
+  await kv.set("sns-registry", registry);
+  return Response.json({ ok: true });
+}
+
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "admin") {
