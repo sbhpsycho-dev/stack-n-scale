@@ -31,9 +31,9 @@ async function getClientChannel(firstName: string): Promise<string | null> {
   return match?.id ?? null;
 }
 
-function base64ToBuffer(dataUrl: string): Buffer {
+function base64ToUint8Array(dataUrl: string): Uint8Array {
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-  return Buffer.from(base64, "base64");
+  return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
 export async function POST(req: Request) {
@@ -90,8 +90,8 @@ export async function POST(req: Request) {
         body.append("files[1]", new Blob([await selfie.arrayBuffer()], { type: selfie.type }), selfie.name || "selfie.jpg");
 
         if (signature) {
-          const sigBuffer = base64ToBuffer(signature);
-          body.append("files[2]", new Blob([sigBuffer], { type: "image/png" }), "signature.png");
+          const sigBytes = base64ToUint8Array(signature);
+          body.append("files[2]", new Blob([sigBytes], { type: "image/png" }), "signature.png");
         }
 
         await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
