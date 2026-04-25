@@ -31,6 +31,8 @@ export async function POST(req: Request) {
   const email = metadata.email ?? (obj as Stripe.Checkout.Session).customer_email ?? "";
   const name = metadata.name ?? metadata.client_name ?? "";
   const phone = metadata.phone ?? "";
+  const amountCents = (obj as Stripe.Checkout.Session).amount_total ?? (obj as Stripe.PaymentIntent).amount ?? 0;
+  const amount = (amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
   if (!email) return Response.json({ received: true, skipped: "no email" });
 
@@ -70,7 +72,7 @@ export async function POST(req: Request) {
     fetch(process.env.DISCORD_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: `💰 New payment received from **${name || email}**` }),
+      body: JSON.stringify({ content: `💰 New payment received from **${name || email}** — ${amount}` }),
     }).catch(console.error);
   }
 
