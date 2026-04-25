@@ -1,0 +1,74 @@
+{
+  "name": "Stack N Scale — Welcome Emails on Stripe Payment",
+  "flow": [
+    {
+      "id": 1,
+      "module": "stripe:TriggerEvent",
+      "version": 1,
+      "parameters": {
+        "event": "payment_intent.succeeded",
+        "__IMTCONN__": "YOUR_STRIPE_CONNECTION_ID"
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {
+          "parameters": {
+            "event": { "label": "Payment Intent — Succeeded" }
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "google-email:ActionSendEmail",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GMAIL_CONNECTION_ID"
+      },
+      "mapper": {
+        "to": "{{1.data.object.receipt_email}}",
+        "subject": "Welcome to Stack N Scale Enterprises",
+        "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Welcome.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{split(1.data.object.billing_details.name; \" \")[]; 1}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Welcome to Stack N Scale Enterprises.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">We're pleased to have you join us. Your decision to step into this environment reflects a commitment to growth, precision, and long-term scale — and that's exactly what we're here to cultivate.</p><p style=\"margin:0 0 32px;font-size:15px;color:#a09070;line-height:1.9;\">To begin, we invite you to access your private member platform below:</p><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:8px 0 36px;\"><a href=\"https://www.skool.com/elysium-sales-academy-7811/about\" style=\"display:inline-block;background:#c8902a;color:#0a0a0a;text-decoration:none;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:16px 40px;border-radius:2px;font-weight:600;\">Access Your Platform</a></td></tr></table><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">This is your central hub for resources, strategic guidance, and direct connection within the Stack N Scale network. Take a few moments to familiarize yourself with the space and introduce yourself when you're ready.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Everything inside has been designed to help you move efficiently, think at a higher level, and execute with clarity.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">If you need anything at all, our team is here to assist you.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;·&nbsp; PRIVATE MEMBER CORRESPONDENCE</p></td></tr></table></td></tr></table></body></html>",
+        "contentType": "html"
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    },
+    {
+      "id": 3,
+      "module": "google-email:ActionSendEmail",
+      "version": 1,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GMAIL_CONNECTION_ID"
+      },
+      "mapper": {
+        "to": "{{1.data.object.receipt_email}}",
+        "subject": "Action Required: ID Verification & Onboarding — Stack N Scale Enterprises",
+        "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Onboarding.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{split(1.data.object.billing_details.name; \" \")[]; 1}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">We're glad to have you inside Stack N Scale Enterprises.</p><p style=\"margin:0 0 28px;font-size:15px;color:#a09070;line-height:1.9;\">To finalize your access and ensure a seamless experience, we ask that you complete the final onboarding steps outlined below.</p><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-bottom:32px;\"><tr><td style=\"padding:24px 28px;background:#0f0f0f;border:1px solid #1e1e1e;border-radius:4px;\"><p style=\"margin:0 0 6px;font-size:11px;letter-spacing:3px;color:#c8902a;text-transform:uppercase;\">Step 01</p><p style=\"margin:0 0 8px;font-size:15px;color:#f5f0e8;font-weight:600;\">Identity Verification</p><p style=\"margin:0;font-size:13px;color:#6a5a40;line-height:1.8;\">Please submit a valid form of identification. This allows us to maintain a secure and high-integrity environment for all members.</p></td></tr><tr><td style=\"height:8px;\"></td></tr><tr><td style=\"padding:24px 28px;background:#0f0f0f;border:1px solid #1e1e1e;border-radius:4px;\"><p style=\"margin:0 0 6px;font-size:11px;letter-spacing:3px;color:#c8902a;text-transform:uppercase;\">Step 02</p><p style=\"margin:0 0 8px;font-size:15px;color:#f5f0e8;font-weight:600;\">Onboarding Questionnaire</p><p style=\"margin:0 0 12px;font-size:13px;color:#6a5a40;line-height:1.8;\">This brief form helps us understand your vision, alignment, and objectives. You'll be asked:</p><ul style=\"margin:0 0 20px;padding-left:20px;\"><li style=\"font-size:13px;color:#6a5a40;line-height:2.2;\">What motivated you to get started</li><li style=\"font-size:13px;color:#6a5a40;line-height:2.2;\">What brought you to Stack N Scale Enterprises</li><li style=\"font-size:13px;color:#6a5a40;line-height:2.2;\">The outcomes you intend to achieve</li></ul><a href=\"https://stack-n-scale.vercel.app/onboarding/form\" style=\"display:inline-block;background:#c8902a;color:#0a0a0a;text-decoration:none;font-size:11px;letter-spacing:3px;text-transform:uppercase;padding:14px 32px;border-radius:2px;font-weight:600;\">Complete Onboarding Form</a></td></tr></table><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your responses allow us to better tailor your experience and support your progression at a higher level.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Once completed, your onboarding will be fully confirmed and you'll be positioned to move forward without delay.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">If you require assistance at any stage, our team is available.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;·&nbsp; PRIVATE MEMBER CORRESPONDENCE</p></td></tr></table></td></tr></table></body></html>",
+        "contentType": "html"
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": true,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us1.make.com"
+  }
+}
