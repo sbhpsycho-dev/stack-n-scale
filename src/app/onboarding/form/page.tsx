@@ -1,8 +1,76 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const gold = "#c8902a";
+
+function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasSignature, setHasSignature] = useState(false);
+
+  function getPos(e: React.MouseEvent | React.TouchEvent) {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+  }
+
+  function startDraw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    const ctx = canvasRef.current!.getContext("2d")!;
+    ctx.strokeStyle = "#f5f0e8"; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    const { x, y } = getPos(e);
+    ctx.beginPath(); ctx.moveTo(x, y);
+    drawing.current = true;
+  }
+
+  function draw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    const { x, y } = getPos(e);
+    ctx.lineTo(x, y); ctx.stroke();
+    setHasSignature(true);
+    onSign(canvas.toDataURL("image/png"));
+  }
+
+  function stopDraw() { drawing.current = false; }
+
+  function clear() {
+    const canvas = canvasRef.current!;
+    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+    onSign(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <label style={{ fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: gold, fontFamily: "Georgia, serif" }}>
+          Signature <span style={{ color: "#a09070", marginLeft: 4 }}>*</span>
+        </label>
+        {hasSignature && (
+          <button type="button" onClick={clear} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, letterSpacing: "2px", textTransform: "uppercase", color: "#6a5a40", fontFamily: "Georgia, serif" }}>
+            Clear
+          </button>
+        )}
+      </div>
+      <canvas
+        ref={canvasRef} width={580} height={120}
+        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
+        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
+        style={{ background: "#0a0a0a", border: `1px solid ${hasSignature ? gold : "#2a2a2a"}`, borderRadius: 4, width: "100%", height: 120, cursor: "crosshair", touchAction: "none", display: "block", transition: "border-color 0.15s" }}
+      />
+      <p style={{ margin: 0, fontSize: 11, color: "#4a3a20", fontFamily: "Georgia, serif" }}>Sign above using your mouse or finger</p>
+    </div>
+  );
+}
 
 function Field({ label, name, value, onChange, type = "text", required = true, placeholder = "" }: {
   label: string; name: string; value: string; onChange: (v: string) => void;
@@ -66,6 +134,7 @@ export default function OnboardingForm() {
     goal30Days: "", goal3Months: "", goal6Months: "", goal1Year: "",
     biggestChallenge: "", successIn90Days: "", additionalNotes: "",
   });
+  const [signature, setSignature] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -75,13 +144,14 @@ export default function OnboardingForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!signature) { setError("Please provide your signature before submitting."); return; }
     setSubmitting(true);
     setError("");
     try {
       const res = await fetch("/api/onboarding/form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, signature }),
       });
       const json = await res.json();
       if (json.ok) {
@@ -245,6 +315,8 @@ export default function OnboardingForm() {
             required={false}
             placeholder="Optional..."
           />
+
+          <SignatureCanvas onSign={setSignature} />
 
           {error && (
             <p style={{ margin: 0, fontSize: 13, color: "#ef4444", textAlign: "center" }}>{error}</p>

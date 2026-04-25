@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const {
       name, email, motivation, whySNS,
       goal30Days, goal3Months, goal6Months, goal1Year,
-      biggestChallenge, successIn90Days, additionalNotes,
+      biggestChallenge, successIn90Days, additionalNotes, signature,
     } = body;
 
     if (!name || !email || !motivation || !whySNS || !goal30Days || !goal3Months || !goal6Months || !goal1Year || !biggestChallenge || !successIn90Days) {
@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       goal30Days, goal3Months, goal6Months, goal1Year,
       biggestChallenge, successIn90Days,
       additionalNotes: additionalNotes ?? "",
+      hasSig: !!signature,
       submittedAt,
     };
 
@@ -106,7 +107,24 @@ export async function POST(req: Request) {
           additionalNotes ? `\n**Additional Notes**\n${additionalNotes}` : "",
         ].join("\n");
 
-        await discordRequest(`/channels/${channel.id}/messages`, "POST", { content: msg });
+        if (signature) {
+          const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
+          const binary = atob(base64);
+          const ab = new ArrayBuffer(binary.length);
+          const view = new Uint8Array(ab);
+          for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+
+          const msgBody = new FormData();
+          msgBody.append("content", msg);
+          msgBody.append("files[0]", new Blob([ab], { type: "image/png" }), "signature.png");
+          await fetch(`${DISCORD_API}/channels/${channel.id}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bot ${BOT_TOKEN}` },
+            body: msgBody,
+          });
+        } else {
+          await discordRequest(`/channels/${channel.id}/messages`, "POST", { content: msg });
+        }
 
         // Generate single-use invite (7 days)
         const invite = await discordRequest(`/channels/${channel.id}/invites`, "POST", {
