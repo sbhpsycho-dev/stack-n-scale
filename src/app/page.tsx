@@ -287,7 +287,7 @@ export default function Dashboard() {
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
             {config.tabs.resources  && <TabsTrigger value="resources"    className="text-xs px-4">Resources</TabsTrigger>}
             {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
-            {!isAdmin && <TabsTrigger value="customize"    className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>}
+            <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
             {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
           </TabsList>
 
@@ -784,7 +784,7 @@ export default function Dashboard() {
             )}
 
             {/* ══════════════ CUSTOMIZE ══════════════ */}
-            {tab === "customize" && !isAdmin && (
+            {tab === "customize" && (
               <TabsContent value="customize">
                 <motion.div key="customize" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-6 max-w-2xl">
                   <div>
