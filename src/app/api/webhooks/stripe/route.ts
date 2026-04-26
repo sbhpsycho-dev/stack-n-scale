@@ -26,8 +26,17 @@ export async function POST(req: Request) {
   const obj = event.data.object as Stripe.Checkout.Session | Stripe.PaymentIntent;
   const metadata = (obj as Stripe.Checkout.Session).metadata ?? (obj as Stripe.PaymentIntent).metadata ?? {};
 
-  const email = metadata.email ?? (obj as Stripe.Checkout.Session).customer_email ?? "";
-  const name = metadata.name ?? metadata.client_name ?? "";
+  const email =
+    metadata.email ??
+    (obj as Stripe.Checkout.Session).customer_email ??
+    (obj as Stripe.Checkout.Session).customer_details?.email ??
+    "";
+
+  const name =
+    metadata.name ??
+    metadata.client_name ??
+    (obj as Stripe.Checkout.Session).customer_details?.name ??
+    "";
   const phone = metadata.phone ?? "";
   const amountCents = (obj as Stripe.Checkout.Session).amount_total ?? (obj as Stripe.PaymentIntent).amount ?? 0;
   const amount = (amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
