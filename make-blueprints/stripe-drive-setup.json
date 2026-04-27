@@ -1,0 +1,124 @@
+{
+  "name": "SNS — Stripe → Drive Folder Setup",
+  "flow": [
+    {
+      "id": 1,
+      "module": "stripe:TriggerEvent",
+      "version": 1,
+      "parameters": {
+        "event": "checkout.session.completed",
+        "__IMTCONN__": "YOUR_STRIPE_CONNECTION_ID"
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 }
+      }
+    },
+    {
+      "id": 7,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "client - {{1.data.object.customer_details.name}}",
+        "parents": ["YOUR_GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID"]
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    },
+    {
+      "id": 8,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "ID Verification",
+        "parents": ["{{7.id}}"]
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 }
+      }
+    },
+    {
+      "id": 9,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "Onboarding",
+        "parents": ["{{7.id}}"]
+      },
+      "metadata": {
+        "designer": { "x": 900, "y": 0 }
+      }
+    },
+    {
+      "id": 10,
+      "module": "google-drive:ActionUploadAFile",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "folderId": "{{9.id}}",
+        "fileName": "YOUR_FILE_NAME",
+        "data": "YOUR_FILE_DATA"
+      },
+      "metadata": {
+        "designer": { "x": 1200, "y": 0 }
+      }
+    },
+    {
+      "id": 11,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "https://stack-n-scale.vercel.app/api/webhooks/drive-folder",
+        "method": "post",
+        "headers": [
+          { "name": "x-webhook-secret", "value": "sns-cron-2026" },
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"email\":\"{{1.data.object.customer_details.email}}\",\"folderId\":\"{{7.id}}\",\"folderUrl\":\"https://drive.google.com/drive/folders/{{7.id}}\",\"idVerificationFolderId\":\"{{8.id}}\",\"onboardingFolderId\":\"{{9.id}}\"}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 1500, "y": 0 }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": true,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us1.make.com"
+  }
+}

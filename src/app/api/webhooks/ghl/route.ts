@@ -34,7 +34,11 @@ export async function POST(req: Request) {
   if (event === "drive_folder_requested") {
     if (!name) return Response.json({ error: "name required for drive folder creation" }, { status: 400 });
     try {
-      const { folderUrl, folderId, docs } = await setupClientFolder(name);
+      const existingRecord = (await kv.get<Record<string, unknown>>(clientKey)) ?? {};
+      if (existingRecord.driveFolder) {
+        return Response.json({ ok: true, skipped: "folder already exists" });
+      }
+      const { folderUrl, folderId, idVerificationFolderId, onboardingFolderId, docs } = await setupClientFolder(name);
       await updateContact(contactId, {
         customField: [{ id: "drive_folder_url", value: folderUrl }],
       });
@@ -42,7 +46,7 @@ export async function POST(req: Request) {
       await kv.set(clientKey, {
         ...existing,
         status: "id_verified",
-        driveFolder: { url: folderUrl, id: folderId, docs },
+        driveFolder: { url: folderUrl, id: folderId, idVerificationFolderId, onboardingFolderId, docs },
       });
       return Response.json({ ok: true, folderUrl });
     } catch (err) {

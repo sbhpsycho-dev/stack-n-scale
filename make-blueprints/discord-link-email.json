@@ -1,0 +1,115 @@
+{
+  "name": "SNS — Email Router",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": 1,
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": -228, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "label": "SNS Discord Email Hook",
+              "data": { "editable": "true", "type": "web" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": { "designer": { "x": 112, "y": 0 } },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 3,
+              "module": "gmail:ActionSendEmail",
+              "version": 1,
+              "parameters": { "account": 1 },
+              "filter": {
+                "name": "Discord Link",
+                "conditions": [[{ "a": "{{1.type}}", "b": "discord_link", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "to": "{{1.to}}",
+                "subject": "Your Stack N Scale Discord Channel is Ready",
+                "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Discord.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{1.name}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your onboarding is complete. You're now cleared to join your private Discord channel and the Stack N Scale student community.</p><p style=\"margin:0 0 32px;font-size:15px;color:#a09070;line-height:1.9;\">Click below to connect your Discord account and gain immediate access:</p><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:8px 0 36px;\"><a href=\"{{1.discordOAuthUrl}}\" style=\"display:inline-block;background:#c8902a;color:#0a0a0a;text-decoration:none;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:16px 40px;border-radius:2px;font-weight:600;\">Connect Discord &rarr;</a></td></tr></table><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin-bottom:32px;\"><tr><td style=\"padding:20px 24px;background:#0f0f0f;border:1px solid #1e1e1e;border-radius:4px;\"><p style=\"margin:0 0 6px;font-size:11px;letter-spacing:3px;color:#c8902a;text-transform:uppercase;\">Your Resources</p><p style=\"margin:0 0 12px;font-size:13px;color:#a09070;line-height:1.8;\">Your personal client folder is ready in Google Drive.</p><a href=\"{{1.driveFolderUrl}}\" style=\"display:inline-block;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#c8902a;text-decoration:none;\">View Your Folder &rarr;</a></td></tr></table><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">If you run into any issues connecting, reach out to our team and we'll get you sorted immediately.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;&middot;&nbsp; PRIVATE MEMBER CORRESPONDENCE</p><a href=\"https://www.skool.com/elysium-sales-academy-7811/about?ref=69ad8597e9144b38b0ac045df7b96c3e\" style=\"color:#c8902a;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Georgia',serif;\">stacknscale.com</a></td></tr></table></td></tr></table></body></html>",
+                "contentType": "html"
+              },
+              "metadata": { "designer": { "x": 340, "y": -150 } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 4,
+              "module": "gmail:ActionSendEmail",
+              "version": 1,
+              "parameters": { "account": 1 },
+              "filter": {
+                "name": "Form Received",
+                "conditions": [[{ "a": "{{1.type}}", "b": "form_received", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "to": "{{1.to}}",
+                "subject": "We Received Your Onboarding Form — Stack N Scale Enterprises",
+                "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Received.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{1.name}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your onboarding questionnaire has been received and saved. Thank you for taking the time to complete it.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">If you haven't already, please complete your identity verification to finalize your access.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">Our team will be in touch shortly.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;&middot;&nbsp; PRIVATE MEMBER CORRESPONDENCE</p><a href=\"https://www.skool.com/elysium-sales-academy-7811/about?ref=69ad8597e9144b38b0ac045df7b96c3e\" style=\"color:#c8902a;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Georgia',serif;\">stacknscale.com</a></td></tr></table></td></tr></table></body></html>",
+                "contentType": "html"
+              },
+              "metadata": { "designer": { "x": 340, "y": 0 } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 5,
+              "module": "gmail:ActionSendEmail",
+              "version": 1,
+              "parameters": { "account": 1 },
+              "filter": {
+                "name": "ID Received",
+                "conditions": [[{ "a": "{{1.type}}", "b": "id_received", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "to": "{{1.to}}",
+                "subject": "ID Verification Received — Stack N Scale Enterprises",
+                "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Under Review.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{1.name}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your identity verification documents have been received and are now under review.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Once verified, you'll receive your Discord channel link to access the Stack N Scale community.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">If you have any questions in the meantime, our team is available.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;&middot;&nbsp; PRIVATE MEMBER CORRESPONDENCE</p><a href=\"https://www.skool.com/elysium-sales-academy-7811/about?ref=69ad8597e9144b38b0ac045df7b96c3e\" style=\"color:#c8902a;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Georgia',serif;\">stacknscale.com</a></td></tr></table></td></tr></table></body></html>",
+                "contentType": "html"
+              },
+              "metadata": { "designer": { "x": 340, "y": 150 } }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us2.make.com"
+  }
+}

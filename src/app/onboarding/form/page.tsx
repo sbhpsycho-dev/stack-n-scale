@@ -1,76 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 const gold = "#c8902a";
-
-function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const drawing = useRef(false);
-  const [hasSignature, setHasSignature] = useState(false);
-
-  function getPos(e: React.MouseEvent | React.TouchEvent) {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    if ("touches" in e) {
-      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY };
-    }
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
-  }
-
-  function startDraw(e: React.MouseEvent | React.TouchEvent) {
-    e.preventDefault();
-    const ctx = canvasRef.current!.getContext("2d")!;
-    ctx.strokeStyle = "#f5f0e8"; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    const { x, y } = getPos(e);
-    ctx.beginPath(); ctx.moveTo(x, y);
-    drawing.current = true;
-  }
-
-  function draw(e: React.MouseEvent | React.TouchEvent) {
-    e.preventDefault();
-    if (!drawing.current) return;
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    const { x, y } = getPos(e);
-    ctx.lineTo(x, y); ctx.stroke();
-    setHasSignature(true);
-    onSign(canvas.toDataURL("image/png"));
-  }
-
-  function stopDraw() { drawing.current = false; }
-
-  function clear() {
-    const canvas = canvasRef.current!;
-    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-    onSign(null);
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <label style={{ fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: gold, fontFamily: "Georgia, serif" }}>
-          Signature <span style={{ color: "#a09070", marginLeft: 4 }}>*</span>
-        </label>
-        {hasSignature && (
-          <button type="button" onClick={clear} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, letterSpacing: "2px", textTransform: "uppercase", color: "#6a5a40", fontFamily: "Georgia, serif" }}>
-            Clear
-          </button>
-        )}
-      </div>
-      <canvas
-        ref={canvasRef} width={580} height={120}
-        onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
-        onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
-        style={{ background: "#0a0a0a", border: `1px solid ${hasSignature ? gold : "#2a2a2a"}`, borderRadius: 4, width: "100%", height: 120, cursor: "crosshair", touchAction: "none", display: "block", transition: "border-color 0.15s" }}
-      />
-      <p style={{ margin: 0, fontSize: 11, color: "#4a3a20", fontFamily: "Georgia, serif" }}>Sign above using your mouse or finger</p>
-    </div>
-  );
-}
 
 function Field({ label, name, value, onChange, type = "text", required = true, placeholder = "" }: {
   label: string; name: string; value: string; onChange: (v: string) => void;
@@ -134,28 +66,24 @@ export default function OnboardingForm() {
     goal30Days: "", goal3Months: "", goal6Months: "", goal1Year: "",
     biggestChallenge: "", successIn90Days: "", additionalNotes: "",
   });
-  const [signature, setSignature] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const set = (key: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [key]: v }));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!signature) { setError("Please provide your signature before submitting."); return; }
     setSubmitting(true);
     setError("");
     try {
       const res = await fetch("/api/onboarding/form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, signature }),
+        body: JSON.stringify(form),
       });
       const json = await res.json();
       if (json.ok) {
-        setInviteUrl(json.inviteUrl ?? null);
         setDone(true);
       } else {
         setError(json.error ?? "Something went wrong. Please try again.");
@@ -189,24 +117,9 @@ export default function OnboardingForm() {
             <p style={{ margin: "0 0 16px", fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
               We've received your responses and will be in touch shortly.
             </p>
-            <p style={{ margin: "0 0 36px", fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
-              Welcome to Stack N Scale Enterprises. We look forward to working with you.
+            <p style={{ margin: 0, fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
+              Once your identity verification is complete, you'll receive an email with a link to your private Discord channel.
             </p>
-            {inviteUrl && (
-              <a
-                href={inviteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-block", background: gold, color: "#0a0a0a",
-                  textDecoration: "none", fontSize: 12, letterSpacing: "3px",
-                  textTransform: "uppercase", padding: "16px 40px", borderRadius: 2,
-                  fontWeight: 600,
-                }}
-              >
-                Join Our Discord Community →
-              </a>
-            )}
           </div>
           <div style={{ padding: "24px 48px", borderTop: "1px solid #1e1e1e", textAlign: "center" }}>
             <p style={{ margin: 0, fontSize: 11, color: "#3a3a3a", letterSpacing: 1 }}>
@@ -221,7 +134,6 @@ export default function OnboardingForm() {
   return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        {/* Header */}
         <div style={{ padding: "40px 48px 32px", borderBottom: "1px solid #1e1e1e", textAlign: "center" }}>
           <p style={{ margin: "0 0 8px", fontSize: 11, letterSpacing: "4px", color: gold, textTransform: "uppercase" }}>Stack N Scale Enterprises</p>
           <h1 style={{ margin: "0 0 8px", fontSize: 28, fontWeight: 400, color: "#f5f0e8", letterSpacing: 1 }}>Onboarding.</h1>
@@ -230,7 +142,6 @@ export default function OnboardingForm() {
           </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} style={{ padding: "40px 48px", display: "flex", flexDirection: "column", gap: 24 }}>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -254,40 +165,15 @@ export default function OnboardingForm() {
             placeholder="What stood out to you about us specifically..."
           />
 
-          {/* Goal fields */}
           <div>
             <p style={{ margin: "0 0 16px", fontSize: 11, letterSpacing: "3px", textTransform: "uppercase", color: gold }}>
               Your Goals
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <TextArea
-                label="30-Day Goal"
-                name="goal30Days"
-                value={form.goal30Days}
-                onChange={set("goal30Days")}
-                placeholder="What do you want to achieve in the next 30 days?"
-              />
-              <TextArea
-                label="3-Month Goal"
-                name="goal3Months"
-                value={form.goal3Months}
-                onChange={set("goal3Months")}
-                placeholder="Where do you want to be in 3 months?"
-              />
-              <TextArea
-                label="6-Month Goal"
-                name="goal6Months"
-                value={form.goal6Months}
-                onChange={set("goal6Months")}
-                placeholder="What does the 6-month mark look like for you?"
-              />
-              <TextArea
-                label="1-Year Goal"
-                name="goal1Year"
-                value={form.goal1Year}
-                onChange={set("goal1Year")}
-                placeholder="Paint the full picture — where are you in a year?"
-              />
+              <TextArea label="30-Day Goal" name="goal30Days" value={form.goal30Days} onChange={set("goal30Days")} placeholder="What do you want to achieve in the next 30 days?" />
+              <TextArea label="3-Month Goal" name="goal3Months" value={form.goal3Months} onChange={set("goal3Months")} placeholder="Where do you want to be in 3 months?" />
+              <TextArea label="6-Month Goal" name="goal6Months" value={form.goal6Months} onChange={set("goal6Months")} placeholder="What does the 6-month mark look like for you?" />
+              <TextArea label="1-Year Goal" name="goal1Year" value={form.goal1Year} onChange={set("goal1Year")} placeholder="Paint the full picture — where are you in a year?" />
             </div>
           </div>
 
@@ -315,8 +201,6 @@ export default function OnboardingForm() {
             required={false}
             placeholder="Optional..."
           />
-
-          <SignatureCanvas onSign={setSignature} />
 
           {error && (
             <p style={{ margin: 0, fontSize: 13, color: "#ef4444", textAlign: "center" }}>{error}</p>

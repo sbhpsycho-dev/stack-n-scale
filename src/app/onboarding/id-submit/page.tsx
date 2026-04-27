@@ -160,6 +160,14 @@ function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void 
 export default function IdSubmitPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const n = params.get("name");
+    const e = params.get("email");
+    if (n) setName(n);
+    if (e) setEmail(e);
+  }, []);
   const [idFront, setIdFront] = useState<File | null>(null);
   const [selfie, setSelfie] = useState<File | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -167,6 +175,7 @@ export default function IdSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [discordOAuthUrl, setDiscordOAuthUrl] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -188,6 +197,7 @@ export default function IdSubmitPage() {
       const res = await fetch("/api/onboarding/id-submit", { method: "POST", body: fd });
       const json = await res.json();
       if (json.ok) {
+        setDiscordOAuthUrl(json.discordOAuthUrl ?? null);
         setDone(true);
       } else {
         setError(json.error ?? "Something went wrong. Please try again.");
@@ -221,9 +231,26 @@ export default function IdSubmitPage() {
             <p style={{ margin: "0 0 16px", fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
               Your identity verification documents have been received.
             </p>
-            <p style={{ margin: 0, fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
-              Our team will review your submission and be in touch shortly.
+            <p style={{ margin: discordOAuthUrl ? "0 0 36px" : 0, fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
+              {discordOAuthUrl
+                ? "You're all set — connect your Discord below to access your private channel and the student community."
+                : "Our team will review your submission and be in touch shortly."}
             </p>
+            {discordOAuthUrl && (
+              <a
+                href={discordOAuthUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-block", background: gold, color: "#0a0a0a",
+                  textDecoration: "none", fontSize: 12, letterSpacing: "3px",
+                  textTransform: "uppercase", padding: "16px 40px", borderRadius: 2,
+                  fontWeight: 600,
+                }}
+              >
+                Connect Discord →
+              </a>
+            )}
           </div>
           <div style={{ padding: "24px 48px", borderTop: "1px solid #1e1e1e", textAlign: "center" }}>
             <p style={{ margin: 0, fontSize: 11, color: "#3a3a3a", letterSpacing: 1 }}>

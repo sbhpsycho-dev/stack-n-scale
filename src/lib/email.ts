@@ -1,10 +1,10 @@
-type EmailType = "welcome" | "rejection" | "approval";
+type EmailType = "welcome" | "rejection" | "approval" | "discord_link" | "form_received" | "id_received";
 
 export async function triggerEmail(
   type: EmailType,
   to: string,
   name: string,
-  extras?: { reason?: string }
+  extras?: { reason?: string; discordOAuthUrl?: string; driveFolderUrl?: string }
 ) {
   const url = process.env.MAKE_EMAIL_WEBHOOK_URL;
   if (!url) {

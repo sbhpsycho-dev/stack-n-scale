@@ -10,7 +10,12 @@ export type CoachingClient = {
   status: string;
   createdAt: string;
   idVerification: string;
-  driveFolder: { url: string; id: string } | null;
+  driveFolder: {
+    url: string;
+    id: string;
+    idVerificationFolderId?: string;
+    onboardingFolderId?: string;
+  } | null;
   activeDate?: string;
   coachAssigned?: string;
 };

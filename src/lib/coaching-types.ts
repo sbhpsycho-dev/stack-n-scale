@@ -6,7 +6,13 @@ export type CoachingClient = {
   status: CoachingStatus;
   createdAt: string;
   idVerification: "pending" | "submitted" | "approved" | "rejected";
-  driveFolder: { url: string; id: string } | null;
+  driveFolder: {
+    url: string;
+    id: string;
+    idVerificationFolderId: string;
+    onboardingFolderId: string;
+    docs: Record<string, string>;
+  } | null;
   activeDate?: string;
   coachAssigned?: string;
   rejectionReason?: string;

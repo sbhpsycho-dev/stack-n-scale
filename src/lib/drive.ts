@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { Readable } from "stream";
 
 function getAuth() {
   const client_email = process.env.GOOGLE_SA_EMAIL;
@@ -6,7 +7,10 @@ function getAuth() {
   if (!client_email || !private_key) throw new Error("Google service account credentials not configured");
   return new google.auth.GoogleAuth({
     credentials: { client_email, private_key },
-    scopes: ["https://www.googleapis.com/auth/drive"],
+    scopes: [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/spreadsheets",
+    ],
   });
 }
 
@@ -14,13 +18,13 @@ function drive() {
   return google.drive({ version: "v3", auth: getAuth() });
 }
 
-export async function createClientFolder(clientName: string): Promise<{ id: string; url: string }> {
+async function createFolder(name: string, parentId: string): Promise<{ id: string; url: string }> {
   const d = drive();
   const res = await d.files.create({
     requestBody: {
-      name: `${clientName} — Coaching Client`,
+      name,
       mimeType: "application/vnd.google-apps.folder",
-      parents: [process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID!],
+      parents: [parentId],
     },
     fields: "id",
   });
@@ -49,21 +53,77 @@ async function listTemplates(): Promise<{ id: string; name: string }[]> {
   );
 }
 
+export async function uploadTextToDrive(folderId: string, fileName: string, content: string): Promise<string> {
+  const d = drive();
+  const res = await d.files.create({
+    requestBody: {
+      name: fileName,
+      mimeType: "application/vnd.google-apps.document",
+      parents: [folderId],
+    },
+    media: { mimeType: "text/plain", body: Readable.from([content]) },
+    fields: "id",
+  });
+  return res.data.id!;
+}
+
+export async function uploadFileToDrive(
+  folderId: string,
+  fileName: string,
+  mimeType: string,
+  buffer: ArrayBuffer | Buffer
+): Promise<string> {
+  const d = drive();
+  const res = await d.files.create({
+    requestBody: { name: fileName, parents: [folderId] },
+    media: { mimeType, body: Readable.from(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)) },
+    fields: "id",
+  });
+  return res.data.id!;
+}
+
 export type ClientDocs = {
   folderUrl: string;
   folderId: string;
+  idVerificationFolderId: string;
+  onboardingFolderId: string;
   docs: Record<string, string>;
 };
 
+export async function appendToSheet(spreadsheetId: string, row: string[], range = "Sheet1!A:L"): Promise<void> {
+  const sheets = google.sheets({ version: "v4", auth: getAuth() });
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range,
+    valueInputOption: "RAW",
+    requestBody: { values: [row] },
+  });
+}
+
 export async function setupClientFolder(clientName: string): Promise<ClientDocs> {
-  const { id: folderId, url: folderUrl } = await createClientFolder(clientName);
+  const root = await createFolder(`client - ${clientName}`, process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID!);
+
+  // Create subfolders in parallel
+  const [idFolder, onboardingFolder] = await Promise.all([
+    createFolder("ID Verification", root.id),
+    createFolder("Onboarding", root.id),
+  ]);
+
+  // Copy templates into root folder
   const templates = await listTemplates();
   const docs: Record<string, string> = {};
   await Promise.all(
     templates.map(async (t) => {
-      const newId = await copyTemplate(t.id, folderId, `${clientName} — ${t.name}`);
+      const newId = await copyTemplate(t.id, root.id, `${clientName} — ${t.name}`);
       docs[t.name] = newId;
     })
   );
-  return { folderId, folderUrl, docs };
+
+  return {
+    folderId: root.id,
+    folderUrl: root.url,
+    idVerificationFolderId: idFolder.id,
+    onboardingFolderId: onboardingFolder.id,
+    docs,
+  };
 }

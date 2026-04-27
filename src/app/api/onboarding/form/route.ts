@@ -1,24 +1,24 @@
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
+import { uploadTextToDrive, appendToSheet } from "@/lib/drive";
+import { triggerEmail } from "@/lib/email";
 
-const DISCORD_API = "https://discord.com/api/v10";
-const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
-const GUILD_ID    = process.env.DISCORD_GUILD_ID ?? "";
-const CAELUM_ID   = process.env.DISCORD_CAELUM_USER_ID ?? "";
+const DISCORD_API  = "https://discord.com/api/v10";
+const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN ?? "";
+const GUILD_ID     = process.env.DISCORD_GUILD_ID ?? "";
+const CAELUM_ID    = process.env.DISCORD_CAELUM_USER_ID ?? "";
+const ADMIN2_ID    = process.env.DISCORD_ADMIN2_USER_ID ?? "";
+const GENERAL_CH   = process.env.DISCORD_GENERAL_CHANNEL_ID ?? "";
+const CLIENT_ID    = process.env.DISCORD_CLIENT_ID ?? "";
+const APP_URL      = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
 
-async function discordRequest(path: string, method: string, body: unknown) {
+async function discordRequest(path: string, method: string, body?: unknown) {
   const res = await fetch(`${DISCORD_API}${path}`, {
     method,
-    headers: {
-      Authorization: `Bot ${BOT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Discord ${method} ${path} failed: ${err}`);
-  }
+  if (!res.ok) throw new Error(`Discord ${method} ${path} failed: ${await res.text()}`);
   return res.json();
 }
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const {
       name, email, motivation, whySNS,
       goal30Days, goal3Months, goal6Months, goal1Year,
-      biggestChallenge, successIn90Days, additionalNotes, signature,
+      biggestChallenge, successIn90Days, additionalNotes,
     } = body;
 
     if (!name || !email || !motivation || !whySNS || !goal30Days || !goal3Months || !goal6Months || !goal1Year || !biggestChallenge || !successIn90Days) {
@@ -36,115 +36,144 @@ export async function POST(req: Request) {
     }
 
     const submittedAt = new Date().toISOString();
-    const formData = {
+
+    // 1. Save form response to KV
+    await kv.set(`sns:onboarding:form:${email.toLowerCase()}`, {
       name, email, motivation, whySNS,
       goal30Days, goal3Months, goal6Months, goal1Year,
       biggestChallenge, successIn90Days,
       additionalNotes: additionalNotes ?? "",
-      hasSig: !!signature,
       submittedAt,
-    };
+    });
 
-    // 1. Save form response to KV
-    await kv.set(`sns:onboarding:form:${email.toLowerCase()}`, formData);
-
-    // 1b. Persist signature separately (base64 kept out of main record to stay lean)
-    if (signature) {
-      await kv.set(`sns:onboarding:sig:form:${email.toLowerCase()}`, signature);
-    }
-
-    // 2. Update coaching client status if they exist in the pipeline
+    // 2. Update client status
     const clientKey = `sns:coaching:client:${email.toLowerCase()}`;
     const existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
       await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
     }
 
-    // 3. Discord — create private channel + post intake + generate invite
-    let inviteUrl: string | null = null;
+    // 3. Append to Google Sheets (non-blocking)
+    const sheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
+    if (sheetId) {
+      appendToSheet(sheetId, [
+        submittedAt, name, email, motivation, whySNS,
+        goal30Days, goal3Months, goal6Months, goal1Year,
+        biggestChallenge, successIn90Days, additionalNotes ?? "",
+      ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
+    }
+
+    // 4. Upload form response to the Onboarding subfolder (non-blocking)
+    const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? existing?.driveFolder?.id;
+    if (onboardingFolderId) {
+      const summary = [
+        `Onboarding Form — ${name}`,
+        `Email: ${email}`,
+        `Submitted: ${submittedAt}`,
+        ``,
+        `What motivated you to get started?`, motivation,
+        ``,
+        `Why Stack N Scale Enterprises?`, whySNS,
+        ``,
+        `30-Day Goal`, goal30Days,
+        ``,
+        `3-Month Goal`, goal3Months,
+        ``,
+        `6-Month Goal`, goal6Months,
+        ``,
+        `1-Year Goal`, goal1Year,
+        ``,
+        `Biggest Challenge`, biggestChallenge,
+        ``,
+        `Success in 90 Days`, successIn90Days,
+        additionalNotes ? `\nAdditional Notes\n${additionalNotes}` : "",
+      ].join("\n");
+      uploadTextToDrive(onboardingFolderId, `${name} — Onboarding Form`, summary)
+        .catch(e => console.error("Drive upload error (form):", e));
+    }
+
+    // 4. Send form received confirmation email (non-blocking)
+    triggerEmail("form_received", email, name)
+      .catch(e => console.error("Form received email error:", e));
+
+    // 5. Discord — create private channel, welcome in #general, store channel for OAuth
+    let discordOAuthUrl: string | null = null;
     if (BOT_TOKEN && GUILD_ID && CAELUM_ID) {
       try {
-        const firstName = name.split(" ")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+        const channelSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const channelName = `client-${channelSlug}`;
+        const botUser = await discordRequest("/users/@me", "GET") as { id: string };
 
-        // Fetch bot's own user ID
-        const botUser = await discordRequest("/users/@me", "GET", undefined) as { id: string };
-
-        // Create private channel
+        // Create private 1-on-1 channel (admins + bot only; customer added after OAuth)
+        const overwrites = [
+          { id: GUILD_ID,    type: 0, deny: "1024" },      // deny everyone
+          { id: CAELUM_ID,  type: 1, allow: "3072" },     // Caelum: VIEW + SEND
+          { id: botUser.id, type: 1, allow: "3072" },     // bot: VIEW + SEND
+          ...(ADMIN2_ID ? [{ id: ADMIN2_ID, type: 1, allow: "3072" }] : []),
+        ];
         const channel = await discordRequest(`/guilds/${GUILD_ID}/channels`, "POST", {
-          name: `client-${firstName}`,
+          name: channelName,
           type: 0,
           topic: `Private channel for ${name}`,
-          permission_overwrites: [
-            { id: GUILD_ID,    type: 0, deny: "1024" },
-            { id: CAELUM_ID,  type: 1, allow: "1024" },
-            { id: botUser.id, type: 1, allow: "2048" },
-          ],
+          permission_overwrites: overwrites,
         }) as { id: string };
 
-        // Post intake summary
-        const msg = [
-          `📋 **New Client Intake — ${name}**`,
-          `📧 ${email}`,
-          ``,
-          `**What motivated you to get started?**`,
-          motivation,
-          ``,
-          `**Why Stack N Scale Enterprises?**`,
-          whySNS,
-          ``,
-          `**30-Day Goal**`,
-          goal30Days,
-          ``,
-          `**3-Month Goal**`,
-          goal3Months,
-          ``,
-          `**6-Month Goal**`,
-          goal6Months,
-          ``,
-          `**1-Year Goal**`,
-          goal1Year,
-          ``,
-          `**Biggest Challenge**`,
-          biggestChallenge,
-          ``,
-          `**Success in 90 Days**`,
-          successIn90Days,
-          additionalNotes ? `\n**Additional Notes**\n${additionalNotes}` : "",
-        ].join("\n");
+        // Post intake summary in private channel
+        await discordRequest(`/channels/${channel.id}/messages`, "POST", {
+          content: [
+            `📋 **New Client Intake — ${name}**`,
+            `📧 ${email}`,
+            ``,
+            `**What motivated you to get started?**`, motivation,
+            ``,
+            `**Why Stack N Scale Enterprises?**`, whySNS,
+            ``,
+            `**30-Day Goal**`, goal30Days,
+            ``,
+            `**3-Month Goal**`, goal3Months,
+            ``,
+            `**6-Month Goal**`, goal6Months,
+            ``,
+            `**1-Year Goal**`, goal1Year,
+            ``,
+            `**Biggest Challenge**`, biggestChallenge,
+            ``,
+            `**Success in 90 Days**`, successIn90Days,
+            additionalNotes ? `\n**Additional Notes**\n${additionalNotes}` : "",
+          ].join("\n"),
+        });
 
-        if (signature) {
-          const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
-          const binary = atob(base64);
-          const ab = new ArrayBuffer(binary.length);
-          const view = new Uint8Array(ab);
-          for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-
-          const msgBody = new FormData();
-          msgBody.append("content", msg);
-          msgBody.append("files[0]", new Blob([ab], { type: "image/png" }), "signature.png");
-          await fetch(`${DISCORD_API}/channels/${channel.id}/messages`, {
-            method: "POST",
-            headers: { Authorization: `Bot ${BOT_TOKEN}` },
-            body: msgBody,
-          });
-        } else {
-          await discordRequest(`/channels/${channel.id}/messages`, "POST", { content: msg });
+        // Welcome in #general student chat
+        if (GENERAL_CH) {
+          discordRequest(`/channels/${GENERAL_CH}/messages`, "POST", {
+            content: `👋 Welcome **${name}** to Stack N Scale Enterprises! We're glad to have you. Check your email to connect your private channel.`,
+          }).catch(() => {});
         }
 
-        // Generate single-use invite (7 days)
-        const invite = await discordRequest(`/channels/${channel.id}/invites`, "POST", {
-          max_uses: 1,
-          max_age: 604800,
-          unique: true,
-        }) as { code: string };
+        // Build OAuth URL — customer clicks this to connect Discord and get added to their channel
+        if (CLIENT_ID) {
+          const params = new URLSearchParams({
+            client_id: CLIENT_ID,
+            redirect_uri: `${APP_URL}/api/discord/connect`,
+            response_type: "code",
+            scope: "identify guilds.join",
+            state: encodeURIComponent(email.toLowerCase()),
+          });
+          discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
+        }
 
-        inviteUrl = `https://discord.gg/${invite.code}`;
+        // Store channel ID + OAuth URL so id-submit can send the link after both forms complete
+        await kv.set(`sns:onboarding:discord:${email.toLowerCase()}`, {
+          channelId: channel.id,
+          channelName,
+          discordOAuthUrl,
+        });
       } catch (discordErr) {
         console.error("Discord error:", discordErr);
       }
     }
 
-    return Response.json({ ok: true, inviteUrl });
+    return Response.json({ ok: true, discordOAuthUrl });
   } catch (err) {
     console.error("Onboarding form error:", err);
     return Response.json({ ok: false, error: "Server error" }, { status: 500 });
