@@ -1,7 +1,7 @@
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
 import { appendToSheet } from "@/lib/drive";
-import { triggerEmail } from "@/lib/email";
+import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 const DISCORD_API  = "https://discord.com/api/v10";
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN ?? "";
@@ -67,15 +67,18 @@ export async function POST(req: Request) {
 
     // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
     const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? undefined;
-    triggerEmail("form_received", email, name, {
+    const formPayload = {
       onboardingFolderId,
       formData: {
         motivation, whySNS, goal30Days, goal3Months,
         goal6Months, goal1Year, biggestChallenge, successIn90Days,
         additionalNotes: additionalNotes ?? "",
       },
-    })
+    };
+    triggerEmail("form_received", email, name, formPayload)
       .catch(e => console.error("Form received email error:", e));
+    triggerDriveDocs("form_received", email, name, formPayload)
+      .catch(e => console.error("Drive docs error:", e));
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth
     let discordOAuthUrl: string | null = null;

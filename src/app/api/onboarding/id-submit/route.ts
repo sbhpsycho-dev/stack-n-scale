@@ -2,7 +2,7 @@ import { kv } from "@vercel/kv";
 import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet } from "@/lib/drive";
-import { triggerEmail } from "@/lib/email";
+import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
@@ -101,6 +101,8 @@ export async function POST(req: Request) {
     const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
     triggerEmail("id_received", email, name, { idVerificationFolderId })
       .catch(e => console.error("ID received email error:", e));
+    triggerDriveDocs("id_received", email, name, { idVerificationFolderId })
+      .catch(e => console.error("Drive docs error:", e));
 
     // If onboarding form was also submitted, send Discord link via email
     let discordOAuthUrl: string | null = null;

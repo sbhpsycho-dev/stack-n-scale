@@ -24,3 +24,22 @@ export async function triggerEmail(
     body: JSON.stringify({ type, to, name, ...extras }),
   });
 }
+
+export async function triggerDriveDocs(
+  type: "form_received" | "id_received",
+  to: string,
+  name: string,
+  extras?: {
+    onboardingFolderId?: string;
+    idVerificationFolderId?: string;
+    formData?: Record<string, string>;
+  }
+) {
+  const url = process.env.MAKE_DRIVE_DOCS_WEBHOOK_URL;
+  if (!url) return;
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, to, name, ...extras }),
+  });
+}
