@@ -33,6 +33,9 @@ export async function triggerDriveDocs(
     onboardingFolderId?: string;
     idVerificationFolderId?: string;
     formData?: Record<string, string>;
+    idFrontUrl?: string;
+    selfieUrl?: string;
+    signatureUrl?: string;
   }
 ) {
   const url = process.env.MAKE_DRIVE_DOCS_WEBHOOK_URL;

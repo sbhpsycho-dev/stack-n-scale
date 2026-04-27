@@ -101,8 +101,12 @@ export async function POST(req: Request) {
     const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
     triggerEmail("id_received", email, name, { idVerificationFolderId })
       .catch(e => console.error("ID received email error:", e));
-    triggerDriveDocs("id_received", email, name, { idVerificationFolderId })
-      .catch(e => console.error("Drive docs error:", e));
+    triggerDriveDocs("id_received", email, name, {
+      idVerificationFolderId,
+      idFrontUrl: blobUrls.find(b => b.label === "ID Front")?.url,
+      selfieUrl: blobUrls.find(b => b.label === "Selfie")?.url,
+      signatureUrl: blobUrls.find(b => b.label === "Signature")?.url,
+    }).catch(e => console.error("Drive docs error:", e));
 
     // If onboarding form was also submitted, send Discord link via email
     let discordOAuthUrl: string | null = null;
