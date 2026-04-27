@@ -1,0 +1,89 @@
+{
+  "name": "SNS — Form Submissions → Drive Docs",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": { "hook": 1, "maxResults": 1 },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": -228, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "label": "SNS Drive Docs Hook",
+              "data": { "editable": "true", "type": "web" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": { "designer": { "x": 112, "y": 0 } },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 3,
+              "module": "google-docs:ActionCreateDocument",
+              "version": 1,
+              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID" },
+              "filter": {
+                "name": "Onboarding Form",
+                "conditions": [[{ "a": "{{1.type}}", "b": "form_received", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "title": "{{1.name}} — Onboarding Form",
+                "folderId": "{{1.onboardingFolderId}}",
+                "content": "ONBOARDING FORM — {{1.name}}\nEmail: {{1.to}}\n\nWhat motivated you to get started?\n{{1.formData.motivation}}\n\nWhy Stack N Scale Enterprises?\n{{1.formData.whySNS}}\n\n30-Day Goal\n{{1.formData.goal30Days}}\n\n3-Month Goal\n{{1.formData.goal3Months}}\n\n6-Month Goal\n{{1.formData.goal6Months}}\n\n1-Year Goal\n{{1.formData.goal1Year}}\n\nBiggest Challenge\n{{1.formData.biggestChallenge}}\n\nSuccess in 90 Days\n{{1.formData.successIn90Days}}\n\nAdditional Notes\n{{1.formData.additionalNotes}}"
+              },
+              "metadata": { "designer": { "x": 340, "y": -100 } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 4,
+              "module": "google-docs:ActionCreateDocument",
+              "version": 1,
+              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID" },
+              "filter": {
+                "name": "ID Verification",
+                "conditions": [[{ "a": "{{1.type}}", "b": "id_received", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "title": "{{1.name}} — ID Verification",
+                "folderId": "{{1.idVerificationFolderId}}",
+                "content": "ID VERIFICATION — {{1.name}}\nEmail: {{1.to}}\n\nStatus: Submitted\nConsent: Confirmed"
+              },
+              "metadata": { "designer": { "x": 340, "y": 100 } }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us2.make.com"
+  }
+}
