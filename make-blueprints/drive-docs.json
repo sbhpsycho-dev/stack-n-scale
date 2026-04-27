@@ -30,15 +30,15 @@
           "flow": [
             {
               "id": 3,
-              "module": "google-docs:ActionCreateDocument",
+              "module": "google-drive:ActionCreateTextFile",
               "version": 1,
-              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID" },
+              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID" },
               "filter": {
                 "name": "Onboarding Form",
                 "conditions": [[{ "a": "{{1.type}}", "b": "form_received", "o": "text:equal" }]]
               },
               "mapper": {
-                "title": "{{1.name}} — Onboarding Form",
+                "name": "{{1.name}} — Onboarding Form",
                 "folderId": "{{1.onboardingFolderId}}",
                 "content": "ONBOARDING FORM — {{1.name}}\nEmail: {{1.to}}\n\nWhat motivated you to get started?\n{{1.formData.motivation}}\n\nWhy Stack N Scale Enterprises?\n{{1.formData.whySNS}}\n\n30-Day Goal\n{{1.formData.goal30Days}}\n\n3-Month Goal\n{{1.formData.goal3Months}}\n\n6-Month Goal\n{{1.formData.goal6Months}}\n\n1-Year Goal\n{{1.formData.goal1Year}}\n\nBiggest Challenge\n{{1.formData.biggestChallenge}}\n\nSuccess in 90 Days\n{{1.formData.successIn90Days}}\n\nAdditional Notes\n{{1.formData.additionalNotes}}"
               },
@@ -50,15 +50,15 @@
           "flow": [
             {
               "id": 4,
-              "module": "google-docs:ActionCreateDocument",
+              "module": "google-drive:ActionCreateTextFile",
               "version": 1,
-              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID" },
+              "parameters": { "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID" },
               "filter": {
                 "name": "ID Verification",
                 "conditions": [[{ "a": "{{1.type}}", "b": "id_received", "o": "text:equal" }]]
               },
               "mapper": {
-                "title": "{{1.name}} — ID Verification",
+                "name": "{{1.name}} — ID Verification",
                 "folderId": "{{1.idVerificationFolderId}}",
                 "content": "ID VERIFICATION — {{1.name}}\nEmail: {{1.to}}\n\nStatus: Submitted\nConsent: Confirmed"
               },
