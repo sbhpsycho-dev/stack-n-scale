@@ -22,6 +22,7 @@ export async function triggerEmail(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, to, name, ...extras }),
+    signal: AbortSignal.timeout(5000),
   });
 }
 
@@ -44,5 +45,6 @@ export async function triggerDriveDocs(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, to, name, ...extras }),
+    signal: AbortSignal.timeout(5000),
   });
 }

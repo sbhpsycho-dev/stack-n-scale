@@ -35,6 +35,11 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400 });
+    }
+
     const submittedAt = new Date().toISOString();
 
     // 1. Save form response to KV
@@ -134,14 +139,16 @@ export async function POST(req: Request) {
           }).catch(() => {});
         }
 
-        // Build OAuth URL — customer clicks this to connect Discord and get added to their channel
+        // Build OAuth URL — use a random state token (not the email) to prevent email exposure
         if (CLIENT_ID) {
+          const stateToken = crypto.randomUUID();
+          await kv.set(`sns:oauth:state:${stateToken}`, email.toLowerCase(), { ex: 86400 }); // 24h TTL
           const params = new URLSearchParams({
             client_id: CLIENT_ID,
             redirect_uri: `${APP_URL}/api/discord/connect`,
             response_type: "code",
             scope: "identify guilds.join",
-            state: encodeURIComponent(email.toLowerCase()),
+            state: stateToken,
           });
           discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
         }

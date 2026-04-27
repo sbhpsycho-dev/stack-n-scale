@@ -14,7 +14,9 @@ export async function GET(req: Request) {
 
   if (!code || !state) return new Response("Missing code or state", { status: 400 });
 
-  const email = decodeURIComponent(state);
+  const email = await kv.get<string>(`sns:oauth:state:${state}`);
+  if (!email) return new Response("Invalid or expired link", { status: 400 });
+  await kv.del(`sns:oauth:state:${state}`);
 
   // Exchange code for access token
   const tokenRes = await fetch("https://discord.com/api/oauth2/token", {

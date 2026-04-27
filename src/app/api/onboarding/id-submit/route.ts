@@ -6,9 +6,11 @@ import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
-const GUILD_ID    = process.env.DISCORD_GUILD_ID ?? "";
 const CAELUM_ID   = process.env.DISCORD_CAELUM_USER_ID ?? "";
 
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const EMAIL_REGEX   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function getOrCreateDmChannel(): Promise<string> {
   const res = await fetch(`${DISCORD_API}/users/@me/channels`, {
@@ -42,6 +44,18 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
     }
 
+    if (!EMAIL_REGEX.test(email)) {
+      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400 });
+    }
+
+    if (!ALLOWED_TYPES.includes(idFront.type) || !ALLOWED_TYPES.includes(selfie.type)) {
+      return Response.json({ ok: false, error: "ID photos must be JPEG, PNG, or WebP images" }, { status: 400 });
+    }
+
+    if (idFront.size > MAX_FILE_SIZE || selfie.size > MAX_FILE_SIZE) {
+      return Response.json({ ok: false, error: "File too large. Max 10MB per photo." }, { status: 400 });
+    }
+
     // Update KV — mark idVerification as submitted
     const clientKey = `sns:coaching:client:${email}`;
     const existing  = await kv.get<CoachingClient>(clientKey);
@@ -68,45 +82,36 @@ export async function POST(req: Request) {
 
     const submittedAt = new Date().toISOString();
 
-    // Append to Google Sheets — Sheet2 for ID verification (non-blocking)
+    // Append to Google Sheets — ID Verification tab (non-blocking)
     const sheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
     if (sheetId) {
-      appendToSheet(sheetId, [submittedAt, name, email, "submitted", !!signature ? "yes" : "no"], "ID Verification!A:E")
+      appendToSheet(sheetId, [submittedAt, name, email, "submitted", signature ? "yes" : "no"], "ID Verification!A:E")
         .catch(e => console.error("Sheets error (ID):", e));
     }
 
-    // Upload ID files to Vercel Blob (non-blocking)
+    // Upload ID files to Vercel Blob — private access (non-blocking)
     const slug = email.replace(/[^a-z0-9]/gi, "-");
-    const blobUploads: Promise<{ url: string; label: string }>[] = [
-      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "public", contentType: idFront.type || "image/jpeg" })
-        .then(r => ({ url: r.url, label: "ID Front" })),
-      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "public", contentType: selfie.type || "image/jpeg" })
-        .then(r => ({ url: r.url, label: "Selfie" })),
+    const blobUploads: Promise<void>[] = [
+      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "private", contentType: idFront.type || "image/jpeg" })
+        .catch(e => console.error("Blob upload error (id-front):", e)),
+      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "private", contentType: selfie.type || "image/jpeg" })
+        .catch(e => console.error("Blob upload error (selfie):", e)),
     ];
     if (signature) {
       const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
       blobUploads.push(
-        put(`id-verification/${slug}/signature`, Buffer.from(base64, "base64"), { access: "public", contentType: "image/png" })
-          .then(r => ({ url: r.url, label: "Signature" }))
+        put(`id-verification/${slug}/signature`, Buffer.from(base64, "base64"), { access: "private", contentType: "image/png" })
+          .catch(e => console.error("Blob upload error (signature):", e))
       );
     }
-    let blobUrls: { url: string; label: string }[] = [];
-    try {
-      blobUrls = await Promise.all(blobUploads);
-    } catch (blobErr) {
-      console.error("Blob upload error:", blobErr);
-    }
+    await Promise.all(blobUploads);
 
     // Send ID received confirmation email + Drive doc trigger (non-blocking)
     const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
     triggerEmail("id_received", email, name, { idVerificationFolderId })
       .catch(e => console.error("ID received email error:", e));
-    triggerDriveDocs("id_received", email, name, {
-      idVerificationFolderId,
-      idFrontUrl: blobUrls.find(b => b.label === "ID Front")?.url,
-      selfieUrl: blobUrls.find(b => b.label === "Selfie")?.url,
-      signatureUrl: blobUrls.find(b => b.label === "Signature")?.url,
-    }).catch(e => console.error("Drive docs error:", e));
+    triggerDriveDocs("id_received", email, name, { idVerificationFolderId })
+      .catch(e => console.error("Drive docs error:", e));
 
     // If onboarding form was also submitted, send Discord link via email
     let discordOAuthUrl: string | null = null;
@@ -119,15 +124,14 @@ export async function POST(req: Request) {
       ]);
       if (formRecord && discordRecord?.discordOAuthUrl) {
         discordOAuthUrl = discordRecord.discordOAuthUrl;
-        const driveFolderUrl = existing?.driveFolder?.url ?? undefined;
-        triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl })
+        triggerEmail("discord_link", email, name, { discordOAuthUrl })
           .catch(e => console.error("Discord link email error:", e));
       }
     } catch (e) {
       console.error("Both-complete check error:", e);
     }
 
-    // Notify Discord (text only — files are in Drive)
+    // Notify Discord — no file URLs (files stored privately in Vercel Blob)
     if (BOT_TOKEN && CAELUM_ID) {
       try {
         let channelId = await getClientChannel(email).catch(() => null);
@@ -141,7 +145,7 @@ export async function POST(req: Request) {
               `🪪 **ID Verification Submitted — ${name}**`,
               `📧 ${email}`,
               `✅ Consent confirmed`,
-              ...blobUrls.map(b => `📎 ${b.label}: ${b.url}`),
+              `📎 ID photo + selfie uploaded securely`,
               existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
             ].filter(Boolean).join("\n"),
           }),
