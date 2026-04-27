@@ -1,4 +1,4 @@
-export type BusinessType = "coaching" | "agency" | "ecommerce" | "saas" | "custom";
+export type BusinessType = "coaching" | "b2b" | "agency" | "ecommerce" | "saas" | "custom";
 
 export type KpiCardKey =
   | "cashCollectedMTD" | "netRevenueMTD" | "leadsThisMonth"
@@ -62,6 +62,17 @@ export const BUSINESS_PRESETS: Record<BusinessType, DashboardConfig> = {
       netByProduct: true, netByProcessor: false, checkInScores: true, paceToGoal: true,
       callMetrics: true, funnelChart: true, stageBreakdown: false,
       adMetrics: false, leadsOverTime: false, topAds: false,
+      leaderboard: true, repCharts: true,
+    },
+  },
+  b2b: {
+    businessType: "b2b",
+    tabs: { dashboard: true, pipeline: true, ads: true, reps: true, resources: true },
+    widgets: {
+      kpiCards: true, monthlyGoal: true, reactivation: false, revenueChart: true,
+      netByProduct: true, netByProcessor: true, checkInScores: false, paceToGoal: true,
+      callMetrics: true, funnelChart: true, stageBreakdown: true,
+      adMetrics: true, leadsOverTime: true, topAds: false,
       leaderboard: true, repCharts: true,
     },
   },

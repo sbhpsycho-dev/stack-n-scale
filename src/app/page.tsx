@@ -1011,11 +1011,11 @@ export default function Dashboard() {
                       <CardTitle className="text-sm font-semibold">Business Type</CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                        {(["coaching", "agency", "ecommerce", "saas", "custom"] as BusinessType[]).map(type => (
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["coaching", "b2b"] as BusinessType[]).map(type => (
                           <button key={type} onClick={() => saveConfig(BUSINESS_PRESETS[type])}
                             className={`rounded-lg border px-3 py-3 text-center text-xs font-medium transition-all ${config.businessType === type ? "bg-orange-500/10 border-orange-500/50 text-orange-400" : "border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground"}`}>
-                            {type === "coaching" ? "🎯 Coaching" : type === "agency" ? "🏢 Agency" : type === "ecommerce" ? "🛒 E-commerce" : type === "saas" ? "💻 SaaS" : "⚡ Custom"}
+                            {type === "coaching" ? "🎯 Coaching" : "🤝 Business to Business"}
                           </button>
                         ))}
                       </div>
