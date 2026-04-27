@@ -4,7 +4,14 @@ export async function triggerEmail(
   type: EmailType,
   to: string,
   name: string,
-  extras?: { reason?: string; discordOAuthUrl?: string; driveFolderUrl?: string }
+  extras?: {
+    reason?: string;
+    discordOAuthUrl?: string;
+    driveFolderUrl?: string;
+    onboardingFolderId?: string;
+    idVerificationFolderId?: string;
+    formData?: Record<string, string>;
+  }
 ) {
   const url = process.env.MAKE_EMAIL_WEBHOOK_URL;
   if (!url) {

@@ -65,8 +65,16 @@ export async function POST(req: Request) {
 
 
 
-    // 4. Send form received confirmation email (non-blocking)
-    triggerEmail("form_received", email, name)
+    // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
+    const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? undefined;
+    triggerEmail("form_received", email, name, {
+      onboardingFolderId,
+      formData: {
+        motivation, whySNS, goal30Days, goal3Months,
+        goal6Months, goal1Year, biggestChallenge, successIn90Days,
+        additionalNotes: additionalNotes ?? "",
+      },
+    })
       .catch(e => console.error("Form received email error:", e));
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth

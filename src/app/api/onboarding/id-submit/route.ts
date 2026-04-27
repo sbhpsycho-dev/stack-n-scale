@@ -97,8 +97,9 @@ export async function POST(req: Request) {
       console.error("Blob upload error:", blobErr);
     }
 
-    // Send ID received confirmation email (non-blocking)
-    triggerEmail("id_received", email, name)
+    // Send ID received confirmation email + Drive doc trigger (non-blocking)
+    const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
+    triggerEmail("id_received", email, name, { idVerificationFolderId })
       .catch(e => console.error("ID received email error:", e));
 
     // If onboarding form was also submitted, send Discord link via email
