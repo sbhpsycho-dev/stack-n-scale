@@ -20,11 +20,15 @@ const BOT_TOKEN  = env.DISCORD_BOT_TOKEN;
 const GUILD_ID   = env.DISCORD_GUILD_ID;
 const GENERAL_ID = env.DISCORD_GENERAL_CHANNEL_ID;
 
-const api = (path, method = "GET", body) => fetch(`https://discord.com/api/v10${path}`, {
-  method,
-  headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-  ...(body ? { body: JSON.stringify(body) } : {}),
-}).then(r => r.json());
+const api = async (path, method = "GET", body) => {
+  const r = await fetch(`https://discord.com/api/v10${path}`, {
+    method,
+    headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (r.status === 204) return { ok: true };
+  return r.json();
+};
 
 // ── 1. Rename #general → #studentchat ────────────────────────────────────────
 console.log("Renaming #general → #studentchat...");
@@ -70,10 +74,10 @@ for (const ch of channels) {
     deny: "1024",   // VIEW_CHANNEL
   });
 
-  if (res.code) {
-    console.error(`❌ #${ch.name} — failed:`, res.message);
-  } else {
+  if (res.ok || !res.code) {
     console.log(`🔒 #${ch.name} — locked from @everyone`);
+  } else {
+    console.error(`❌ #${ch.name} — failed:`, res.message);
   }
 }
 
