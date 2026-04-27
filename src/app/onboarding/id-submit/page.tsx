@@ -40,6 +40,7 @@ function FileField({ label, name, onChange, accept = "image/*" }: {
 function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  const hasDrawn = useRef(false);
   const [hasSignature, setHasSignature] = useState(false);
 
   useEffect(() => {
@@ -88,12 +89,12 @@ function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void 
     const { x, y } = getPos(e);
     ctx.lineTo(x, y);
     ctx.stroke();
+    if (!hasDrawn.current) hasDrawn.current = true;
     if (!hasSignature) setHasSignature(true);
   }
 
   function stopDraw() {
-    if (drawing.current && hasSignature) {
-      // Capture signature once per stroke-end, not on every pixel move
+    if (drawing.current && hasDrawn.current) {
       onSign(canvasRef.current!.toDataURL("image/png"));
     }
     drawing.current = false;
@@ -103,6 +104,7 @@ function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void 
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasDrawn.current = false;
     setHasSignature(false);
     onSign(null);
   }
