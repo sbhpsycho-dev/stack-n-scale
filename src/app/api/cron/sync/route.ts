@@ -3,8 +3,13 @@ import { syncAll } from "@/lib/sync-runners";
 import { SEED, type SalesData } from "@/lib/sales-data";
 
 export async function GET(req: Request) {
-  const secret = req.headers.get("x-cron-secret") ?? new URL(req.url).searchParams.get("secret");
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization");
+  const querySecret = new URL(req.url).searchParams.get("secret") ?? req.headers.get("x-cron-secret");
+  const authorized =
+    cronSecret &&
+    (authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret);
+  if (!authorized) {
     return new Response("Unauthorized", { status: 401 });
   }
 
