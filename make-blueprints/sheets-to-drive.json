@@ -1,0 +1,135 @@
+{
+  "name": "SNS — Sheets → Drive Docs",
+  "flow": [
+    {
+      "id": 1,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "mapper": null,
+      "metadata": { "designer": { "x": 0, "y": 0 } },
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 2,
+              "module": "google-sheets:TriggerNewRow",
+              "version": 2,
+              "parameters": {
+                "__IMTCONN__": "YOUR_GOOGLE_SHEETS_CONNECTION_ID",
+                "spreadsheetId": "1uStqjKxygyGjuBiXDBDKbZ4effE4BfoBAKqjrg0LyZk",
+                "sheetId": "Onboarding Forms",
+                "includeColumnsFromHeader": true,
+                "useFirstRowAsHeaders": true
+              },
+              "metadata": { "designer": { "x": 300, "y": -200 } }
+            },
+            {
+              "id": 3,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": { "handleErrors": false, "useNewZLibDeflate": true },
+              "mapper": {
+                "url": "https://stack-n-scale.vercel.app/api/client/folder",
+                "method": "get",
+                "headers": [
+                  { "name": "x-webhook-secret", "value": "sns-cron-2026" }
+                ],
+                "qs": [{ "name": "email", "value": "{{2.Email}}" }],
+                "bodyType": "raw",
+                "parseResponse": true
+              },
+              "metadata": { "designer": { "x": 600, "y": -200 } }
+            },
+            {
+              "id": 4,
+              "module": "google-docs:ActionCreateDocument",
+              "version": 1,
+              "parameters": {
+                "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID"
+              },
+              "filter": {
+                "name": "Has folder",
+                "conditions": [[{ "a": "{{3.data.ok}}", "b": "true", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "title": "{{2.Name}} — Onboarding Form",
+                "folderId": "{{3.data.onboardingFolderId}}",
+                "content": "ONBOARDING FORM — {{2.Name}}\nEmail: {{2.Email}}\nSubmitted: {{2.`Submitted At`}}\n\nWhat motivated you to get started?\n{{2.Motivation}}\n\nWhy Stack N Scale Enterprises?\n{{2.`Why SNS`}}\n\n30-Day Goal\n{{2.`30-Day Goal`}}\n\n3-Month Goal\n{{2.`3-Month Goal`}}\n\n6-Month Goal\n{{2.`6-Month Goal`}}\n\n1-Year Goal\n{{2.`1-Year Goal`}}\n\nBiggest Challenge\n{{2.`Biggest Challenge`}}\n\nSuccess in 90 Days\n{{2.`Success in 90 Days`}}\n\nAdditional Notes\n{{2.`Additional Notes`}}"
+              },
+              "metadata": { "designer": { "x": 900, "y": -200 } }
+            }
+          ]
+        },
+        {
+          "flow": [
+            {
+              "id": 5,
+              "module": "google-sheets:TriggerNewRow",
+              "version": 2,
+              "parameters": {
+                "__IMTCONN__": "YOUR_GOOGLE_SHEETS_CONNECTION_ID",
+                "spreadsheetId": "1uStqjKxygyGjuBiXDBDKbZ4effE4BfoBAKqjrg0LyZk",
+                "sheetId": "ID Verification",
+                "includeColumnsFromHeader": true,
+                "useFirstRowAsHeaders": true
+              },
+              "metadata": { "designer": { "x": 300, "y": 200 } }
+            },
+            {
+              "id": 6,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": { "handleErrors": false, "useNewZLibDeflate": true },
+              "mapper": {
+                "url": "https://stack-n-scale.vercel.app/api/client/folder",
+                "method": "get",
+                "headers": [
+                  { "name": "x-webhook-secret", "value": "sns-cron-2026" }
+                ],
+                "qs": [{ "name": "email", "value": "{{5.Email}}" }],
+                "bodyType": "raw",
+                "parseResponse": true
+              },
+              "metadata": { "designer": { "x": 600, "y": 200 } }
+            },
+            {
+              "id": 7,
+              "module": "google-docs:ActionCreateDocument",
+              "version": 1,
+              "parameters": {
+                "__IMTCONN__": "YOUR_GOOGLE_DOCS_CONNECTION_ID"
+              },
+              "filter": {
+                "name": "Has folder",
+                "conditions": [[{ "a": "{{6.data.ok}}", "b": "true", "o": "text:equal" }]]
+              },
+              "mapper": {
+                "title": "{{5.Name}} — ID Verification",
+                "folderId": "{{6.data.idVerificationFolderId}}",
+                "content": "ID VERIFICATION — {{5.Name}}\nEmail: {{5.Email}}\nSubmitted: {{5.`Submitted At`}}\nStatus: {{5.Status}}\nSignature: {{5.Signature}}"
+              },
+              "metadata": { "designer": { "x": 900, "y": 200 } }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "instant": false,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us2.make.com"
+  }
+}
