@@ -1,6 +1,7 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { NextAuthOptions } from "next-auth";
 import { type ClientMeta, SEED_REGISTRY } from "@/lib/sales-data";
+import { verifyPassword } from "@/lib/password";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -25,13 +26,13 @@ export const authOptions: NextAuthOptions = {
           const dedicated = await kv.get<ClientMeta[]>("sns-registry");
           const adminData = await kv.get<{ clientRegistry?: ClientMeta[] }>("sns-dashboard-v1");
           const registry = dedicated ?? adminData?.clientRegistry ?? SEED_REGISTRY;
-          const client = registry.find((c) => c.password === pw);
+          const client = registry.find((c) => verifyPassword(pw, c.password));
           if (client) {
             return { id: client.id, name: client.name, role: "client", clientId: client.id };
           }
         } catch {
           // KV unavailable — fall back to seed registry
-          const client = SEED_REGISTRY.find((c) => c.password === pw);
+          const client = SEED_REGISTRY.find((c) => verifyPassword(pw, c.password));
           if (client) {
             return { id: client.id, name: client.name, role: "client", clientId: client.id };
           }

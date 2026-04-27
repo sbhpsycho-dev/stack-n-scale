@@ -6,10 +6,11 @@ export type ClientMeta = {
   password: string; // Login password for this client
 };
 
+// Passwords must be set via the admin panel or seed-kv script — never hardcode them here.
 export const SEED_REGISTRY: ClientMeta[] = [
-  { id: "alpha-coaching",   name: "Alpha Coaching",   password: "alpha2026"   },
-  { id: "peak-performance", name: "Peak Performance", password: "peak2026"    },
-  { id: "momentum-media",   name: "Momentum Media",   password: "momentum2026" },
+  { id: "alpha-coaching",   name: "Alpha Coaching",   password: "" },
+  { id: "peak-performance", name: "Peak Performance", password: "" },
+  { id: "momentum-media",   name: "Momentum Media",   password: "" },
 ];
 
 export type TimePoint    = { date: string; amount: number };

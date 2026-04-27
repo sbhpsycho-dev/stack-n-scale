@@ -1,0 +1,11 @@
+Date,Amount,Processor,Product
+Apr 1 2026,8500,Stripe,Scale (Tier 3)
+Apr 3 2026,5000,Stripe,Growth (Tier 2)
+Apr 5 2026,8500,Stripe,Scale (Tier 3)
+Apr 7 2026,3500,PayPal,Starter (Tier 1)
+Apr 9 2026,8500,Stripe,Scale (Tier 3)
+Apr 12 2026,5000,Stripe,Growth (Tier 2)
+Apr 14 2026,1200,Stripe,Starter (Tier 1)
+Apr 17 2026,8500,Stripe,Scale (Tier 3)
+Apr 19 2026,5000,Stripe,Growth (Tier 2)
+Apr 21 2026,3500,PayPal,Starter (Tier 1)

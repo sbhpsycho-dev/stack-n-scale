@@ -10,6 +10,7 @@ export async function GET(req: Request) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const target = new URL(req.url).searchParams.get("target");
+  if (target && session.user.role !== "admin") return new Response("Forbidden", { status: 403 });
   const key =
     session.user.role === "admin" && target ? clientKey(target)
     : session.user.role === "admin"          ? ADMIN_KEY
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const target = new URL(req.url).searchParams.get("target");
+  if (target && session.user.role !== "admin") return new Response("Forbidden", { status: 403 });
   const key = session.user.role === "admin" && target
     ? clientKey(target)
     : session.user.role === "admin"

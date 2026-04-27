@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { SEED, type SalesData, type ClientMeta } from "@/lib/sales-data";
+import { verifyPassword, hashPassword } from "@/lib/password";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -17,9 +18,10 @@ export async function POST(req: Request) {
     const entry = registry.find((c) => c.id === session.user.clientId);
 
     if (!entry) return Response.json({ ok: false, error: "Client not found" }, { status: 404 });
-    if (entry.password !== currentPassword) return Response.json({ ok: false, error: "Current password is incorrect" }, { status: 401 });
+    if (!verifyPassword(currentPassword, entry.password)) return Response.json({ ok: false, error: "Current password is incorrect" }, { status: 401 });
 
-    entry.password = newPassword;
+    const hashed = hashPassword(newPassword);
+    entry.password = hashed;
     await kv.set("sns-dashboard-v1", adminData);
 
     // Mirror to dedicated registry so auth picks it up
@@ -27,13 +29,14 @@ export async function POST(req: Request) {
     if (dedicated) {
       const dedEntry = dedicated.find((c) => c.id === session.user.clientId);
       if (dedEntry) {
-        dedEntry.password = newPassword;
+        dedEntry.password = hashed;
         await kv.set("sns-registry", dedicated);
       }
     }
 
     return Response.json({ ok: true });
   } catch (err) {
-    return Response.json({ ok: false, error: String(err) }, { status: 500 });
+    console.error("Password change error:", err);
+    return Response.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }

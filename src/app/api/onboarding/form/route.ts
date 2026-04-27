@@ -17,9 +17,24 @@ async function discordRequest(path: string, method: string, body?: unknown) {
     method,
     headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`Discord ${method} ${path} failed: ${await res.text()}`);
   return res.json();
+}
+
+const MAX_TEXT_LEN = 2000;
+const EMAIL_REGEX  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function sanitizeForSheets(val: string): string {
+  // Strip leading formula characters to prevent CSV/Sheets injection
+  return val.replace(/^[=+\-@\t\r]/, "'");
+}
+
+function validateTextField(val: unknown, fieldName: string): string | null {
+  if (typeof val !== "string" || !val.trim()) return `${fieldName} is required`;
+  if (val.length > MAX_TEXT_LEN) return `${fieldName} exceeds maximum length`;
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -31,12 +46,20 @@ export async function POST(req: Request) {
       biggestChallenge, successIn90Days, additionalNotes,
     } = body;
 
-    if (!name || !email || !motivation || !whySNS || !goal30Days || !goal3Months || !goal6Months || !goal1Year || !biggestChallenge || !successIn90Days) {
-      return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
+    const requiredFields: [unknown, string][] = [
+      [name, "Name"], [email, "Email"], [motivation, "Motivation"], [whySNS, "Why SNS"],
+      [goal30Days, "30-day goal"], [goal3Months, "3-month goal"], [goal6Months, "6-month goal"],
+      [goal1Year, "1-year goal"], [biggestChallenge, "Biggest challenge"], [successIn90Days, "Success in 90 days"],
+    ];
+    for (const [val, label] of requiredFields) {
+      const err = validateTextField(val, label);
+      if (err) return Response.json({ ok: false, error: err }, { status: 400 });
+    }
+    if (additionalNotes && (typeof additionalNotes !== "string" || additionalNotes.length > MAX_TEXT_LEN)) {
+      return Response.json({ ok: false, error: "Additional notes exceeds maximum length" }, { status: 400 });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!EMAIL_REGEX.test(email)) {
       return Response.json({ ok: false, error: "Invalid email address" }, { status: 400 });
     }
 
@@ -61,10 +84,11 @@ export async function POST(req: Request) {
     // 3. Append to Google Sheets (non-blocking)
     const sheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
     if (sheetId) {
+      const san = sanitizeForSheets;
       appendToSheet(sheetId, [
-        submittedAt, name, email, motivation, whySNS,
-        goal30Days, goal3Months, goal6Months, goal1Year,
-        biggestChallenge, successIn90Days, additionalNotes ?? "",
+        submittedAt, san(name), san(email), san(motivation), san(whySNS),
+        san(goal30Days), san(goal3Months), san(goal6Months), san(goal1Year),
+        san(biggestChallenge), san(successIn90Days), san(additionalNotes ?? ""),
       ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
     }
 

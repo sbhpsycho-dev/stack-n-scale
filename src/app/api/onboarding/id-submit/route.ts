@@ -12,6 +12,18 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const EMAIL_REGEX   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Verify file magic numbers to prevent MIME type spoofing
+async function validateFileMagic(file: File): Promise<boolean> {
+  const buf = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const isJpeg  = buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+  const isPng   = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+  const isWebp  = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+               && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+  // HEIC starts with ftyp box — allow if declared type matches
+  const isHeic  = file.type === "image/heic";
+  return isJpeg || isPng || isWebp || isHeic;
+}
+
 async function getOrCreateDmChannel(): Promise<string> {
   const res = await fetch(`${DISCORD_API}/users/@me/channels`, {
     method: "POST",
@@ -20,6 +32,7 @@ async function getOrCreateDmChannel(): Promise<string> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ recipient_id: CAELUM_ID }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`DM channel create failed: ${await res.text()}`);
   const data = await res.json() as { id: string };
@@ -39,9 +52,14 @@ export async function POST(req: Request) {
     const idFront   = formData.get("idFront") as File | null;
     const selfie    = formData.get("selfie") as File | null;
     const signature = formData.get("signature") as string | null;
+    const consented = formData.get("consented");
 
     if (!name || !email || !idFront || !selfie) {
       return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (consented !== "true") {
+      return Response.json({ ok: false, error: "Consent is required" }, { status: 400 });
     }
 
     if (!EMAIL_REGEX.test(email)) {
@@ -54,6 +72,10 @@ export async function POST(req: Request) {
 
     if (idFront.size > MAX_FILE_SIZE || selfie.size > MAX_FILE_SIZE) {
       return Response.json({ ok: false, error: "File too large. Max 10MB per photo." }, { status: 400 });
+    }
+
+    if (!await validateFileMagic(idFront) || !await validateFileMagic(selfie)) {
+      return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400 });
     }
 
     // Update KV — mark idVerification as submitted
@@ -91,7 +113,7 @@ export async function POST(req: Request) {
 
     // Upload ID files to Vercel Blob — private access (non-blocking)
     const slug = email.replace(/[^a-z0-9]/gi, "-");
-    const blobUploads: Promise<void>[] = [
+    const blobUploads: Promise<unknown>[] = [
       put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "private", contentType: idFront.type || "image/jpeg" })
         .catch(e => console.error("Blob upload error (id-front):", e)),
       put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "private", contentType: selfie.type || "image/jpeg" })
@@ -140,6 +162,7 @@ export async function POST(req: Request) {
         await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
           method: "POST",
           headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(8000),
           body: JSON.stringify({
             content: [
               `🪪 **ID Verification Submitted — ${name}**`,

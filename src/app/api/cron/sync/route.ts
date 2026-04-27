@@ -4,11 +4,9 @@ import { SEED, type SalesData } from "@/lib/sales-data";
 
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
+  // Only accept the secret via Authorization header — never via URL params (they appear in logs)
   const authHeader = req.headers.get("authorization");
-  const querySecret = new URL(req.url).searchParams.get("secret") ?? req.headers.get("x-cron-secret");
-  const authorized =
-    cronSecret &&
-    (authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret);
+  const authorized = cronSecret && authHeader === `Bearer ${cronSecret}`;
   if (!authorized) {
     return new Response("Unauthorized", { status: 401 });
   }
@@ -24,6 +22,7 @@ export async function GET(req: Request) {
 
     return Response.json({ ok: true, synced: registry.length + 1 });
   } catch (err) {
-    return Response.json({ ok: false, error: String(err) }, { status: 500 });
+    console.error("Cron sync error:", err);
+    return Response.json({ ok: false, error: "Sync failed" }, { status: 500 });
   }
 }

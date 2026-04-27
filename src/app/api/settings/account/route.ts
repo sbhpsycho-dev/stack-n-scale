@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     await kv.set("sns-dashboard-v1", adminData);
     return Response.json({ ok: true });
   } catch (err) {
-    return Response.json({ ok: false, error: String(err) }, { status: 500 });
+    console.error("Account update error:", err);
+    return Response.json({ ok: false, error: "Server error" }, { status: 500 });
   }
 }

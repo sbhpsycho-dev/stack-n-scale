@@ -128,13 +128,18 @@ export default function Dashboard() {
   const redirectedRef = useRef(false);
   useEffect(() => {
     if (redirectedRef.current || loading || isAdmin || !clientId) return;
-    const setupDone = localStorage.getItem(`sns-setup-done-${clientId}`) === "1";
-    if (!setupDone &&
-        data.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD &&
-        data.dashboard.leadsThisMonth === SEED.dashboard.leadsThisMonth) {
-      redirectedRef.current = true;
-      router.push("/setup");
-    }
+    if (data.dashboard.cashCollectedMTD !== SEED.dashboard.cashCollectedMTD ||
+        data.dashboard.leadsThisMonth !== SEED.dashboard.leadsThisMonth) return;
+    // Check setup completion server-side (not localStorage, which can be spoofed)
+    fetch("/api/setup-complete")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.done && !redirectedRef.current) {
+          redirectedRef.current = true;
+          router.push("/setup");
+        }
+      })
+      .catch(() => {});
   }, [loading, data, isAdmin, clientId, router]);
 
   // Load integrations for client

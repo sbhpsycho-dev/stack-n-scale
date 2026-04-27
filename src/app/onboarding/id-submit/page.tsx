@@ -88,15 +88,14 @@ function SignatureCanvas({ onSign }: { onSign: (dataUrl: string | null) => void 
     const { x, y } = getPos(e);
     ctx.lineTo(x, y);
     ctx.stroke();
-    if (!hasSignature) {
-      setHasSignature(true);
-      onSign(canvas.toDataURL("image/png"));
-    } else {
-      onSign(canvas.toDataURL("image/png"));
-    }
+    if (!hasSignature) setHasSignature(true);
   }
 
   function stopDraw() {
+    if (drawing.current && hasSignature) {
+      // Capture signature once per stroke-end, not on every pixel move
+      onSign(canvasRef.current!.toDataURL("image/png"));
+    }
     drawing.current = false;
   }
 
@@ -192,6 +191,7 @@ export default function IdSubmitPage() {
     fd.append("idFront", idFront);
     fd.append("selfie", selfie);
     fd.append("signature", signature);
+    fd.append("consented", "true");
 
     try {
       const res = await fetch("/api/onboarding/id-submit", { method: "POST", body: fd });
