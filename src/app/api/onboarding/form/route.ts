@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
-import { uploadTextToDrive, appendToSheet } from "@/lib/drive";
+import { appendToSheet } from "@/lib/drive";
 import { triggerEmail } from "@/lib/email";
 
 const DISCORD_API  = "https://discord.com/api/v10";
@@ -63,34 +63,7 @@ export async function POST(req: Request) {
       ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
     }
 
-    // 4. Upload form response to the Onboarding subfolder (non-blocking)
-    const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? existing?.driveFolder?.id;
-    if (onboardingFolderId) {
-      const summary = [
-        `Onboarding Form — ${name}`,
-        `Email: ${email}`,
-        `Submitted: ${submittedAt}`,
-        ``,
-        `What motivated you to get started?`, motivation,
-        ``,
-        `Why Stack N Scale Enterprises?`, whySNS,
-        ``,
-        `30-Day Goal`, goal30Days,
-        ``,
-        `3-Month Goal`, goal3Months,
-        ``,
-        `6-Month Goal`, goal6Months,
-        ``,
-        `1-Year Goal`, goal1Year,
-        ``,
-        `Biggest Challenge`, biggestChallenge,
-        ``,
-        `Success in 90 Days`, successIn90Days,
-        additionalNotes ? `\nAdditional Notes\n${additionalNotes}` : "",
-      ].join("\n");
-      uploadTextToDrive(onboardingFolderId, `${name} — Onboarding Form`, summary)
-        .catch(e => console.error("Drive upload error (form):", e));
-    }
+
 
     // 4. Send form received confirmation email (non-blocking)
     triggerEmail("form_received", email, name)

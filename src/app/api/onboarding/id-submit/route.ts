@@ -1,6 +1,7 @@
 import { kv } from "@vercel/kv";
+import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
-import { uploadFileToDrive, uploadTextToDrive, appendToSheet } from "@/lib/drive";
+import { appendToSheet } from "@/lib/drive";
 import { triggerEmail } from "@/lib/email";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -74,32 +75,26 @@ export async function POST(req: Request) {
         .catch(e => console.error("Sheets error (ID):", e));
     }
 
-    // Upload ID files + text summary to the ID Verification subfolder
-    const idFolderId = existing?.driveFolder?.idVerificationFolderId ?? existing?.driveFolder?.id;
-    if (idFolderId) {
-      try {
-        const summary = [
-          `ID Verification — ${name}`,
-          `Email: ${email}`,
-          `Submitted: ${submittedAt}`,
-          `Consent: confirmed`,
-          `Signature: ${signature ? "provided" : "not provided"}`,
-        ].join("\n");
-
-        const uploads: Promise<unknown>[] = [
-          uploadFileToDrive(idFolderId, `${name} — ID Front`, idFront.type || "image/jpeg", await idFront.arrayBuffer()),
-          uploadFileToDrive(idFolderId, `${name} — Selfie with ID`, selfie.type || "image/jpeg", await selfie.arrayBuffer()),
-          uploadTextToDrive(idFolderId, `${name} — ID Verification Summary`, summary),
-        ];
-        if (signature) {
-          const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
-          const sigBuffer = Buffer.from(base64, "base64");
-          uploads.push(uploadFileToDrive(idFolderId, `${name} — Signature`, "image/png", sigBuffer));
-        }
-        await Promise.all(uploads);
-      } catch (driveErr) {
-        console.error("Drive upload error (ID):", driveErr);
-      }
+    // Upload ID files to Vercel Blob (non-blocking)
+    const slug = email.replace(/[^a-z0-9]/gi, "-");
+    const blobUploads: Promise<{ url: string; label: string }>[] = [
+      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "public", contentType: idFront.type || "image/jpeg" })
+        .then(r => ({ url: r.url, label: "ID Front" })),
+      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "public", contentType: selfie.type || "image/jpeg" })
+        .then(r => ({ url: r.url, label: "Selfie" })),
+    ];
+    if (signature) {
+      const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
+      blobUploads.push(
+        put(`id-verification/${slug}/signature`, Buffer.from(base64, "base64"), { access: "public", contentType: "image/png" })
+          .then(r => ({ url: r.url, label: "Signature" }))
+      );
+    }
+    let blobUrls: { url: string; label: string }[] = [];
+    try {
+      blobUrls = await Promise.all(blobUploads);
+    } catch (blobErr) {
+      console.error("Blob upload error:", blobErr);
     }
 
     // Send ID received confirmation email (non-blocking)
@@ -138,8 +133,9 @@ export async function POST(req: Request) {
             content: [
               `🪪 **ID Verification Submitted — ${name}**`,
               `📧 ${email}`,
-              `✅ Consent confirmed · Files saved to Google Drive`,
-              existing?.driveFolder?.url ? `📁 ${existing.driveFolder.url}` : "",
+              `✅ Consent confirmed`,
+              ...blobUrls.map(b => `📎 ${b.label}: ${b.url}`),
+              existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
             ].filter(Boolean).join("\n"),
           }),
         });
