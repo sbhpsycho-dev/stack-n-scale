@@ -79,25 +79,6 @@ export async function POST(req: Request) {
     let existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
       await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
-      // Create Drive folder in background if missing (non-blocking)
-      if (!existing.driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-        setupClientFolder(existing.name || name).then(async (folders) => {
-          const updated = await kv.get<CoachingClient>(clientKey);
-          if (updated && !updated.driveFolder) {
-            await kv.set(clientKey, {
-              ...updated,
-              driveFolder: {
-                url: folders.folderUrl,
-                id: folders.folderId,
-                idVerificationFolderId: folders.idVerificationFolderId,
-                onboardingFolderId: folders.onboardingFolderId,
-                notesFolderId: folders.notesFolderId,
-                docs: folders.docs,
-              },
-            });
-          }
-        }).catch(e => console.error("Drive folder setup error (form):", e));
-      }
     }
 
     // 3. Append to Google Sheets (non-blocking)
@@ -111,24 +92,56 @@ export async function POST(req: Request) {
       ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
     }
 
-
+    const formData = {
+      motivation, whySNS, goal30Days, goal3Months,
+      goal6Months, goal1Year, biggestChallenge, successIn90Days,
+      additionalNotes: additionalNotes ?? "",
+    };
 
     // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
-    const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? undefined;
-    const notesFolderId = existing?.driveFolder?.notesFolderId ?? undefined;
-    const formPayload = {
-      onboardingFolderId,
-      notesFolderId,
-      formData: {
-        motivation, whySNS, goal30Days, goal3Months,
-        goal6Months, goal1Year, biggestChallenge, successIn90Days,
-        additionalNotes: additionalNotes ?? "",
-      },
-    };
-    triggerEmail("form_received", email, name, formPayload)
-      .catch(e => console.error("Form received email error:", e));
-    triggerDriveDocs("form_received", email, name, formPayload)
-      .catch(e => console.error("Drive docs error:", e));
+    // If Drive folder exists, fire immediately; otherwise create it first then fire
+    if (existing?.driveFolder) {
+      const formPayload = {
+        onboardingFolderId: existing.driveFolder.onboardingFolderId,
+        notesFolderId: existing.driveFolder.notesFolderId,
+        formData,
+      };
+      triggerEmail("form_received", email, name, formPayload)
+        .catch(e => console.error("Form received email error:", e));
+      triggerDriveDocs("form_received", email, name, formPayload)
+        .catch(e => console.error("Drive docs error:", e));
+    } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+      // Folder missing — create it, save to KV, then fire webhooks
+      setupClientFolder(existing?.name || name).then(async (folders) => {
+        const driveFolder = {
+          url: folders.folderUrl,
+          id: folders.folderId,
+          idVerificationFolderId: folders.idVerificationFolderId,
+          onboardingFolderId: folders.onboardingFolderId,
+          notesFolderId: folders.notesFolderId,
+          docs: folders.docs,
+        };
+        const updated = await kv.get<CoachingClient>(clientKey);
+        if (updated) await kv.set(clientKey, { ...updated, driveFolder });
+        const formPayload = {
+          onboardingFolderId: folders.onboardingFolderId,
+          notesFolderId: folders.notesFolderId,
+          formData,
+        };
+        triggerEmail("form_received", email, name, formPayload)
+          .catch(e => console.error("Form received email error:", e));
+        triggerDriveDocs("form_received", email, name, formPayload)
+          .catch(e => console.error("Drive docs error:", e));
+      }).catch(e => {
+        console.error("Drive folder setup error (form):", e);
+        // Fire without folder IDs as fallback
+        triggerEmail("form_received", email, name, { formData })
+          .catch(err => console.error("Form received email error:", err));
+      });
+    } else {
+      triggerEmail("form_received", email, name, { formData })
+        .catch(e => console.error("Form received email error:", e));
+    }
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth
     let discordOAuthUrl: string | null = null;
