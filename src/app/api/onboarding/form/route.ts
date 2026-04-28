@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
-import { appendToSheet } from "@/lib/drive";
+import { appendToSheet, setupClientFolder } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 const DISCORD_API  = "https://discord.com/api/v10";
@@ -74,11 +74,28 @@ export async function POST(req: Request) {
       submittedAt,
     });
 
-    // 2. Update client status
+    // 2. Update client status — create Drive folder if missing
     const clientKey = `sns:coaching:client:${email.toLowerCase()}`;
-    const existing = await kv.get<CoachingClient>(clientKey);
+    let existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
-      await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
+      let driveFolder = existing.driveFolder;
+      if (!driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+        try {
+          const folders = await setupClientFolder(existing.name || name);
+          driveFolder = {
+            url: folders.folderUrl,
+            id: folders.folderId,
+            idVerificationFolderId: folders.idVerificationFolderId,
+            onboardingFolderId: folders.onboardingFolderId,
+            notesFolderId: folders.notesFolderId,
+            docs: folders.docs,
+          };
+        } catch (e) {
+          console.error("Drive folder setup error (form):", e);
+        }
+      }
+      existing = { ...existing, driveFolder, status: "onboarding_complete" };
+      await kv.set(clientKey, existing);
     }
 
     // 3. Append to Google Sheets (non-blocking)

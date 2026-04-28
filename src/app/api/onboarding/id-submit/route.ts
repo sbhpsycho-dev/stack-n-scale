@@ -1,7 +1,7 @@
 import { kv } from "@vercel/kv";
 import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
-import { appendToSheet } from "@/lib/drive";
+import { appendToSheet, setupClientFolder } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 const DISCORD_API = "https://discord.com/api/v10";
@@ -78,15 +78,28 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400 });
     }
 
-    // Update KV — mark idVerification as submitted
+    // Update KV — mark idVerification as submitted, create Drive folder if missing
     const clientKey = `sns:coaching:client:${email}`;
-    const existing  = await kv.get<CoachingClient>(clientKey);
+    let existing  = await kv.get<CoachingClient>(clientKey);
     if (existing) {
-      await kv.set(clientKey, {
-        ...existing,
-        idVerification: "submitted",
-        status: "id_pending_review",
-      });
+      let driveFolder = existing.driveFolder;
+      if (!driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+        try {
+          const folders = await setupClientFolder(existing.name || name);
+          driveFolder = {
+            url: folders.folderUrl,
+            id: folders.folderId,
+            idVerificationFolderId: folders.idVerificationFolderId,
+            onboardingFolderId: folders.onboardingFolderId,
+            notesFolderId: folders.notesFolderId,
+            docs: folders.docs,
+          };
+        } catch (e) {
+          console.error("Drive folder setup error (id-submit):", e);
+        }
+      }
+      existing = { ...existing, driveFolder, idVerification: "submitted", status: "id_pending_review" };
+      await kv.set(clientKey, existing);
     }
 
     // Store submission record
