@@ -6,6 +6,16 @@ import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 export const runtime = "nodejs";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://stack-n-scale-site.vercel.app",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
 const CAELUM_ID   = process.env.DISCORD_CAELUM_USER_ID ?? "";
@@ -57,27 +67,27 @@ export async function POST(req: Request) {
     const consented = formData.get("consented");
 
     if (!name || !email || !idFront || !selfie) {
-      return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
+      return Response.json({ ok: false, error: "Missing required fields" }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (consented !== "true") {
-      return Response.json({ ok: false, error: "Consent is required" }, { status: 400 });
+      return Response.json({ ok: false, error: "Consent is required" }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (!EMAIL_REGEX.test(email)) {
-      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400 });
+      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (!ALLOWED_TYPES.includes(idFront.type) || !ALLOWED_TYPES.includes(selfie.type)) {
-      return Response.json({ ok: false, error: "ID photos must be JPEG, PNG, or WebP images" }, { status: 400 });
+      return Response.json({ ok: false, error: "ID photos must be JPEG, PNG, or WebP images" }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (idFront.size > MAX_FILE_SIZE || selfie.size > MAX_FILE_SIZE) {
-      return Response.json({ ok: false, error: "File too large. Max 10MB per photo." }, { status: 400 });
+      return Response.json({ ok: false, error: "File too large. Max 10MB per photo." }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (!await validateFileMagic(idFront) || !await validateFileMagic(selfie)) {
-      return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400 });
+      return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400, headers: CORS_HEADERS });
     }
 
     // Update KV — mark idVerification as submitted
@@ -85,25 +95,6 @@ export async function POST(req: Request) {
     let existing  = await kv.get<CoachingClient>(clientKey);
     if (existing) {
       await kv.set(clientKey, { ...existing, idVerification: "submitted", status: "id_pending_review" });
-      // Create Drive folder in background if missing (non-blocking)
-      if (!existing.driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-        setupClientFolder(existing.name || name).then(async (folders) => {
-          const updated = await kv.get<CoachingClient>(clientKey);
-          if (updated && !updated.driveFolder) {
-            await kv.set(clientKey, {
-              ...updated,
-              driveFolder: {
-                url: folders.folderUrl,
-                id: folders.folderId,
-                idVerificationFolderId: folders.idVerificationFolderId,
-                onboardingFolderId: folders.onboardingFolderId,
-                notesFolderId: folders.notesFolderId,
-                docs: folders.docs,
-              },
-            });
-          }
-        }).catch(e => console.error("Drive folder setup error (id-submit):", e));
-      }
     }
 
     // Store submission record
@@ -146,11 +137,39 @@ export async function POST(req: Request) {
     const signatureUrl = sigBlob?.url;
 
     // Send ID received confirmation email + Drive doc trigger (non-blocking)
-    const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
-    triggerEmail("id_received", email, name, { idVerificationFolderId })
-      .catch(e => console.error("ID received email error:", e));
-    triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
-      .catch(e => console.error("Drive docs error:", e));
+    if (existing?.driveFolder?.idVerificationFolderId) {
+      const idVerificationFolderId = existing.driveFolder.idVerificationFolderId;
+      triggerEmail("id_received", email, name, { idVerificationFolderId })
+        .catch(e => console.error("ID received email error:", e));
+      triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
+        .catch(e => console.error("Drive docs error:", e));
+    } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+      setupClientFolder(existing?.name || name).then(async (folders) => {
+        const driveFolder = {
+          url: folders.folderUrl,
+          id: folders.folderId,
+          idVerificationFolderId: folders.idVerificationFolderId,
+          onboardingFolderId: folders.onboardingFolderId,
+          notesFolderId: folders.notesFolderId,
+          docs: folders.docs,
+        };
+        const updated = await kv.get<CoachingClient>(clientKey);
+        if (updated) await kv.set(clientKey, { ...updated, driveFolder });
+        triggerEmail("id_received", email, name, { idVerificationFolderId: folders.idVerificationFolderId })
+          .catch(e => console.error("ID received email error:", e));
+        triggerDriveDocs("id_received", email, name, {
+          idVerificationFolderId: folders.idVerificationFolderId,
+          idFrontUrl, selfieUrl, signatureUrl,
+        }).catch(e => console.error("Drive docs error:", e));
+      }).catch(e => {
+        console.error("Drive folder setup error (id-submit):", e);
+        triggerEmail("id_received", email, name, {})
+          .catch(err => console.error("ID received email error:", err));
+      });
+    } else {
+      triggerEmail("id_received", email, name, {})
+        .catch(e => console.error("ID received email error:", e));
+    }
 
     // If onboarding form was also submitted, send Discord link via email
     let discordOAuthUrl: string | null = null;
@@ -195,9 +214,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return Response.json({ ok: true, discordOAuthUrl });
+    return Response.json({ ok: true, discordOAuthUrl }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("ID submit error:", err);
-    return Response.json({ ok: false, error: "Server error" }, { status: 500 });
+    return Response.json({ ok: false, error: "Server error" }, { status: 500, headers: CORS_HEADERS });
   }
 }
