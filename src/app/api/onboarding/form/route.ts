@@ -255,7 +255,8 @@ export async function POST(req: Request) {
         // If ID was already submitted before the form, send Discord link now
         const idRecord = await kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`);
         if (idRecord && discordOAuthUrl) {
-          triggerEmail("discord_link", email, name, { discordOAuthUrl })
+          const freshClient = await kv.get<CoachingClient>(clientKey);
+          triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
             .catch(e => console.error("Discord link email error (form-side):", e));
         }
       } catch (discordErr) {

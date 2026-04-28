@@ -182,7 +182,7 @@ export async function POST(req: Request) {
       ]);
       if (formRecord && discordRecord?.discordOAuthUrl) {
         discordOAuthUrl = discordRecord.discordOAuthUrl;
-        triggerEmail("discord_link", email, name, { discordOAuthUrl })
+        triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
           .catch(e => console.error("Discord link email error:", e));
       }
     } catch (e) {
