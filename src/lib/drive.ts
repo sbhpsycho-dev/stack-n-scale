@@ -29,6 +29,15 @@ async function createFolder(name: string, parentId: string): Promise<{ id: strin
     fields: "id",
   });
   const id = res.data.id!;
+  // Share with the admin email so Make.com (evan@stacknscale.co) can access it
+  const shareEmail = process.env.GOOGLE_DRIVE_IMPERSONATE_EMAIL;
+  if (shareEmail) {
+    await d.permissions.create({
+      fileId: id,
+      requestBody: { type: "user", role: "writer", emailAddress: shareEmail },
+      sendNotificationEmail: false,
+    });
+  }
   return { id, url: `https://drive.google.com/drive/folders/${id}` };
 }
 
