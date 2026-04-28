@@ -15,6 +15,8 @@ export type CoachingClient = {
     id: string;
     idVerificationFolderId?: string;
     onboardingFolderId?: string;
+    notesFolderId?: string;
+    docs?: Record<string, string>;
   } | null;
   activeDate?: string;
   coachAssigned?: string;
