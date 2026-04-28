@@ -78,28 +78,30 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400 });
     }
 
-    // Update KV — mark idVerification as submitted, create Drive folder if missing
+    // Update KV — mark idVerification as submitted
     const clientKey = `sns:coaching:client:${email}`;
     let existing  = await kv.get<CoachingClient>(clientKey);
     if (existing) {
-      let driveFolder = existing.driveFolder;
-      if (!driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-        try {
-          const folders = await setupClientFolder(existing.name || name);
-          driveFolder = {
-            url: folders.folderUrl,
-            id: folders.folderId,
-            idVerificationFolderId: folders.idVerificationFolderId,
-            onboardingFolderId: folders.onboardingFolderId,
-            notesFolderId: folders.notesFolderId,
-            docs: folders.docs,
-          };
-        } catch (e) {
-          console.error("Drive folder setup error (id-submit):", e);
-        }
+      await kv.set(clientKey, { ...existing, idVerification: "submitted", status: "id_pending_review" });
+      // Create Drive folder in background if missing (non-blocking)
+      if (!existing.driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+        setupClientFolder(existing.name || name).then(async (folders) => {
+          const updated = await kv.get<CoachingClient>(clientKey);
+          if (updated && !updated.driveFolder) {
+            await kv.set(clientKey, {
+              ...updated,
+              driveFolder: {
+                url: folders.folderUrl,
+                id: folders.folderId,
+                idVerificationFolderId: folders.idVerificationFolderId,
+                onboardingFolderId: folders.onboardingFolderId,
+                notesFolderId: folders.notesFolderId,
+                docs: folders.docs,
+              },
+            });
+          }
+        }).catch(e => console.error("Drive folder setup error (id-submit):", e));
       }
-      existing = { ...existing, driveFolder, idVerification: "submitted", status: "id_pending_review" };
-      await kv.set(clientKey, existing);
     }
 
     // Store submission record

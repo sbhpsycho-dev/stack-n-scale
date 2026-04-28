@@ -74,28 +74,30 @@ export async function POST(req: Request) {
       submittedAt,
     });
 
-    // 2. Update client status — create Drive folder if missing
+    // 2. Update client status
     const clientKey = `sns:coaching:client:${email.toLowerCase()}`;
     let existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
-      let driveFolder = existing.driveFolder;
-      if (!driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-        try {
-          const folders = await setupClientFolder(existing.name || name);
-          driveFolder = {
-            url: folders.folderUrl,
-            id: folders.folderId,
-            idVerificationFolderId: folders.idVerificationFolderId,
-            onboardingFolderId: folders.onboardingFolderId,
-            notesFolderId: folders.notesFolderId,
-            docs: folders.docs,
-          };
-        } catch (e) {
-          console.error("Drive folder setup error (form):", e);
-        }
+      await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
+      // Create Drive folder in background if missing (non-blocking)
+      if (!existing.driveFolder && process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+        setupClientFolder(existing.name || name).then(async (folders) => {
+          const updated = await kv.get<CoachingClient>(clientKey);
+          if (updated && !updated.driveFolder) {
+            await kv.set(clientKey, {
+              ...updated,
+              driveFolder: {
+                url: folders.folderUrl,
+                id: folders.folderId,
+                idVerificationFolderId: folders.idVerificationFolderId,
+                onboardingFolderId: folders.onboardingFolderId,
+                notesFolderId: folders.notesFolderId,
+                docs: folders.docs,
+              },
+            });
+          }
+        }).catch(e => console.error("Drive folder setup error (form):", e));
       }
-      existing = { ...existing, driveFolder, status: "onboarding_complete" };
-      await kv.set(clientKey, existing);
     }
 
     // 3. Append to Google Sheets (non-blocking)
