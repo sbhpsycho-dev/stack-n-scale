@@ -4,6 +4,8 @@ import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet, setupClientFolder } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
+export const runtime = "nodejs";
+
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
 const CAELUM_ID   = process.env.DISCORD_CAELUM_USER_ID ?? "";

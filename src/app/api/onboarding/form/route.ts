@@ -3,6 +3,8 @@ import { type CoachingClient } from "@/app/api/onboarding/clients/route";
 import { appendToSheet, setupClientFolder } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
+export const runtime = "nodejs";
+
 const DISCORD_API  = "https://discord.com/api/v10";
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN ?? "";
 const GUILD_ID     = process.env.DISCORD_GUILD_ID ?? "";
