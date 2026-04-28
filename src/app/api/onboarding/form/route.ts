@@ -100,6 +100,38 @@ export async function POST(req: Request) {
       additionalNotes: additionalNotes ?? "",
     };
 
+    // Build base64 file of form content for Make.com Drive upload
+    const formText = [
+      `ONBOARDING FORM — ${name}`,
+      `Email: ${email}`,
+      ``,
+      `What motivated you to get started?`,
+      formData.motivation,
+      ``,
+      `Why Stack N Scale Enterprises?`,
+      formData.whySNS,
+      ``,
+      `30-Day Goal`,
+      formData.goal30Days,
+      ``,
+      `3-Month Goal`,
+      formData.goal3Months,
+      ``,
+      `6-Month Goal`,
+      formData.goal6Months,
+      ``,
+      `1-Year Goal`,
+      formData.goal1Year,
+      ``,
+      `Biggest Challenge`,
+      formData.biggestChallenge,
+      ``,
+      `Success in 90 Days`,
+      formData.successIn90Days,
+      formData.additionalNotes ? `\nAdditional Notes\n${formData.additionalNotes}` : "",
+    ].join("\n");
+    const formFile = Buffer.from(formText, "utf8").toString("base64");
+
     // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
     // If Drive folder exists, fire immediately; otherwise create it first then fire
     if (existing?.driveFolder) {
@@ -107,13 +139,13 @@ export async function POST(req: Request) {
         onboardingFolderId: existing.driveFolder.onboardingFolderId,
         notesFolderId: existing.driveFolder.notesFolderId,
         formData,
+        formFile,
       };
       triggerEmail("form_received", email, name, formPayload)
         .catch(e => console.error("Form received email error:", e));
       triggerDriveDocs("form_received", email, name, formPayload)
         .catch(e => console.error("Drive docs error:", e));
     } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-      // Folder missing — create it, save to KV, then fire webhooks
       setupClientFolder(existing?.name || name).then(async (folders) => {
         const driveFolder = {
           url: folders.folderUrl,
@@ -129,6 +161,7 @@ export async function POST(req: Request) {
           onboardingFolderId: folders.onboardingFolderId,
           notesFolderId: folders.notesFolderId,
           formData,
+          formFile,
         };
         triggerEmail("form_received", email, name, formPayload)
           .catch(e => console.error("Form received email error:", e));
@@ -136,7 +169,6 @@ export async function POST(req: Request) {
           .catch(e => console.error("Drive docs error:", e));
       }).catch(e => {
         console.error("Drive folder setup error (form):", e);
-        // Fire without folder IDs as fallback
         triggerEmail("form_received", email, name, { formData })
           .catch(err => console.error("Form received email error:", err));
       });

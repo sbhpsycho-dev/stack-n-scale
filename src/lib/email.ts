@@ -35,6 +35,7 @@ export async function triggerDriveDocs(
     idVerificationFolderId?: string;
     notesFolderId?: string;
     formData?: Record<string, string>;
+    formFile?: string;
     idFrontUrl?: string;
     selfieUrl?: string;
     signatureUrl?: string;
