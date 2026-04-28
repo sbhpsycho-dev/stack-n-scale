@@ -5,9 +5,12 @@ import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "admin") {
-    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const cronSecret = req.headers.get("x-webhook-secret");
+  if (cronSecret !== process.env.CRON_SECRET) {
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== "admin") {
+      return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   const { email } = await req.json();
