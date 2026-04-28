@@ -96,8 +96,10 @@ export async function POST(req: Request) {
 
     // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
     const onboardingFolderId = existing?.driveFolder?.onboardingFolderId ?? undefined;
+    const notesFolderId = existing?.driveFolder?.notesFolderId ?? undefined;
     const formPayload = {
       onboardingFolderId,
+      notesFolderId,
       formData: {
         motivation, whySNS, goal30Days, goal3Months,
         goal6Months, goal1Year, biggestChallenge, successIn90Days,
@@ -183,6 +185,13 @@ export async function POST(req: Request) {
           channelName,
           discordOAuthUrl,
         });
+
+        // If ID was already submitted before the form, send Discord link now
+        const idRecord = await kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`);
+        if (idRecord && discordOAuthUrl) {
+          triggerEmail("discord_link", email, name, { discordOAuthUrl })
+            .catch(e => console.error("Discord link email error (form-side):", e));
+        }
       } catch (discordErr) {
         console.error("Discord error:", discordErr);
       }

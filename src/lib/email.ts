@@ -33,6 +33,7 @@ export async function triggerDriveDocs(
   extras?: {
     onboardingFolderId?: string;
     idVerificationFolderId?: string;
+    notesFolderId?: string;
     formData?: Record<string, string>;
     idFrontUrl?: string;
     selfieUrl?: string;

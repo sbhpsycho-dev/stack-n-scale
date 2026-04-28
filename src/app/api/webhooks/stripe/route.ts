@@ -1,0 +1,86 @@
+import Stripe from "stripe";
+import { kv } from "@vercel/kv";
+import { createContact } from "@/lib/ghl";
+import { triggerEmail } from "@/lib/email";
+import { setupClientFolder } from "@/lib/drive";
+import type { CoachingClient } from "@/lib/coaching-types";
+
+export const runtime = "nodejs";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const sig = req.headers.get("stripe-signature");
+
+  if (!sig) return new Response("Missing signature", { status: 400 });
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  } catch {
+    return new Response("Invalid signature", { status: 400 });
+  }
+
+  if (event.type !== "checkout.session.completed") {
+    return new Response("ok", { status: 200 });
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session;
+  const email = session.customer_details?.email?.toLowerCase().trim();
+  const rawName = session.customer_details?.name?.trim() ?? "";
+  const phone = session.customer_details?.phone ?? undefined;
+
+  if (!email || !rawName) return new Response("Missing customer info", { status: 400 });
+
+  const clientKey = `sns:coaching:client:${email}`;
+  const existing = await kv.get<CoachingClient>(clientKey);
+
+  // Skip if already created — Stripe can fire duplicate events
+  if (existing) return new Response("ok", { status: 200 });
+
+  const [firstName, ...rest] = rawName.split(" ");
+  const lastName = rest.join(" ") || undefined;
+
+  let ghlContactId = "";
+  try {
+    const contact = await createContact({ firstName, lastName, email, phone, tags: ["coaching-client"] });
+    ghlContactId = contact.id;
+  } catch (e) {
+    console.error("GHL createContact error:", e);
+  }
+
+  let driveFolder: CoachingClient["driveFolder"] = null;
+  if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+    try {
+      const folders = await setupClientFolder(rawName);
+      driveFolder = {
+        url: folders.folderUrl,
+        id: folders.folderId,
+        idVerificationFolderId: folders.idVerificationFolderId,
+        onboardingFolderId: folders.onboardingFolderId,
+        notesFolderId: folders.notesFolderId,
+        docs: folders.docs,
+      };
+    } catch (e) {
+      console.error("Drive folder setup error:", e);
+    }
+  }
+
+  const client: CoachingClient = {
+    ghlContactId,
+    name: rawName,
+    email,
+    phone,
+    status: "payment_received",
+    createdAt: new Date().toISOString(),
+    idVerification: "pending",
+    driveFolder,
+  };
+
+  await kv.set(clientKey, client);
+
+  triggerEmail("welcome", email, rawName).catch(e => console.error("Welcome email error:", e));
+
+  return new Response("ok", { status: 200 });
+}

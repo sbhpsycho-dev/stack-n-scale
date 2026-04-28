@@ -111,28 +111,28 @@ export async function POST(req: Request) {
         .catch(e => console.error("Sheets error (ID):", e));
     }
 
-    // Upload ID files to Vercel Blob — private access (non-blocking)
+    // Upload ID files to Vercel Blob — public so Make.com can fetch them for Drive upload
     const slug = email.replace(/[^a-z0-9]/gi, "-");
-    const blobUploads: Promise<unknown>[] = [
-      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "private", contentType: idFront.type || "image/jpeg" })
-        .catch(e => console.error("Blob upload error (id-front):", e)),
-      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "private", contentType: selfie.type || "image/jpeg" })
-        .catch(e => console.error("Blob upload error (selfie):", e)),
-    ];
-    if (signature) {
-      const base64 = signature.replace(/^data:image\/\w+;base64,/, "");
-      blobUploads.push(
-        put(`id-verification/${slug}/signature`, Buffer.from(base64, "base64"), { access: "private", contentType: "image/png" })
-          .catch(e => console.error("Blob upload error (signature):", e))
-      );
-    }
-    await Promise.all(blobUploads);
+    const sigBase64 = signature ? signature.replace(/^data:image\/\w+;base64,/, "") : null;
+    const [idFrontBlob, selfieBlob, sigBlob] = await Promise.all([
+      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "public", contentType: idFront.type || "image/jpeg" })
+        .catch(e => { console.error("Blob upload error (id-front):", e); return null; }),
+      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "public", contentType: selfie.type || "image/jpeg" })
+        .catch(e => { console.error("Blob upload error (selfie):", e); return null; }),
+      sigBase64
+        ? put(`id-verification/${slug}/signature`, Buffer.from(sigBase64, "base64"), { access: "public", contentType: "image/png" })
+            .catch(e => { console.error("Blob upload error (signature):", e); return null; })
+        : Promise.resolve(null),
+    ]);
+    const idFrontUrl  = idFrontBlob?.url;
+    const selfieUrl   = selfieBlob?.url;
+    const signatureUrl = sigBlob?.url;
 
     // Send ID received confirmation email + Drive doc trigger (non-blocking)
     const idVerificationFolderId = existing?.driveFolder?.idVerificationFolderId ?? undefined;
     triggerEmail("id_received", email, name, { idVerificationFolderId })
       .catch(e => console.error("ID received email error:", e));
-    triggerDriveDocs("id_received", email, name, { idVerificationFolderId })
+    triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
       .catch(e => console.error("Drive docs error:", e));
 
     // If onboarding form was also submitted, send Discord link via email

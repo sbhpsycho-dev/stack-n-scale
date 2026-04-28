@@ -43,6 +43,7 @@ async function copyTemplate(templateId: string, destFolderId: string, newTitle: 
 }
 
 async function listTemplates(): Promise<{ id: string; name: string }[]> {
+  if (!process.env.GOOGLE_DRIVE_TEMPLATE_FOLDER_ID) return [];
   const d = drive();
   const res = await d.files.list({
     q: `'${process.env.GOOGLE_DRIVE_TEMPLATE_FOLDER_ID}' in parents and trashed = false`,
@@ -87,6 +88,7 @@ export type ClientDocs = {
   folderId: string;
   idVerificationFolderId: string;
   onboardingFolderId: string;
+  notesFolderId: string;
   docs: Record<string, string>;
 };
 
@@ -104,9 +106,10 @@ export async function setupClientFolder(clientName: string): Promise<ClientDocs>
   const root = await createFolder(`client - ${clientName}`, process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID!);
 
   // Create subfolders in parallel
-  const [idFolder, onboardingFolder] = await Promise.all([
+  const [idFolder, onboardingFolder, notesFolder] = await Promise.all([
     createFolder("ID Verification", root.id),
     createFolder("Onboarding", root.id),
+    createFolder("Notes", root.id),
   ]);
 
   // Copy templates into root folder
@@ -124,6 +127,7 @@ export async function setupClientFolder(clientName: string): Promise<ClientDocs>
     folderUrl: root.url,
     idVerificationFolderId: idFolder.id,
     onboardingFolderId: onboardingFolder.id,
+    notesFolderId: notesFolder.id,
     docs,
   };
 }
