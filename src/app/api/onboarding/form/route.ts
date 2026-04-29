@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
-import { appendToSheet, setupClientFolder } from "@/lib/drive";
+import { appendToSheet, setupClientFolder, uploadTextToDrive } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -135,15 +135,18 @@ export async function POST(req: Request) {
     // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
     // If Drive folder exists, fire immediately; otherwise create it first then fire
     if (existing?.driveFolder) {
-      const formPayload = {
+      const emailPayload = {
         onboardingFolderId: existing.driveFolder.onboardingFolderId,
         notesFolderId: existing.driveFolder.notesFolderId,
         formData,
-        formFile,
       };
-      triggerEmail("form_received", email, name, formPayload)
+      if (existing.driveFolder.onboardingFolderId) {
+        uploadTextToDrive(existing.driveFolder.onboardingFolderId, "Onboarding Form.txt", formText)
+          .catch(e => console.error("Drive upload error:", e));
+      }
+      triggerEmail("form_received", email, name, emailPayload)
         .catch(e => console.error("Form received email error:", e));
-      triggerDriveDocs("form_received", email, name, formPayload)
+      triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
         .catch(e => console.error("Drive docs error:", e));
     } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
       setupClientFolder(existing?.name || name).then(async (folders) => {
@@ -157,23 +160,24 @@ export async function POST(req: Request) {
         };
         const updated = await kv.get<CoachingClient>(clientKey);
         if (updated) await kv.set(clientKey, { ...updated, driveFolder });
-        const formPayload = {
+        const emailPayload = {
           onboardingFolderId: folders.onboardingFolderId,
           notesFolderId: folders.notesFolderId,
           formData,
-          formFile,
         };
-        triggerEmail("form_received", email, name, formPayload)
+        uploadTextToDrive(folders.onboardingFolderId, "Onboarding Form.txt", formText)
+          .catch(e => console.error("Drive upload error:", e));
+        triggerEmail("form_received", email, name, emailPayload)
           .catch(e => console.error("Form received email error:", e));
-        triggerDriveDocs("form_received", email, name, formPayload)
+        triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
           .catch(e => console.error("Drive docs error:", e));
       }).catch(e => {
         console.error("Drive folder setup error (form):", e);
-        triggerEmail("form_received", email, name, { formData, formFile })
+        triggerEmail("form_received", email, name, { formData })
           .catch(err => console.error("Form received email error:", err));
       });
     } else {
-      triggerEmail("form_received", email, name, { formData, formFile })
+      triggerEmail("form_received", email, name, { formData })
         .catch(e => console.error("Form received email error:", e));
     }
 
