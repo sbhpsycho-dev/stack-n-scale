@@ -6,13 +6,21 @@ import type { CoachingClient } from "@/lib/coaching-types";
 
 export const runtime = "nodejs";
 
-// Fanbasis sends this payload shape via Make.com HTTP module
+// Fanbasis sends this payload shape via Make.com HTTP module.
+// If Make creates the Drive folders itself, pass the IDs here and the
+// app will skip creating them a second time.
 export type FanbasisPayload = {
   email: string;
-  name: string;          // full name
+  name: string;           // full name
   phone?: string;
-  amount_cents: number;  // payment total in cents
+  amount_cents: number;   // payment total in cents
   currency?: string;
+  // Optional — populated by Make's Google Drive modules
+  drive_folder_id?:                string;
+  drive_folder_url?:               string;
+  drive_id_verification_folder_id?: string;
+  drive_onboarding_folder_id?:     string;
+  drive_notes_folder_id?:          string;
 };
 
 export async function POST(req: Request) {
@@ -55,18 +63,29 @@ export async function POST(req: Request) {
     console.error("GHL createContact error:", e);
   }
 
-  // 2. Set up Google Drive folders + copy templates
+  // 2. Google Drive folders
+  // If Make already created the folders and passed the IDs, use those directly.
+  // Otherwise fall back to creating them server-side via the service account.
   let driveFolder: CoachingClient["driveFolder"] = null;
-  if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+  if (payload.drive_folder_id) {
+    driveFolder = {
+      id:                      payload.drive_folder_id,
+      url:                     payload.drive_folder_url ?? `https://drive.google.com/drive/folders/${payload.drive_folder_id}`,
+      idVerificationFolderId:  payload.drive_id_verification_folder_id ?? "",
+      onboardingFolderId:      payload.drive_onboarding_folder_id ?? "",
+      notesFolderId:           payload.drive_notes_folder_id ?? "",
+      docs:                    {},
+    };
+  } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
     try {
       const folders = await setupClientFolder(rawName);
       driveFolder = {
-        url: folders.folderUrl,
-        id: folders.folderId,
-        idVerificationFolderId: folders.idVerificationFolderId,
-        onboardingFolderId: folders.onboardingFolderId,
-        notesFolderId: folders.notesFolderId,
-        docs: folders.docs,
+        url:                     folders.folderUrl,
+        id:                      folders.folderId,
+        idVerificationFolderId:  folders.idVerificationFolderId,
+        onboardingFolderId:      folders.onboardingFolderId,
+        notesFolderId:           folders.notesFolderId,
+        docs:                    folders.docs,
       };
     } catch (e) {
       console.error("Drive folder setup error:", e);
