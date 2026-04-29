@@ -82,5 +82,52 @@ export async function POST(req: Request) {
 
   triggerEmail("welcome", email, rawName).catch(e => console.error("Welcome email error:", e));
 
+  // Fire all three Discord notifications non-blocking
+  const amountDollars = ((session.amount_total ?? 0) / 100).toFixed(2);
+  const formatted = `$${Number(amountDollars).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+
+  const discordNotifications = [
+    // Payment alert
+    {
+      url: process.env.DISCORD_WEBHOOK_PAYMENT ?? "",
+      body: { content: `💰 New payment received from **${rawName}** — ${formatted}` },
+    },
+    // Deal closed
+    {
+      url: process.env.DISCORD_WEBHOOK_DEAL_CLOSED ?? "",
+      body: { content: `🔥 **DEAL CLOSED — NEW CLIENT**\n**${rawName}** just joined the program!\nAmount: **${formatted}**\n@Coach @Admin — onboarding is firing automatically.` },
+    },
+    // New client onboarded embed
+    {
+      url: process.env.DISCORD_WEBHOOK_NEW_CLIENT ?? "",
+      body: {
+        embeds: [{
+          title: "🎉 NEW CLIENT ONBOARDED",
+          description: `Welcome **${rawName}** to the program!`,
+          color: 16737792,
+          fields: [
+            { name: "Amount",  value: formatted,                   inline: true },
+            { name: "Email",   value: email,                       inline: true },
+            { name: "Status",  value: "✅ Payment confirmed\n✅ GHL contact tagged\n✅ Drive folder created\n✅ Welcome + Verification emails sent", inline: false },
+          ],
+          footer: { text: "@Coach — reach out within 24 hours to book their kickoff call" },
+        }],
+      },
+    },
+  ];
+
+  Promise.all(
+    discordNotifications
+      .filter(n => n.url)
+      .map(n =>
+        fetch(n.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(n.body),
+          signal: AbortSignal.timeout(5000),
+        }).catch(e => console.error("Discord webhook error:", e))
+      )
+  ).catch(() => {});
+
   return new Response("ok", { status: 200 });
 }
