@@ -147,6 +147,128 @@
           }
         }
       }
+    },
+    {
+      "id": 7,
+      "module": "gmail:ActionSendEmail",
+      "version": 1,
+      "parameters": { "account": 1 },
+      "mapper": {
+        "to": "{{1.email}}",
+        "subject": "Welcome to Stack N Scale Enterprises",
+        "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">Welcome.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{1.name}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your payment has been received and your account is now active. Welcome to Stack N Scale Enterprises — we're glad to have you.</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Here's what happens next:</p><p style=\"margin:0 0 8px;font-size:15px;color:#a09070;line-height:1.9;\">1. You'll receive your onboarding form shortly — please complete it at your earliest convenience.</p><p style=\"margin:0 0 8px;font-size:15px;color:#a09070;line-height:1.9;\">2. Your coach will reach out within 24 hours to schedule your kickoff call.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">3. Once onboarding is complete, you'll receive access to your private Discord channel and the full Stack N Scale community.</p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;&middot;&nbsp; PRIVATE MEMBER CORRESPONDENCE</p><a href=\"https://www.skool.com/elysium-sales-academy-7811/about?ref=69ad8597e9144b38b0ac045df7b96c3e\" style=\"color:#c8902a;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Georgia',serif;\">stacknscale.com</a></td></tr></table></td></tr></table></body></html>",
+        "contentType": "html"
+      },
+      "metadata": {
+        "designer": { "x": 1800, "y": 0 },
+        "restore": {
+          "parameters": {
+            "account": { "label": "Gmail" }
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "YOUR_DISCORD_WEBHOOK_PAYMENT_URL",
+        "method": "post",
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"content\":\"💰 New payment received from **{{1.name}}** — ${{formatNumber(1.amount / 100; 2)}}\"}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 2100, "y": 0 },
+        "restore": {
+          "expect": {
+            "method":      { "label": "POST" },
+            "bodyType":    { "label": "Raw" },
+            "contentType": { "label": "JSON (application/json)" }
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "YOUR_DISCORD_WEBHOOK_DEAL_CLOSED_URL",
+        "method": "post",
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"content\":\"🔥 **DEAL CLOSED — NEW CLIENT**\\n**{{1.name}}** just joined the program!\\nAmount: **${{formatNumber(1.amount / 100; 2)}}**\\n@Coach @Admin — onboarding is firing automatically.\"}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 2400, "y": 0 },
+        "restore": {
+          "expect": {
+            "method":      { "label": "POST" },
+            "bodyType":    { "label": "Raw" },
+            "contentType": { "label": "JSON (application/json)" }
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "YOUR_DISCORD_WEBHOOK_NEW_CLIENT_URL",
+        "method": "post",
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"embeds\":[{\"title\":\"🎉 NEW CLIENT ONBOARDED\",\"description\":\"Welcome **{{1.name}}** to the program!\",\"color\":16737792,\"fields\":[{\"name\":\"Amount\",\"value\":\"${{formatNumber(1.amount / 100; 2)}}\",\"inline\":true},{\"name\":\"Email\",\"value\":\"{{1.email}}\",\"inline\":true},{\"name\":\"Status\",\"value\":\"✅ Payment confirmed\\n✅ GHL contact tagged\\n✅ Drive folder created\\n✅ Welcome email sent\",\"inline\":false}],\"footer\":{\"text\":\"@Coach — reach out within 24 hours to book their kickoff call\"}}]}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 2700, "y": 0 },
+        "restore": {
+          "expect": {
+            "method":      { "label": "POST" },
+            "bodyType":    { "label": "Raw" },
+            "contentType": { "label": "JSON (application/json)" }
+          }
+        }
+      }
     }
   ],
   "metadata": {

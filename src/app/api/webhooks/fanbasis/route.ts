@@ -1,6 +1,5 @@
 import { kv } from "@vercel/kv";
 import { createContact } from "@/lib/ghl";
-import { triggerEmail } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 
@@ -41,7 +40,6 @@ export async function POST(req: Request) {
   const email = payload.email?.toLowerCase().trim();
   const rawName = payload.name?.trim() ?? "";
   const phone = payload.phone ?? undefined;
-  const amountCents = payload.amount_cents ?? 0;
 
   if (!email || !rawName) return new Response("Missing email or name", { status: 400 });
 
@@ -104,55 +102,6 @@ export async function POST(req: Request) {
     driveFolder,
   };
   await kv.set(clientKey, client);
-
-  // 4. Welcome email (fires Make email webhook)
-  triggerEmail("welcome", email, rawName).catch(e => console.error("Welcome email error:", e));
-
-  // 5. Discord notifications (all three channels)
-  const amountDollars = (amountCents / 100).toFixed(2);
-  const formatted = `$${Number(amountDollars).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-
-  const discordNotifications = [
-    {
-      url: process.env.DISCORD_WEBHOOK_PAYMENT ?? "",
-      body: { content: `💰 New payment received from **${rawName}** — ${formatted}` },
-    },
-    {
-      url: process.env.DISCORD_WEBHOOK_DEAL_CLOSED ?? "",
-      body: {
-        content: `🔥 **DEAL CLOSED — NEW CLIENT**\n**${rawName}** just joined the program!\nAmount: **${formatted}**\n@Coach @Admin — onboarding is firing automatically.`,
-      },
-    },
-    {
-      url: process.env.DISCORD_WEBHOOK_NEW_CLIENT ?? "",
-      body: {
-        embeds: [{
-          title: "🎉 NEW CLIENT ONBOARDED",
-          description: `Welcome **${rawName}** to the program!`,
-          color: 16737792,
-          fields: [
-            { name: "Amount",  value: formatted, inline: true },
-            { name: "Email",   value: email,     inline: true },
-            { name: "Status",  value: "✅ Payment confirmed\n✅ GHL contact tagged\n✅ Drive folder created\n✅ Welcome + Verification emails sent", inline: false },
-          ],
-          footer: { text: "@Coach — reach out within 24 hours to book their kickoff call" },
-        }],
-      },
-    },
-  ];
-
-  Promise.all(
-    discordNotifications
-      .filter(n => n.url)
-      .map(n =>
-        fetch(n.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(n.body),
-          signal: AbortSignal.timeout(5000),
-        }).catch(e => console.error("Discord webhook error:", e))
-      )
-  ).catch(() => {});
 
   return new Response("ok", { status: 200 });
 }
