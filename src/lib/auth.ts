@@ -1,6 +1,7 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { NextAuthOptions } from "next-auth";
 import { type ClientMeta, SEED_REGISTRY } from "@/lib/sales-data";
+import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 import { verifyPassword } from "@/lib/password";
 
 export const authOptions: NextAuthOptions = {
@@ -19,10 +20,20 @@ export const authOptions: NextAuthOptions = {
           return { id: "admin", name: "Evan", role: "admin", clientId: null };
         }
 
-        // Client registry — read from dedicated sns-registry key first,
-        // then fall back to embedded registry in admin SalesData, then SEED
         try {
           const { kv } = await import("@vercel/kv");
+
+          // Staff registry check
+          const staffRegistry = await kv.get<StaffMeta[]>(STAFF_KV_KEY);
+          if (staffRegistry) {
+            const staff = staffRegistry.find((s) => verifyPassword(pw, s.password));
+            if (staff) {
+              return { id: staff.id, name: staff.name, role: "staff", clientId: staff.id };
+            }
+          }
+
+          // Client registry — read from dedicated sns-registry key first,
+          // then fall back to embedded registry in admin SalesData, then SEED
           const dedicated = await kv.get<ClientMeta[]>("sns-registry");
           const adminData = await kv.get<{ clientRegistry?: ClientMeta[] }>("sns-dashboard-v1");
           const registry = dedicated ?? adminData?.clientRegistry ?? SEED_REGISTRY;

@@ -173,6 +173,46 @@ export default function Dashboard() {
   const [clientMsg, setClientMsg] = useState("");
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [editingClientName, setEditingClientName] = useState("");
+
+  // Manage Staff state (admin only)
+  const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string }[]>([]);
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffPassword, setNewStaffPassword] = useState("");
+  const [staffSaving, setStaffSaving] = useState(false);
+  const [staffMsg, setStaffMsg] = useState("");
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/admin/staff").then((r) => r.json()).then(setStaffList).catch(() => {});
+    }
+  }, [isAdmin]);
+  const addStaff = useCallback(async () => {
+    if (!newStaffName.trim() || !newStaffPassword.trim()) return;
+    setStaffSaving(true);
+    setStaffMsg("");
+    const res = await fetch("/api/admin/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newStaffName.trim(), password: newStaffPassword.trim() }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      setStaffList((prev) => [...prev, json.staff]);
+      setStaffMsg(`✓ "${newStaffName.trim()}" added. Password: ${newStaffPassword.trim()}`);
+      setNewStaffName("");
+      setNewStaffPassword("");
+    } else {
+      setStaffMsg(`✗ ${json.error ?? "Failed to add staff"}`);
+    }
+    setStaffSaving(false);
+  }, [newStaffName, newStaffPassword]);
+  const removeStaff = useCallback(async (id: string) => {
+    await fetch("/api/admin/staff", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setStaffList((prev) => prev.filter((s) => s.id !== id));
+  }, []);
   const [editingRepIdx, setEditingRepIdx] = useState<number | null>(null);
   const [editingRepName, setEditingRepName] = useState("");
 
@@ -1439,6 +1479,65 @@ export default function Dashboard() {
                       </div>
                       {clientMsg && (
                         <p className="text-xs text-emerald-400 mt-3">{clientMsg}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Manage Staff */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Users className="h-4 w-4 text-orange-400" />
+                        Staff Access
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-4">
+                      {staffList.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {staffList.map((s) => (
+                            <div key={s.id} className="flex items-center gap-1">
+                              <Badge className="px-3 py-1.5 text-xs bg-muted border border-border">{s.name}</Badge>
+                              <Button
+                                size="icon" variant="ghost"
+                                className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
+                                onClick={() => removeStaff(s.id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
+                          <Input
+                            value={newStaffName}
+                            onChange={(e) => setNewStaffName(e.target.value)}
+                            placeholder="e.g. Jordan Smith"
+                            className="h-8 text-sm bg-muted border-border"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
+                          <Input
+                            value={newStaffPassword}
+                            onChange={(e) => setNewStaffPassword(e.target.value)}
+                            placeholder="e.g. staff2026"
+                            className="h-8 text-sm bg-muted border-border"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()}
+                          onClick={addStaff}
+                          className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs"
+                        >
+                          {staffSaving ? "Saving…" : "Add Staff"}
+                        </Button>
+                      </div>
+                      {staffMsg && (
+                        <p className={`text-xs mt-1 ${staffMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{staffMsg}</p>
                       )}
                     </CardContent>
                   </Card>

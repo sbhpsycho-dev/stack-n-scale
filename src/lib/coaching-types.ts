@@ -56,3 +56,15 @@ export const STATUS_ORDER: CoachingStatus[] = [
   "active",
   "alumni",
 ];
+
+export type ProgressNote = {
+  text: string;
+  createdAt: string;
+  author: string;
+};
+
+export type StudentProgress = {
+  ghlContactId: string;
+  notes: ProgressNote[];
+  lastUpdated: string;
+};

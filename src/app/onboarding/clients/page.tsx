@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import type { CoachingClient, CoachingStatus } from "@/lib/coaching-types";
 import { STATUS_ORDER, STATUS_LABELS } from "@/lib/coaching-types";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,31 @@ export default function ClientsPipeline() {
   const router = useRouter();
   const [clients, setClients] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState<Record<string, boolean>>({});
+  const [retryResult, setRetryResult] = useState<Record<string, "ok" | "err">>({});
+
+  async function retryUpload(e: React.MouseEvent, email: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setRetrying((r) => ({ ...r, [email]: true }));
+    try {
+      const res = await fetch("/api/onboarding/retry-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      setRetryResult((r) => ({ ...r, [email]: data.ok ? "ok" : "err" }));
+    } catch {
+      setRetryResult((r) => ({ ...r, [email]: "err" }));
+    } finally {
+      setRetrying((r) => ({ ...r, [email]: false }));
+    }
+  }
+
+  const FORM_SUBMITTED_STATUSES: CoachingStatus[] = [
+    "onboarding_complete", "coach_assigned", "kickoff_booked", "active", "alumni",
+  ];
 
   useEffect(() => {
     if (status === "unauthenticated") { router.push("/login"); return; }
@@ -113,17 +138,33 @@ export default function ClientsPipeline() {
                             <p className="text-[10px] text-muted-foreground">
                               {daysInStage(c.createdAt)}d in pipeline
                             </p>
-                            {c.driveFolder && (
-                              <a
-                                href={c.driveFolder.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-muted-foreground hover:text-orange-400 transition-colors"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {FORM_SUBMITTED_STATUSES.includes(stage) && (
+                                <button
+                                  onClick={(e) => retryUpload(e, c.email)}
+                                  title="Retry Drive upload"
+                                  className={cn(
+                                    "transition-colors",
+                                    retryResult[c.email] === "ok" ? "text-emerald-400" :
+                                    retryResult[c.email] === "err" ? "text-red-400" :
+                                    "text-muted-foreground hover:text-orange-400"
+                                  )}
+                                >
+                                  <RefreshCw className={cn("h-3 w-3", retrying[c.email] && "animate-spin")} />
+                                </button>
+                              )}
+                              {c.driveFolder && (
+                                <a
+                                  href={c.driveFolder.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-muted-foreground hover:text-orange-400 transition-colors"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
