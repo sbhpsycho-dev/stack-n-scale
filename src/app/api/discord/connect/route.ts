@@ -56,12 +56,22 @@ export async function GET(req: Request) {
   if (discordData?.channelId) {
     const channelId = discordData.channelId;
 
-    // Grant the user VIEW_CHANNEL permission on their private channel
+    // Grant the user VIEW_CHANNEL + SEND_MESSAGES on their private channel
     await fetch(`${DISCORD_API}/channels/${channelId}/permissions/${user.id}`, {
       method: "PUT",
       headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ allow: "1024", deny: "0", type: 1 }),
+      body: JSON.stringify({ allow: "3072", deny: "0", type: 1 }),
     });
+
+    // Grant VIEW_CHANNEL + SEND_MESSAGES in the general/student chat channel
+    const generalChannelId = process.env.DISCORD_GENERAL_CHANNEL_ID;
+    if (generalChannelId) {
+      await fetch(`${DISCORD_API}/channels/${generalChannelId}/permissions/${user.id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ allow: "3072", deny: "0", type: 1 }),
+      }).catch(() => {});
+    }
 
     // Welcome them in their private channel
     await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
