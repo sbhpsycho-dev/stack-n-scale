@@ -169,11 +169,11 @@ export async function POST(req: Request) {
           .catch(e => console.error("Drive docs error:", e));
       }).catch(e => {
         console.error("Drive folder setup error (form):", e);
-        triggerEmail("form_received", email, name, { formData })
+        triggerEmail("form_received", email, name, { formData, formFile })
           .catch(err => console.error("Form received email error:", err));
       });
     } else {
-      triggerEmail("form_received", email, name, { formData })
+      triggerEmail("form_received", email, name, { formData, formFile })
         .catch(e => console.error("Form received email error:", e));
     }
 

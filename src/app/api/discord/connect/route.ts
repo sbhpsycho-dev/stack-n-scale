@@ -42,6 +42,10 @@ export async function GET(req: Request) {
   const userRes = await fetch(`${DISCORD_API}/users/@me`, {
     headers: { Authorization: `Bearer ${access_token}` },
   });
+  if (!userRes.ok) {
+    console.error("Discord user fetch failed:", await userRes.text());
+    return Response.redirect("https://discord.com");
+  }
   const user = await userRes.json() as { id: string; username: string };
 
   // Add user to the guild
