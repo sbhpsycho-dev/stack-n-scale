@@ -1,0 +1,169 @@
+{
+  "name": "SNS — Fanbasis Payment → Client Onboarding",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "YOUR_MAKE_WEBHOOK_ID",
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": { "label": "Fanbasis Payment" }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hook",
+            "type": "hook:gateway-respond",
+            "label": "Webhook",
+            "required": true
+          }
+        ],
+        "expect": [
+          { "name": "email",  "type": "text",   "label": "Customer Email" },
+          { "name": "name",   "type": "text",   "label": "Customer Name" },
+          { "name": "phone",  "type": "text",   "label": "Customer Phone" },
+          { "name": "amount", "type": "number", "label": "Amount (cents)" }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "client - {{1.name}}",
+        "parents": ["YOUR_GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID"]
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 },
+        "restore": {
+          "parameters": {
+            "__IMTCONN__": { "label": "Google Drive" }
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "ID Verification",
+        "parents": ["{{2.id}}"]
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 },
+        "restore": {
+          "parameters": {
+            "__IMTCONN__": { "label": "Google Drive" }
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "Onboarding",
+        "parents": ["{{2.id}}"]
+      },
+      "metadata": {
+        "designer": { "x": 900, "y": 0 },
+        "restore": {
+          "parameters": {
+            "__IMTCONN__": { "label": "Google Drive" }
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "module": "google-drive:ActionCreateFolder",
+      "version": 3,
+      "parameters": {
+        "__IMTCONN__": "YOUR_GOOGLE_DRIVE_CONNECTION_ID"
+      },
+      "mapper": {
+        "name": "Notes",
+        "parents": ["{{2.id}}"]
+      },
+      "metadata": {
+        "designer": { "x": 1200, "y": 0 },
+        "restore": {
+          "parameters": {
+            "__IMTCONN__": { "label": "Google Drive" }
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "https://stack-n-scale.vercel.app/api/webhooks/fanbasis",
+        "method": "post",
+        "headers": [
+          { "name": "x-webhook-secret", "value": "YOUR_FANBASIS_WEBHOOK_SECRET_HERE" },
+          { "name": "Content-Type",     "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"email\":\"{{1.email}}\",\"name\":\"{{1.name}}\",\"phone\":\"{{1.phone}}\",\"amount_cents\":{{1.amount}},\"drive_folder_id\":\"{{2.id}}\",\"drive_folder_url\":\"https://drive.google.com/drive/folders/{{2.id}}\",\"drive_id_verification_folder_id\":\"{{3.id}}\",\"drive_onboarding_folder_id\":\"{{4.id}}\",\"drive_notes_folder_id\":\"{{5.id}}\"}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 1500, "y": 0 },
+        "restore": {
+          "expect": {
+            "method":      { "label": "POST" },
+            "bodyType":    { "label": "Raw" },
+            "contentType": { "label": "JSON (application/json)" }
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": true,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us1.make.com"
+  }
+}
