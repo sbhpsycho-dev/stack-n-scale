@@ -6,16 +6,20 @@ import type { CoachingClient } from "@/lib/coaching-types";
 
 export const runtime = "nodejs";
 
-// Native Fanbasis webhook payload (apidocs.fan — payment.succeeded event)
+// Accepts two shapes:
+//   Native Fanbasis: { payment_id, buyer: { email, name }, amount }
+//   Zapier flat:     { payment_id, email, name, amount }
 type FanbasisPayload = {
-  payment_id: string;
-  buyer: {
-    email: string;
-    name: string;
-  };
-  amount: number;      // in cents (e.g. 2900 = $29.00)
+  payment_id?: string;
+  // native nested
+  buyer?: { email?: string; name?: string };
+  // zapier flat
+  email?: string;
+  name?: string;
+  // amount in cents
+  amount?: number;
   currency?: string;
-  // Optional — populated by Make's Google Drive modules if routing via Make.com
+  // Optional — Drive folder IDs pre-created by Make.com
   drive_folder_id?:                 string;
   drive_folder_url?:                string;
   drive_id_verification_folder_id?: string;
@@ -24,7 +28,6 @@ type FanbasisPayload = {
 };
 
 export async function POST(req: Request) {
-  // Optional secret check — set FANBASIS_WEBHOOK_SECRET in env to enable
   const secret = process.env.FANBASIS_WEBHOOK_SECRET;
   if (secret) {
     const provided = req.headers.get("x-webhook-secret");
@@ -38,22 +41,21 @@ export async function POST(req: Request) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const email = payload.buyer?.email?.toLowerCase().trim();
-  const rawName = payload.buyer?.name?.trim() ?? "";
-  const phone = undefined;
+  // Support both native nested and Zapier flat shapes
+  const email = (payload.buyer?.email ?? payload.email)?.toLowerCase().trim();
+  const rawName = (payload.buyer?.name ?? payload.name)?.trim() ?? "";
   const amountCents = payload.amount ?? 0;
 
-  if (!email || !rawName) return new Response("Missing buyer email or name", { status: 400 });
+  if (!email || !rawName) return new Response("Missing email or name", { status: 400 });
 
-  // Idempotency — dedupe on payment_id (prevents double-fire on Fanbasis retries)
+  // Dedupe on payment_id if present (prevents double-fire on retries)
   if (payload.payment_id) {
     const paymentKey = `sns:fanbasis:payment:${payload.payment_id}`;
     const alreadyProcessed = await kv.get(paymentKey);
     if (alreadyProcessed) return new Response("ok", { status: 200 });
-    await kv.set(paymentKey, true, { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
+    await kv.set(paymentKey, true, { ex: 60 * 60 * 24 * 7 });
   }
 
-  // Also skip if client already exists from a prior payment
   const clientKey = `sns:coaching:client:${email}`;
   const existing = await kv.get<CoachingClient>(clientKey);
   if (existing) return new Response("ok", { status: 200 });
@@ -61,18 +63,16 @@ export async function POST(req: Request) {
   const [firstName, ...rest] = rawName.split(" ");
   const lastName = rest.join(" ") || undefined;
 
-  // 1. Create GHL contact
+  // 1. GHL contact
   let ghlContactId = "";
   try {
-    const contact = await createContact({ firstName, lastName, email, phone, tags: ["coaching-client"] });
+    const contact = await createContact({ firstName, lastName, email, phone: undefined, tags: ["coaching-client"] });
     ghlContactId = contact.id;
   } catch (e) {
     console.error("GHL createContact error:", e);
   }
 
   // 2. Google Drive folders
-  // If Make already created the folders and passed the IDs, use those directly.
-  // Otherwise fall back to creating them server-side via the service account.
   let driveFolder: CoachingClient["driveFolder"] = null;
   if (payload.drive_folder_id) {
     driveFolder = {
@@ -99,12 +99,12 @@ export async function POST(req: Request) {
     }
   }
 
-  // 3. Store client record in KV
+  // 3. Store in KV
   const client: CoachingClient = {
     ghlContactId,
     name: rawName,
     email,
-    phone,
+    phone: undefined,
     status: "payment_received",
     createdAt: new Date().toISOString(),
     idVerification: "pending",
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
     driveFolderUrl: driveFolder?.url,
   }).catch(e => console.error("Welcome email error:", e));
 
-  // 5. Discord notifications (same three channels as Stripe)
+  // 5. Discord notifications
   const amountDollars = (amountCents / 100).toFixed(2);
   const formatted = `$${Number(amountDollars).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
@@ -138,10 +138,10 @@ export async function POST(req: Request) {
           description: `Welcome **${rawName}** to the program!`,
           color: 16737792,
           fields: [
-            { name: "Amount",  value: formatted,   inline: true },
-            { name: "Email",   value: email,        inline: true },
-            { name: "Source",  value: "Fanbasis",   inline: true },
-            { name: "Status",  value: "✅ Payment confirmed\n✅ GHL contact tagged\n✅ Drive folder created\n✅ Welcome + Onboarding emails sent", inline: false },
+            { name: "Amount", value: formatted,  inline: true },
+            { name: "Email",  value: email,       inline: true },
+            { name: "Source", value: "Fanbasis",  inline: true },
+            { name: "Status", value: "✅ Payment confirmed\n✅ GHL contact tagged\n✅ Drive folder created\n✅ Welcome + Onboarding emails sent", inline: false },
           ],
           footer: { text: "@Coach — reach out within 24 hours to book their kickoff call" },
         }],
