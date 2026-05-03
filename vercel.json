@@ -11,6 +11,14 @@
     {
       "path": "/api/agents/student-summary",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/agents/payout-cron",
+      "schedule": "0 17 * * 5"
+    },
+    {
+      "path": "/api/agents/monthly-summary",
+      "schedule": "0 7 1 * *"
     }
   ]
 }

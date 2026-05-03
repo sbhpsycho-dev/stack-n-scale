@@ -74,6 +74,7 @@ export async function POST(req: Request) {
     leadSource:   body.leadSource,
     setter:       body.setter ?? null,
     closer:       body.closer ?? null,
+    dmSetter:     null,
     payouts:      {} as Deal["payouts"],
     payoutStatus: "pending",
     notes:        body.notes ?? "",

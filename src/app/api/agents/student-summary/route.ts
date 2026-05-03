@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import type { CheckInRecord } from "@/lib/health-score";
+import { sendDiscordDM } from "@/lib/discord";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -60,6 +61,25 @@ export async function GET(req: Request) {
     topPerf.length ? `🏆 Top Performers This Week:` : "",
     ...topPerf.map((s, i) => `${i + 1}. ${s.studentName} — Score: ${s.healthScore}`),
   ].filter(Boolean).join("\n");
+
+  // Discord DMs to admins (fire-and-forget)
+  const discordMsg = [
+    `📊 **Weekly Student Summary — Week of ${weekLabel}**`,
+    "",
+    `✅ Check-Ins: ${checkedIn.length} / ${valid.length}`,
+    missing.length ? `❌ Missing: ${missing.join(", ")}` : "",
+    "",
+    `🟢 On Track (8-10): ${green.length}`,
+    orange.length ? `🟡 At Risk (6-7): ${orange.length} — ${orange.map(s => s.studentName).join(", ")}` : "",
+    red.length ? `🔴 Off Track (1-5): ${red.length} — ${red.map(s => s.studentName).join(", ")} ⚠️ CALL THESE TODAY` : "",
+    topPerf.length ? `\n🏆 **Top Performers**\n${topPerf.map((s, i) => `${i + 1}. ${s.studentName} — ${s.healthScore}/10`).join("\n")}` : "",
+  ].filter(Boolean).join("\n");
+
+  const adminIds = [
+    process.env.DISCORD_CAELUM_USER_ID,
+    process.env.EVAN_DISCORD_USER_ID,
+  ].filter(Boolean) as string[];
+  void Promise.all(adminIds.map(id => sendDiscordDM(id, discordMsg).catch(e => console.error(`Discord DM error (${id}):`, e))));
 
   return Response.json({
     weekLabel,

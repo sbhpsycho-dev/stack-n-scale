@@ -1,13 +1,19 @@
 import type { Deal, DealPayout } from "./deal-types";
 
 export function calculatePayouts(deal: Deal): DealPayout {
-  const caelum = deal.netAmount * 0.15;
-  const mediaBuyer = deal.leadSource === "ad" ? deal.grossAmount * 0.05 : 0;
-  const setter = deal.closer ? deal.grossAmount * 0.10 : deal.grossAmount * 0.20;
-  const closer = deal.closer ? deal.grossAmount * 0.10 : 0;
-  const totalPayouts = caelum + mediaBuyer + setter + closer;
+  const caelum     = Math.round(deal.netAmount * 0.15);
+  const mediaBuyer = deal.leadSource === "ad" ? Math.round(deal.grossAmount * 0.05) : 0;
+
+  // Setter pot: always 20% of gross, split equally if both dmSetter + setter present
+  const setterCount = [deal.dmSetter, deal.setter].filter(Boolean).length;
+  const eachShare   = setterCount > 1 ? deal.grossAmount * 0.10 : deal.grossAmount * 0.20;
+  const dmSetter    = deal.dmSetter ? Math.round(eachShare) : 0;
+  const setter      = deal.setter   ? Math.round(eachShare) : 0;
+  const closer      = deal.closer   ? Math.round(deal.grossAmount * 0.10) : 0;
+
+  const totalPayouts = caelum + mediaBuyer + dmSetter + setter + closer;
   const evanTakeHome = deal.netAmount - totalPayouts;
-  return { caelum, mediaBuyer, setter, closer, totalPayouts, evanTakeHome };
+  return { caelum, mediaBuyer, dmSetter, setter, closer, totalPayouts, evanTakeHome };
 }
 
 export function getWeekId(date: Date = new Date()): string {

@@ -8,6 +8,7 @@ export interface Deal {
   processorFee: number;
   netAmount: number;
   leadSource: "ad" | "organic";
+  dmSetter: string | null;
   setter: string | null;
   closer: string | null;
   payouts: DealPayout;
@@ -18,6 +19,7 @@ export interface Deal {
 export interface DealPayout {
   caelum: number;
   mediaBuyer: number;
+  dmSetter: number;
   setter: number;
   closer: number;
   totalPayouts: number;

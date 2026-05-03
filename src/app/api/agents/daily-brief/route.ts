@@ -4,6 +4,7 @@ import { kv } from "@vercel/kv";
 import type { SalesData } from "@/lib/sales-data";
 import type { Deal } from "@/lib/deal-types";
 import type { CheckInRecord } from "@/lib/health-score";
+import { sendDiscordDM } from "@/lib/discord";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -95,6 +96,33 @@ export async function GET(req: Request) {
     `⚠️ Missing Check-In: ${missingIn.length}`,
     needsAttention.length ? `\n🚨 *Needs Your Attention*\n${needsAttention.join("\n")}` : "",
   ].filter(line => line !== "").join("\n");
+
+  // Discord DMs to admins (fire-and-forget, non-blocking)
+  const discordMsg = [
+    `📋 **SNS Daily Brief — ${dateLabel}**`,
+    "",
+    `💰 **Revenue**`,
+    `Yesterday: ${fmt$(yesterdayGross)}`,
+    `MTD Gross: ${fmt$(mtdGross)}`,
+    `MTD Evan Take Home: ${fmt$(mtdEvanNet)}`,
+    paceToGoal !== null ? `Pace to ${fmt$(monthlyGoal)}: ${paceToGoal}%` : "",
+    "",
+    `📅 **Pipeline**`,
+    `Deals Closed Yesterday: ${yesterdayDeals.length}`,
+    pipeline ? `Calls Showed: ${pipeline.callsAnswered ?? 0}` : "",
+    showRate !== null ? `Show Rate: ${showRate}%` : "",
+    "",
+    `👥 **Students**`,
+    `Active: ${active} | 🟢 ${onTrack} on track | 🟡 ${atRisk} at risk | 🔴 ${offTrack.length} off track`,
+    missingIn.length ? `⚠️ Missing check-in: ${missingIn.length}` : "",
+    needsAttention.length ? `\n🚨 **Needs Attention**\n${needsAttention.join("\n")}` : "",
+  ].filter(l => l !== "").join("\n");
+
+  const adminIds = [
+    process.env.DISCORD_CAELUM_USER_ID,
+    process.env.EVAN_DISCORD_USER_ID,
+  ].filter(Boolean) as string[];
+  void Promise.all(adminIds.map(id => sendDiscordDM(id, discordMsg).catch(e => console.error(`Discord DM error (${id}):`, e))));
 
   return Response.json({
     date: dateLabel,

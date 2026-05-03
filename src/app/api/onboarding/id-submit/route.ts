@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet, setupClientFolder } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
+import { sendDiscordDM } from "@/lib/discord";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,6 @@ export async function OPTIONS() {
 
 const DISCORD_API = "https://discord.com/api/v10";
 const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
-const CAELUM_ID   = process.env.DISCORD_CAELUM_USER_ID ?? "";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -35,21 +35,6 @@ async function validateFileMagic(file: File): Promise<boolean> {
   // HEIC starts with ftyp box — allow if declared type matches
   const isHeic  = file.type === "image/heic";
   return isJpeg || isPng || isWebp || isHeic;
-}
-
-async function getOrCreateDmChannel(): Promise<string> {
-  const res = await fetch(`${DISCORD_API}/users/@me/channels`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bot ${BOT_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ recipient_id: CAELUM_ID }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) throw new Error(`DM channel create failed: ${await res.text()}`);
-  const data = await res.json() as { id: string };
-  return data.id;
 }
 
 async function getClientChannel(email: string): Promise<string | null> {
@@ -203,26 +188,43 @@ export async function POST(req: Request) {
       console.error("Both-complete check error:", e);
     }
 
-    // Notify Discord — no file URLs (files stored privately in Vercel Blob)
-    if (BOT_TOKEN && CAELUM_ID) {
+    // Notify Discord — post to client's private channel + DM all admins
+    if (BOT_TOKEN) {
       try {
-        let channelId = await getClientChannel(email).catch(() => null);
-        if (!channelId) channelId = await getOrCreateDmChannel();
+        // Post to client's private channel if they have one
+        const clientChannelId = await getClientChannel(email).catch(() => null);
+        if (clientChannelId) {
+          await fetch(`${DISCORD_API}/channels/${clientChannelId}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(8000),
+            body: JSON.stringify({
+              content: [
+                `🪪 **ID Verification Submitted — ${name}**`,
+                `📧 ${email}`,
+                `✅ Consent confirmed`,
+                `📎 ID photo + selfie uploaded securely`,
+                existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
+              ].filter(Boolean).join("\n"),
+            }),
+          });
+        }
 
-        await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
-          method: "POST",
-          headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(8000),
-          body: JSON.stringify({
-            content: [
-              `🪪 **ID Verification Submitted — ${name}**`,
-              `📧 ${email}`,
-              `✅ Consent confirmed`,
-              `📎 ID photo + selfie uploaded securely`,
-              existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
-            ].filter(Boolean).join("\n"),
-          }),
-        });
+        // DM all admins so they know to approve in the onboarding dashboard
+        const adminMsg = [
+          `🪪 **ID Verification Pending Approval**`,
+          `**Name:** ${name}`,
+          `**Email:** ${email}`,
+          `**Consent:** Yes`,
+          existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
+          `\nReview → /admin/onboarding`,
+        ].filter(Boolean).join("\n");
+        const adminIds = [
+          process.env.DISCORD_CAELUM_USER_ID,
+          process.env.EVAN_DISCORD_USER_ID,
+          process.env.DISCORD_ADMIN2_USER_ID,
+        ].filter(Boolean) as string[];
+        await Promise.all(adminIds.map(id => sendDiscordDM(id, adminMsg).catch(e => console.error(`Discord DM error (${id}):`, e))));
       } catch (discordErr) {
         console.error("Discord error:", discordErr);
       }

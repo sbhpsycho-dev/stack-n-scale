@@ -30,6 +30,7 @@ function PayoutPreview({ p }: { p: DealPayout }) {
   const rows: [string, number][] = [
     ["Caelum (15% net)", p.caelum],
     ["Media Buyer (5% gross)", p.mediaBuyer],
+    ["DM Setter", p.dmSetter],
     ["Setter", p.setter],
     ["Closer", p.closer],
     ["Total Payouts", p.totalPayouts],
@@ -54,27 +55,30 @@ type FormData = {
   date: string; clientName: string; offer: "5K" | "10K";
   grossAmount: string; processor: "fanbasis" | "stripe";
   processorFee: string; leadSource: "ad" | "organic";
-  setter: string; closer: string; notes: string;
+  dmSetter: string; setter: string; closer: string; notes: string;
 };
 
 const EMPTY: FormData = {
   date: new Date().toISOString().slice(0, 10),
   clientName: "", offer: "5K", grossAmount: "",
   processor: "fanbasis", processorFee: "",
-  leadSource: "organic", setter: "", closer: "", notes: "",
+  leadSource: "organic", dmSetter: "", setter: "", closer: "", notes: "",
 };
 
 function calcPreview(f: FormData): DealPayout | null {
   const gross = parseFloat(f.grossAmount);
   const fee   = parseFloat(f.processorFee);
   if (isNaN(gross) || isNaN(fee)) return null;
-  const net       = gross - fee;
-  const caelum    = net * 0.15;
-  const mediaBuyer = f.leadSource === "ad" ? gross * 0.05 : 0;
-  const setter    = f.closer.trim() ? gross * 0.10 : gross * 0.20;
-  const closer    = f.closer.trim() ? gross * 0.10 : 0;
-  const totalPayouts = caelum + mediaBuyer + setter + closer;
-  return { caelum, mediaBuyer, setter, closer, totalPayouts, evanTakeHome: net - totalPayouts };
+  const net        = gross - fee;
+  const caelum     = Math.round(net * 0.15);
+  const mediaBuyer = f.leadSource === "ad" ? Math.round(gross * 0.05) : 0;
+  const setterCount = [f.dmSetter.trim(), f.setter.trim()].filter(Boolean).length;
+  const eachShare   = setterCount > 1 ? gross * 0.10 : gross * 0.20;
+  const dmSetter    = f.dmSetter.trim() ? Math.round(eachShare) : 0;
+  const setter      = f.setter.trim()   ? Math.round(eachShare) : 0;
+  const closer      = f.closer.trim()   ? Math.round(gross * 0.10) : 0;
+  const totalPayouts = caelum + mediaBuyer + dmSetter + setter + closer;
+  return { caelum, mediaBuyer, dmSetter, setter, closer, totalPayouts, evanTakeHome: net - totalPayouts };
 }
 
 function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved: (d: Deal) => void; reps: string[] }) {
@@ -97,8 +101,9 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
           ...form,
           grossAmount:  parseFloat(form.grossAmount),
           processorFee: parseFloat(form.processorFee),
-          setter: form.setter.trim() || null,
-          closer: form.closer.trim() || null,
+          dmSetter: form.dmSetter.trim() || null,
+          setter:   form.setter.trim()   || null,
+          closer:   form.closer.trim()   || null,
         }),
       });
       if (!res.ok) {
@@ -176,7 +181,11 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
           <datalist id="rep-list">
             {reps.map(name => <option key={name} value={name} />)}
           </datalist>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">DM Setter (optional)</label>
+              <input list="rep-list" className={inp} placeholder="Name" value={form.dmSetter} onChange={e => set("dmSetter", e.target.value)} />
+            </div>
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Setter (optional)</label>
               <input list="rep-list" className={inp} placeholder="Name" value={form.setter} onChange={e => set("setter", e.target.value)} />
