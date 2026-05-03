@@ -209,15 +209,21 @@ function RevenueTab() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {data.revenueOverTime.length > 0 && (
-          <CC title="Revenue Over Time"><RevenueOverTimeChart data={data.revenueOverTime} /></CC>
-        )}
-        {data.netByProcessor.length > 0 && (
-          <CC title="Revenue by Processor"><NetByProcessorChart data={data.netByProcessor} /></CC>
-        )}
-        {data.netByProduct.length > 0 && (
-          <CC title="Revenue by Product"><NetByProductChart data={data.netByProduct} /></CC>
-        )}
+        <CC title="Revenue Over Time">
+          {data.revenueOverTime.length > 0
+            ? <RevenueOverTimeChart data={data.revenueOverTime} />
+            : <p className="text-xs text-muted-foreground py-8 text-center">No revenue data yet.</p>}
+        </CC>
+        <CC title="Revenue by Processor">
+          {data.netByProcessor.length > 0
+            ? <NetByProcessorChart data={data.netByProcessor} />
+            : <p className="text-xs text-muted-foreground py-8 text-center">No processor data yet.</p>}
+        </CC>
+        <CC title="Revenue by Product">
+          {data.netByProduct.length > 0
+            ? <NetByProductChart data={data.netByProduct} />
+            : <p className="text-xs text-muted-foreground py-8 text-center">No product data yet.</p>}
+        </CC>
       </div>
     </div>
   );
@@ -254,19 +260,16 @@ function AdsTab() {
         <MetricCard label="Reach"        value={data.reach}           variant="default" index={8} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {data.leadsOverTime.length > 0 && (
-          <CC title="Leads Over Time"><LeadsOverTimeChart data={data.leadsOverTime} /></CC>
-        )}
-        {data.leadsByCampaign.length > 0 && (
-          <CC title="Leads by Campaign"><LeadsByCampaignChart data={data.leadsByCampaign} /></CC>
-        )}
-        {data.totalLeads === 0 && (
-          <CC title="Ads Data">
-            <p className="text-xs text-muted-foreground py-8 text-center">
-              No Meta Ads data yet — run a sync from Settings to pull live data.
-            </p>
-          </CC>
-        )}
+        <CC title="Leads Over Time">
+          {data.leadsOverTime.length > 0
+            ? <LeadsOverTimeChart data={data.leadsOverTime} />
+            : <p className="text-xs text-muted-foreground py-8 text-center">No leads data yet — connect Meta Ads and run a sync.</p>}
+        </CC>
+        <CC title="Leads by Campaign">
+          {data.leadsByCampaign.length > 0
+            ? <LeadsByCampaignChart data={data.leadsByCampaign} />
+            : <p className="text-xs text-muted-foreground py-8 text-center">No campaign data yet.</p>}
+        </CC>
       </div>
     </div>
   );

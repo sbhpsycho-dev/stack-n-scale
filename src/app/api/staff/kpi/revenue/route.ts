@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
-import { type SalesData, SEED } from "@/lib/sales-data";
+import { type SalesData, BLANK } from "@/lib/sales-data";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,7 +9,7 @@ export async function GET() {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const data = (await kv.get<SalesData>("sns-dashboard-v1")) ?? SEED;
+  const data = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
   const d = data.dashboard;
 
   return Response.json({
