@@ -2,7 +2,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { google } from "googleapis";
-import { type SalesData, SEED } from "@/lib/sales-data";
+import type { Deal } from "@/lib/deal-types";
+import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 
 function getAuth() {
   const client_email = process.env.GOOGLE_SA_EMAIL;
@@ -36,10 +37,6 @@ export async function GET() {
   if (!session || (session.user.role !== "admin" && session.user.role !== "staff")) {
     return new Response("Unauthorized", { status: 401 });
   }
-
-  // Fallback: use GHL-synced leaderboard from SalesData
-  const salesData = (await kv.get<SalesData>("sns-dashboard-v1")) ?? SEED;
-  const ghlLeaderboard = salesData.reps.leaderboard ?? [];
 
   // Try reading from Setter KPI Tracker sheet
   const rows = await readSetterSheet();
@@ -77,15 +74,47 @@ export async function GET() {
       .filter(r => r.name);
   }
 
-  const leaderboard = sheetLeaderboard.length > 0 ? sheetLeaderboard : ghlLeaderboard.map(r => ({
-    name:          r.name,
-    cashCollected: r.cashCollected,
-    demosSet:      r.demosSet,
-    demosShowed:   r.demosShowed,
-    dealsClosed:   r.dealsClosed,
-    showRate:      r.demosSet > 0 ? parseFloat(((r.demosShowed / r.demosSet) * 100).toFixed(1)) : 0,
-    closeRate:     r.demosShowed > 0 ? parseFloat(((r.dealsClosed / r.demosShowed) * 100).toFixed(1)) : 0,
-  }));
+  let leaderboard: typeof sheetLeaderboard;
+
+  if (sheetLeaderboard.length > 0) {
+    leaderboard = sheetLeaderboard;
+  } else {
+    // Build from deals KV + staff registry (all start at zero, grow as deals are logged)
+    const [staffRegistry, dealIds] = await Promise.all([
+      kv.get<StaffMeta[]>(STAFF_KV_KEY),
+      kv.get<string[]>("sns:deals:index"),
+    ]);
+    const staff = staffRegistry ?? [];
+    const ids   = dealIds ?? [];
+    const deals = ids.length > 0
+      ? (await Promise.all(ids.map(id => kv.get<Deal>(`sns:deals:${id}`)))).filter((d): d is Deal => d !== null)
+      : [];
+
+    type RepStats = { cashCollected: number; demosSet: number; dealsClosed: number };
+    const repMap = new Map<string, RepStats>();
+    for (const s of staff) {
+      repMap.set(s.name, { cashCollected: 0, demosSet: 0, dealsClosed: 0 });
+    }
+    for (const deal of deals) {
+      if (deal.setter) {
+        const r = repMap.get(deal.setter) ?? { cashCollected: 0, demosSet: 0, dealsClosed: 0 };
+        repMap.set(deal.setter, { ...r, demosSet: r.demosSet + 1 });
+      }
+      if (deal.closer) {
+        const r = repMap.get(deal.closer) ?? { cashCollected: 0, demosSet: 0, dealsClosed: 0 };
+        repMap.set(deal.closer, { ...r, dealsClosed: r.dealsClosed + 1, cashCollected: r.cashCollected + deal.grossAmount });
+      }
+    }
+    leaderboard = Array.from(repMap.entries()).map(([name, s]) => ({
+      name,
+      cashCollected: s.cashCollected,
+      demosSet:      s.demosSet,
+      demosShowed:   0,
+      dealsClosed:   s.dealsClosed,
+      showRate:      0,
+      closeRate:     s.demosSet > 0 ? parseFloat(((s.dealsClosed / s.demosSet) * 100).toFixed(1)) : 0,
+    }));
+  }
 
   const totalCash    = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
   const totalDeals   = leaderboard.reduce((s, r) => s + r.dealsClosed, 0);

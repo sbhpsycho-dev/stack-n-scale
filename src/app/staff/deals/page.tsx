@@ -77,7 +77,7 @@ function calcPreview(f: FormData): DealPayout | null {
   return { caelum, mediaBuyer, setter, closer, totalPayouts, evanTakeHome: net - totalPayouts };
 }
 
-function AddDealModal({ onClose, onSaved }: { onClose: () => void; onSaved: (d: Deal) => void }) {
+function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved: (d: Deal) => void; reps: string[] }) {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -173,14 +173,17 @@ function AddDealModal({ onClose, onSaved }: { onClose: () => void; onSaved: (d: 
             </div>
           </div>
 
+          <datalist id="rep-list">
+            {reps.map(name => <option key={name} value={name} />)}
+          </datalist>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Setter (optional)</label>
-              <input className={inp} placeholder="Name" value={form.setter} onChange={e => set("setter", e.target.value)} />
+              <input list="rep-list" className={inp} placeholder="Name" value={form.setter} onChange={e => set("setter", e.target.value)} />
             </div>
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Closer (optional)</label>
-              <input className={inp} placeholder="Name" value={form.closer} onChange={e => set("closer", e.target.value)} />
+              <input list="rep-list" className={inp} placeholder="Name" value={form.closer} onChange={e => set("closer", e.target.value)} />
             </div>
           </div>
 
@@ -236,6 +239,13 @@ export default function DealsPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [showModal, setShowModal] = useState(false);
+  const [reps, setReps] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/staff/reps").then(r => r.ok ? r.json() : []).then((list: { name: string }[]) => {
+      setReps(list.map(r => r.name));
+    });
+  }, []);
 
   const load = useCallback(async (f: Filters) => {
     setLoading(true);
@@ -269,6 +279,7 @@ export default function DealsPage() {
     <div className="space-y-5">
       {showModal && (
         <AddDealModal
+          reps={reps}
           onClose={() => setShowModal(false)}
           onSaved={(d) => { setDeals(prev => [d, ...prev]); setShowModal(false); }}
         />
