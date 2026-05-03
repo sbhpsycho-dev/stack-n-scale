@@ -33,6 +33,36 @@ export async function POST(req: Request) {
     });
     await kv.set(clientKey, { ...client, idVerification: "approved", status: "id_verified" });
     triggerEmail("approval", clientEmail, clientName).catch(console.error);
+
+    // Generate a fresh OAuth state token (original expires in 24h; approval may come later)
+    const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+    const APP_URL   = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
+    if (CLIENT_ID) {
+      const discordRecord = await kv.get<{ channelId?: string }>(
+        `sns:onboarding:discord:${clientEmail.toLowerCase()}`
+      );
+      if (discordRecord?.channelId) {
+        const stateToken = crypto.randomUUID();
+        await kv.set(`sns:oauth:state:${stateToken}`, clientEmail.toLowerCase(), { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
+        const params = new URLSearchParams({
+          client_id: CLIENT_ID,
+          redirect_uri: `${APP_URL}/api/discord/connect`,
+          response_type: "code",
+          scope: "identify guilds.join",
+          state: stateToken,
+        });
+        const freshOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
+        // Update KV so future re-approvals also get a fresh URL
+        await kv.set(`sns:onboarding:discord:${clientEmail.toLowerCase()}`, {
+          ...discordRecord,
+          discordOAuthUrl: freshOAuthUrl,
+        });
+        triggerEmail("discord_link", clientEmail, clientName, {
+          discordOAuthUrl: freshOAuthUrl,
+        }).catch(console.error);
+      }
+    }
+
     return Response.json({ ok: true, action: "approved" });
   }
 

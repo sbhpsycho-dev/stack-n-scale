@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 import { createContact } from "@/lib/ghl";
-import { triggerEmail } from "@/lib/email";
+import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 
@@ -16,7 +16,8 @@ type FanbasisPayload = {
   // zapier flat
   email?: string;
   name?: string;
-  // amount in cents
+  // amount in cents — Make.com sends as amount_cents, direct callers may use amount
+  amount_cents?: number;
   amount?: number;
   currency?: string;
   // Optional — Drive folder IDs pre-created by Make.com
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
   // Support both native nested and Zapier flat shapes
   const email = (payload.buyer?.email ?? payload.email)?.toLowerCase().trim();
   const rawName = (payload.buyer?.name ?? payload.name)?.trim() ?? "";
-  const amountCents = payload.amount ?? 0;
+  const amountCents = payload.amount_cents ?? payload.amount ?? 0;
 
   if (!email || !rawName) return new Response("Missing email or name", { status: 400 });
 
@@ -112,10 +113,13 @@ export async function POST(req: Request) {
   };
   await kv.set(clientKey, client);
 
-  // 4. Welcome + onboarding email
+  // 4. Welcome + onboarding email + campaign sequence
+  const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
   triggerEmail("welcome", email, rawName, {
     driveFolderUrl: driveFolder?.url,
+    skoolLink: SKOOL_LINK,
   }).catch(e => console.error("Welcome email error:", e));
+  triggerCampaign(email, rawName, amountCents, "fanbasis").catch(e => console.error("Campaign trigger error:", e));
 
   // 5. Discord notifications
   const amountDollars = (amountCents / 100).toFixed(2);

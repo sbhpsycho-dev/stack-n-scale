@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { kv } from "@vercel/kv";
 import { createContact } from "@/lib/ghl";
-import { triggerEmail } from "@/lib/email";
+import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 
@@ -80,7 +80,9 @@ export async function POST(req: Request) {
 
   await kv.set(clientKey, client);
 
-  triggerEmail("welcome", email, rawName).catch(e => console.error("Welcome email error:", e));
+  const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
+  triggerEmail("welcome", email, rawName, { skoolLink: SKOOL_LINK }).catch(e => console.error("Welcome email error:", e));
+  triggerCampaign(email, rawName, session.amount_total ?? 0, "stripe").catch(e => console.error("Campaign trigger error:", e));
 
   // Fire all three Discord notifications non-blocking
   const amountDollars = ((session.amount_total ?? 0) / 100).toFixed(2);

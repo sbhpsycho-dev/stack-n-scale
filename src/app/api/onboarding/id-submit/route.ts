@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
@@ -144,45 +145,57 @@ export async function POST(req: Request) {
       triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
         .catch(e => console.error("Drive docs error:", e));
     } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-      setupClientFolder(existing?.name || name).then(async (folders) => {
-        const driveFolder = {
-          url: folders.folderUrl,
-          id: folders.folderId,
-          idVerificationFolderId: folders.idVerificationFolderId,
-          onboardingFolderId: folders.onboardingFolderId,
-          notesFolderId: folders.notesFolderId,
-          docs: folders.docs,
-        };
-        const updated = await kv.get<CoachingClient>(clientKey);
-        if (updated) await kv.set(clientKey, { ...updated, driveFolder });
-        triggerEmail("id_received", email, name, { idVerificationFolderId: folders.idVerificationFolderId })
-          .catch(e => console.error("ID received email error:", e));
-        triggerDriveDocs("id_received", email, name, {
-          idVerificationFolderId: folders.idVerificationFolderId,
-          idFrontUrl, selfieUrl, signatureUrl,
-        }).catch(e => console.error("Drive docs error:", e));
-      }).catch(e => {
-        console.error("Drive folder setup error (id-submit):", e);
-        triggerEmail("id_received", email, name, {})
-          .catch(err => console.error("ID received email error:", err));
+      after(async () => {
+        try {
+          const folders = await setupClientFolder(existing?.name || name);
+          const driveFolder = {
+            url: folders.folderUrl,
+            id: folders.folderId,
+            idVerificationFolderId: folders.idVerificationFolderId,
+            onboardingFolderId: folders.onboardingFolderId,
+            notesFolderId: folders.notesFolderId,
+            docs: folders.docs,
+          };
+          const updated = await kv.get<CoachingClient>(clientKey);
+          if (updated) await kv.set(clientKey, { ...updated, driveFolder });
+          triggerEmail("id_received", email, name, { idVerificationFolderId: folders.idVerificationFolderId })
+            .catch(e => console.error("ID received email error:", e));
+          triggerDriveDocs("id_received", email, name, {
+            idVerificationFolderId: folders.idVerificationFolderId,
+            idFrontUrl, selfieUrl, signatureUrl,
+          }).catch(e => console.error("Drive docs error:", e));
+        } catch (e) {
+          console.error("Drive folder setup error (id-submit):", e);
+          triggerEmail("id_received", email, name, {})
+            .catch(err => console.error("ID received email error:", err));
+        }
       });
     } else {
       triggerEmail("id_received", email, name, {})
         .catch(e => console.error("ID received email error:", e));
     }
 
-    // If onboarding form was also submitted, send Discord link via email
-    let discordOAuthUrl: string | null = null;
+    // If onboarding form was also submitted, send Discord link via email with a fresh token
     try {
+      const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+      const APP_URL   = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
       const [formRecord, discordRecord] = await Promise.all([
         kv.get(`sns:onboarding:form:${email}`),
-        kv.get<{ channelId: string; channelName: string; discordOAuthUrl?: string }>(
-          `sns:onboarding:discord:${email}`
-        ),
+        kv.get<{ channelId?: string }>(`sns:onboarding:discord:${email}`),
       ]);
-      if (formRecord && discordRecord?.discordOAuthUrl) {
-        discordOAuthUrl = discordRecord.discordOAuthUrl;
-        triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
+      if (formRecord && discordRecord?.channelId && CLIENT_ID) {
+        const stateToken = crypto.randomUUID();
+        await kv.set(`sns:oauth:state:${stateToken}`, email, { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
+        const params = new URLSearchParams({
+          client_id: CLIENT_ID,
+          redirect_uri: `${APP_URL}/api/discord/connect`,
+          response_type: "code",
+          scope: "identify guilds.join",
+          state: stateToken,
+        });
+        const freshOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
+        await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl: freshOAuthUrl });
+        triggerEmail("discord_link", email, name, { discordOAuthUrl: freshOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
           .catch(e => console.error("Discord link email error:", e));
       }
     } catch (e) {

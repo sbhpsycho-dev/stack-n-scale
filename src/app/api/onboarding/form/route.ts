@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
 import { appendToSheet, setupClientFolder, uploadTextToDrive } from "@/lib/drive";
@@ -149,32 +150,35 @@ export async function POST(req: Request) {
       triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
         .catch(e => console.error("Drive docs error:", e));
     } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-      setupClientFolder(existing?.name || name).then(async (folders) => {
-        const driveFolder = {
-          url: folders.folderUrl,
-          id: folders.folderId,
-          idVerificationFolderId: folders.idVerificationFolderId,
-          onboardingFolderId: folders.onboardingFolderId,
-          notesFolderId: folders.notesFolderId,
-          docs: folders.docs,
-        };
-        const updated = await kv.get<CoachingClient>(clientKey);
-        if (updated) await kv.set(clientKey, { ...updated, driveFolder });
-        const emailPayload = {
-          onboardingFolderId: folders.onboardingFolderId,
-          notesFolderId: folders.notesFolderId,
-          formData,
-        };
-        uploadTextToDrive(folders.onboardingFolderId, "Onboarding Form.txt", formText)
-          .catch(e => console.error("Drive upload error:", e));
-        triggerEmail("form_received", email, name, emailPayload)
-          .catch(e => console.error("Form received email error:", e));
-        triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
-          .catch(e => console.error("Drive docs error:", e));
-      }).catch(e => {
-        console.error("Drive folder setup error (form):", e);
-        triggerEmail("form_received", email, name, { formData })
-          .catch(err => console.error("Form received email error:", err));
+      after(async () => {
+        try {
+          const folders = await setupClientFolder(existing?.name || name);
+          const driveFolder = {
+            url: folders.folderUrl,
+            id: folders.folderId,
+            idVerificationFolderId: folders.idVerificationFolderId,
+            onboardingFolderId: folders.onboardingFolderId,
+            notesFolderId: folders.notesFolderId,
+            docs: folders.docs,
+          };
+          const updated = await kv.get<CoachingClient>(clientKey);
+          if (updated) await kv.set(clientKey, { ...updated, driveFolder });
+          const emailPayload = {
+            onboardingFolderId: folders.onboardingFolderId,
+            notesFolderId: folders.notesFolderId,
+            formData,
+          };
+          await uploadTextToDrive(folders.onboardingFolderId, "Onboarding Form.txt", formText)
+            .catch(e => console.error("Drive upload error:", e));
+          triggerEmail("form_received", email, name, emailPayload)
+            .catch(e => console.error("Form received email error:", e));
+          triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
+            .catch(e => console.error("Drive docs error:", e));
+        } catch (e) {
+          console.error("Drive folder setup error (form):", e);
+          triggerEmail("form_received", email, name, { formData })
+            .catch(err => console.error("Form received email error:", err));
+        }
       });
     } else {
       triggerEmail("form_received", email, name, { formData })
@@ -238,7 +242,7 @@ export async function POST(req: Request) {
         // Build OAuth URL — use a random state token (not the email) to prevent email exposure
         if (CLIENT_ID) {
           const stateToken = crypto.randomUUID();
-          await kv.set(`sns:oauth:state:${stateToken}`, email.toLowerCase(), { ex: 86400 }); // 24h TTL
+          await kv.set(`sns:oauth:state:${stateToken}`, email.toLowerCase(), { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
           const params = new URLSearchParams({
             client_id: CLIENT_ID,
             redirect_uri: `${APP_URL}/api/discord/connect`,

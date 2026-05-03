@@ -11,6 +11,7 @@ export async function triggerEmail(
     onboardingFolderId?: string;
     idVerificationFolderId?: string;
     formData?: Record<string, string>;
+    skoolLink?: string;
   }
 ) {
   const url = process.env.MAKE_EMAIL_WEBHOOK_URL;
@@ -24,6 +25,25 @@ export async function triggerEmail(
     body: JSON.stringify({ type, to, name, ...extras }),
     signal: AbortSignal.timeout(5000),
   });
+}
+
+export async function triggerCampaign(
+  email: string,
+  name: string,
+  amount: number,
+  source: "stripe" | "fanbasis"
+) {
+  const url = process.env.MAKE_CAMPAIGN_WEBHOOK_URL;
+  if (!url) {
+    console.warn("MAKE_CAMPAIGN_WEBHOOK_URL not set — skipping campaign trigger");
+    return;
+  }
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, name, amount, source }),
+    signal: AbortSignal.timeout(5000),
+  }).catch(e => console.error("Campaign webhook error:", e));
 }
 
 export async function triggerDriveDocs(
