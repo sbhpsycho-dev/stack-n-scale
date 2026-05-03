@@ -1,9 +1,11 @@
 import Stripe from "stripe";
 import { kv } from "@vercel/kv";
+import { randomUUID } from "crypto";
 import { createContact } from "@/lib/ghl";
 import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
+import type { Lead } from "@/lib/lead-types";
 
 export const runtime = "nodejs";
 
@@ -79,6 +81,17 @@ export async function POST(req: Request) {
   };
 
   await kv.set(clientKey, client);
+
+  // Create lead record for follow-up tracking
+  const leadId = randomUUID();
+  const lead: Lead = {
+    id: leadId, name: rawName, email, phone,
+    source: "stripe", state: "opted_in",
+    createdAt: client.createdAt, updatedAt: client.createdAt, contactHistory: [],
+  };
+  await kv.set(`sns:leads:${leadId}`, lead);
+  const leadIndex = (await kv.get<string[]>("sns:leads:index")) ?? [];
+  await kv.set("sns:leads:index", [leadId, ...leadIndex]);
 
   const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
   triggerEmail("welcome", email, rawName, { skoolLink: SKOOL_LINK }).catch(e => console.error("Welcome email error:", e));

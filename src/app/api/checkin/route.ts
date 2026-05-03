@@ -1,4 +1,6 @@
 import { google } from "googleapis";
+import { kv } from "@vercel/kv";
+import { calculateHealthScore, type CheckInRecord } from "@/lib/health-score";
 
 export const runtime = "nodejs";
 
@@ -64,29 +66,47 @@ async function appendToSheet(payload: CheckInPayload, score: number, submittedAt
   });
 }
 
-async function sendDiscordAlert(payload: CheckInPayload, score: number) {
-  const url = process.env.DISCORD_WEBHOOK_CHECKIN_ALERT;
-  if (!url) return;
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      embeds: [{
-        title: "⚠️ LOW CHECK-IN SCORE",
-        color: 0xFF4444,
-        fields: [
-          { name: "Client",      value: payload.fullName,    inline: true },
-          { name: "Score",       value: `${score}/10`,       inline: true },
-          { name: "Program Week", value: payload.programWeek, inline: true },
-          { name: "Struggled with", value: payload.struggled.slice(0, 300) },
-          { name: "Needs from Coach", value: payload.needFromCoach.slice(0, 300) },
-        ],
-        footer: { text: "Reach out ASAP — score 7 or below" },
-        timestamp: new Date().toISOString(),
-      }],
-    }),
-    signal: AbortSignal.timeout(5000),
-  }).catch(e => console.error("Discord checkin alert error:", e));
+async function sendRedAlert(payload: CheckInPayload, score: number) {
+  // Telegram
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId   = process.env.TELEGRAM_EVAN_CHAT_ID;
+  if (botToken && chatId) {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        parse_mode: "Markdown",
+        text: `🔴 *${payload.fullName}* scored *${score}/10*. Reach out today.\n\n_"${payload.couldDoBetter.slice(0, 200)}"_`,
+      }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(e => console.error("Telegram alert error:", e));
+  }
+
+  // Discord fallback
+  const discordUrl = process.env.DISCORD_WEBHOOK_CHECKIN_ALERT;
+  if (discordUrl) {
+    await fetch(discordUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🔴 OFF-TRACK STUDENT — ACTION REQUIRED",
+          color: 0xFF4444,
+          fields: [
+            { name: "Client",       value: payload.fullName,     inline: true },
+            { name: "Score",        value: `${score}/10`,        inline: true },
+            { name: "Program Week", value: payload.programWeek,  inline: true },
+            { name: "Struggled with",    value: payload.struggled.slice(0, 300) },
+            { name: "Needs from Coach",  value: payload.needFromCoach.slice(0, 300) },
+          ],
+          footer: { text: "Score ≤ 5 — call this student today" },
+          timestamp: new Date().toISOString(),
+        }],
+      }),
+      signal: AbortSignal.timeout(5000),
+    }).catch(e => console.error("Discord red alert error:", e));
+  }
 }
 
 async function sendPositiveSms(payload: CheckInPayload, score: number) {
@@ -105,6 +125,34 @@ async function sendPositiveSms(payload: CheckInPayload, score: number) {
     }),
     signal: AbortSignal.timeout(5000),
   }).catch(e => console.error("Positive SMS error:", e));
+}
+
+async function storeCheckinInKV(payload: CheckInPayload, healthScore: number, submittedAt: string) {
+  const studentId = payload.fullName.toLowerCase().replace(/\s+/g, "-");
+  const key = `sns:checkins:${studentId}`;
+  const existing = (await kv.get<CheckInRecord[]>(key)) ?? [];
+
+  const record: CheckInRecord = {
+    studentName:       payload.fullName,
+    programWeek:       payload.programWeek,
+    satisfactionScore: parseInt(payload.satisfactionScore, 10),
+    hoursThisWeek:     payload.hoursWorked,
+    goalsCompleted:    payload.goalsCompleted,
+    couldDoBetter:     payload.couldDoBetter,
+    submittedAt,
+    healthScore,
+  };
+
+  await kv.set(key, [...existing, record]);
+
+  // If orange (6–7): flag for daily brief
+  if (healthScore >= 6 && healthScore <= 7) {
+    const flagKey = "sns:checkins:flagged";
+    const flagged = (await kv.get<string[]>(flagKey)) ?? [];
+    if (!flagged.includes(payload.fullName)) {
+      await kv.set(flagKey, [...flagged, payload.fullName]);
+    }
+  }
 }
 
 export async function POST(req: Request) {
@@ -130,13 +178,15 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid satisfaction score" }, { status: 400 });
   }
 
-  const submittedAt = new Date().toISOString();
+  const healthScore  = calculateHealthScore(payload);
+  const submittedAt  = new Date().toISOString();
 
   await Promise.allSettled([
     appendToSheet(payload, score, submittedAt),
-    score <= 7 ? sendDiscordAlert(payload, score) : Promise.resolve(),
-    score >= 8 ? sendPositiveSms(payload, score) : Promise.resolve(),
+    storeCheckinInKV(payload, healthScore, submittedAt),
+    healthScore <= 5 ? sendRedAlert(payload, healthScore) : Promise.resolve(),
+    healthScore >= 8 ? sendPositiveSms(payload, score)   : Promise.resolve(),
   ]);
 
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, healthScore });
 }

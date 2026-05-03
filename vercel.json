@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/sync",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/agents/daily-brief",
+      "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/agents/student-summary",
+      "schedule": "0 3 * * 1"
     }
   ]
 }

@@ -176,6 +176,7 @@ export async function POST(req: Request) {
     }
 
     // If onboarding form was also submitted, send Discord link via email with a fresh token
+    let discordOAuthUrl: string | undefined;
     try {
       const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
       const APP_URL   = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
@@ -193,9 +194,9 @@ export async function POST(req: Request) {
           scope: "identify guilds.join",
           state: stateToken,
         });
-        const freshOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
-        await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl: freshOAuthUrl });
-        triggerEmail("discord_link", email, name, { discordOAuthUrl: freshOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
+        discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
+        await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl });
+        triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
           .catch(e => console.error("Discord link email error:", e));
       }
     } catch (e) {

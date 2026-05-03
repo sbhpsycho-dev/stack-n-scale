@@ -78,14 +78,34 @@ function fmt$(n: number) { return `$${n.toLocaleString("en-US", { minimumFractio
 
 // ─── Tab components ─────────────────────────────────────────────────────────
 
+interface PayoutMTD {
+  evanTakeHomeMTD: number;
+  totalPayoutsMTD: number;
+  caelumOwedMTD: number;
+  salesTeamOwedMTD: number;
+}
+
 function OverviewTab() {
   const [data, setData] = useState<InsightsData | null>(null);
+  const [payouts, setPayouts] = useState<PayoutMTD | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/insights");
-    if (res.ok) setData(await res.json());
+    const [insRes, moneyRes] = await Promise.all([
+      fetch("/api/staff/insights"),
+      fetch("/api/staff/money"),
+    ]);
+    if (insRes.ok) setData(await insRes.json());
+    if (moneyRes.ok) {
+      const m = await moneyRes.json();
+      setPayouts({
+        evanTakeHomeMTD:  m.mtd?.evanTakeHome  ?? 0,
+        totalPayoutsMTD:  m.mtd?.totalPayouts  ?? 0,
+        caelumOwedMTD:    m.mtd?.caelumOwed    ?? 0,
+        salesTeamOwedMTD: m.mtd?.salesTeamOwed ?? 0,
+      });
+    }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -102,6 +122,14 @@ function OverviewTab() {
         <MetricCard label="Avg Days to Active" value={data.avgDaysToActive ?? 0} suffix=" d" variant="default" index={4} />
         <MetricCard label="Total Notes"       value={data.totalNotes}           variant="black"   index={5} />
       </div>
+      {payouts && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MetricCard label="Evan Take Home MTD"  value={payouts.evanTakeHomeMTD}  prefix="$" variant="green"   index={6} />
+          <MetricCard label="Total Payouts MTD"   value={payouts.totalPayoutsMTD}  prefix="$" variant="black"   index={7} />
+          <MetricCard label="Caelum Owed MTD"     value={payouts.caelumOwedMTD}    prefix="$" variant="orange"  index={8} />
+          <MetricCard label="Sales Team Owed MTD" value={payouts.salesTeamOwedMTD} prefix="$" variant="default" index={9} />
+        </div>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CC title="Student Pipeline Distribution">
           <ResponsiveContainer width="100%" height={220}>

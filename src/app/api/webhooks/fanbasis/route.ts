@@ -1,8 +1,10 @@
 import { kv } from "@vercel/kv";
+import { randomUUID } from "crypto";
 import { createContact } from "@/lib/ghl";
 import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
+import type { Lead } from "@/lib/lead-types";
 
 export const runtime = "nodejs";
 
@@ -101,17 +103,29 @@ export async function POST(req: Request) {
   }
 
   // 3. Store in KV
+  const now = new Date().toISOString();
   const client: CoachingClient = {
     ghlContactId,
     name: rawName,
     email,
     phone: undefined,
     status: "payment_received",
-    createdAt: new Date().toISOString(),
+    createdAt: now,
     idVerification: "pending",
     driveFolder,
   };
   await kv.set(clientKey, client);
+
+  // 3b. Create lead record for follow-up tracking
+  const leadId = randomUUID();
+  const lead: Lead = {
+    id: leadId, name: rawName, email,
+    source: "fanbasis", state: "opted_in",
+    createdAt: now, updatedAt: now, contactHistory: [],
+  };
+  await kv.set(`sns:leads:${leadId}`, lead);
+  const leadIndex = (await kv.get<string[]>("sns:leads:index")) ?? [];
+  await kv.set("sns:leads:index", [leadId, ...leadIndex]);
 
   // 4. Welcome + onboarding email + campaign sequence
   const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
