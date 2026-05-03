@@ -21,15 +21,19 @@ async function readSetterSheet() {
   const auth = getAuth();
   if (!auth) return null;
   const sheets = google.sheets({ version: "v4", auth });
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: "Daily Log!A1:Z",
-    });
-    return res.data.values ?? null;
-  } catch {
-    return null;
+  // Try tabs in priority order — Leaderboard (aggregated query) → Weekly Summary → Daily Log → Sheet1
+  for (const tab of ["Leaderboard", "Weekly Summary", "Daily Log", "Sheet1"]) {
+    try {
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: sheetId,
+        range: `${tab}!A1:Z`,
+      });
+      if (res.data.values && res.data.values.length >= 2) return res.data.values;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 export async function GET() {
@@ -54,24 +58,39 @@ export async function GET() {
     const headers = rows[0].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
     const col = (name: string) => headers.indexOf(name);
 
-    const nameIdx       = col("name") >= 0 ? col("name") : col("settername") >= 0 ? col("settername") : 0;
-    const cashIdx       = col("cashcollected");
-    const demosSetIdx   = col("demosset");
-    const demosShowIdx  = col("demosshowed") >= 0 ? col("demosshowed") : col("showedups");
-    const closedIdx     = col("dealsclosed") >= 0 ? col("dealsclosed") : col("closed");
+    const nameIdx      = col("name") >= 0 ? col("name") : col("settername") >= 0 ? col("settername") : 0;
+    const cashIdx      = col("cashcollected");
+    const demosSetIdx  = col("demosset");
+    const demosShowIdx = col("demosshowed") >= 0 ? col("demosshowed") : col("showedups");
+    const closedIdx    = col("dealsclosed") >= 0 ? col("dealsclosed") : col("closed");
 
-    sheetLeaderboard = rows.slice(1)
-      .map((row: string[]) => {
-        const name        = row[nameIdx]?.trim() ?? "";
-        const cash        = parseFloat((row[cashIdx] ?? "0").replace(/[$,]/g, "")) || 0;
-        const demosSet    = parseFloat(row[demosSetIdx]  ?? "0") || 0;
-        const demosShowed = parseFloat(row[demosShowIdx] ?? "0") || 0;
-        const closed      = parseFloat(row[closedIdx]    ?? "0") || 0;
-        const showRate    = demosSet  > 0 ? parseFloat(((demosShowed / demosSet)  * 100).toFixed(1)) : 0;
-        const closeRate   = demosShowed > 0 ? parseFloat(((closed / demosShowed) * 100).toFixed(1)) : 0;
-        return { name, cashCollected: cash, demosSet, demosShowed, dealsClosed: closed, showRate, closeRate };
-      })
-      .filter(r => r.name);
+    // Aggregate by name — handles both summary rows (one per setter) and daily log rows
+    type Totals = { cashCollected: number; demosSet: number; demosShowed: number; dealsClosed: number };
+    const repMap = new Map<string, Totals>();
+    for (const row of rows.slice(1) as string[][]) {
+      const name = row[nameIdx]?.trim() ?? "";
+      if (!name) continue;
+      const cash        = parseFloat((row[cashIdx]      ?? "0").replace(/[$,]/g, "")) || 0;
+      const demosSet    = parseFloat((row[demosSetIdx]  ?? "0").replace(/[$,]/g, "")) || 0;
+      const demosShowed = parseFloat((row[demosShowIdx] ?? "0").replace(/[$,]/g, "")) || 0;
+      const closed      = parseFloat((row[closedIdx]    ?? "0").replace(/[$,]/g, "")) || 0;
+      const prev        = repMap.get(name) ?? { cashCollected: 0, demosSet: 0, demosShowed: 0, dealsClosed: 0 };
+      repMap.set(name, {
+        cashCollected: prev.cashCollected + cash,
+        demosSet:      prev.demosSet      + demosSet,
+        demosShowed:   prev.demosShowed   + demosShowed,
+        dealsClosed:   prev.dealsClosed   + closed,
+      });
+    }
+    sheetLeaderboard = Array.from(repMap.entries()).map(([name, s]) => ({
+      name,
+      cashCollected: s.cashCollected,
+      demosSet:      s.demosSet,
+      demosShowed:   s.demosShowed,
+      dealsClosed:   s.dealsClosed,
+      showRate:  s.demosSet    > 0 ? parseFloat(((s.demosShowed / s.demosSet)    * 100).toFixed(1)) : 0,
+      closeRate: s.demosShowed > 0 ? parseFloat(((s.dealsClosed / s.demosShowed) * 100).toFixed(1)) : 0,
+    }));
   }
 
   let leaderboard: typeof sheetLeaderboard;
