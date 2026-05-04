@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   // Sync to Google Sheets immediately — fire and forget
   syncDealToSheets(partial).catch(e => console.error("Sheets sync error:", e));
 
-  // Patch admin dashboard MTD totals from deals so admin page stays live
+  // Patch admin dashboard MTD totals + rep leaderboard from deals so admin page stays live
   void (async () => {
     try {
       const now = new Date();
@@ -119,10 +119,38 @@ export async function POST(req: Request) {
       const netRevenueMTD       = parseFloat(mtd.reduce((s, d) => s + d.netAmount, 0).toFixed(2));
       const totalDealsClosedMTD = mtd.length;
 
+      // Rebuild rep leaderboard from all deals (all-time, not just MTD)
+      type RepStats = { cashCollected: number; dealsClosed: number; demosSet: number };
+      const repMap = new Map<string, RepStats>();
+      for (const deal of allDeals) {
+        if (deal.setter) {
+          const r = repMap.get(deal.setter) ?? { cashCollected: 0, dealsClosed: 0, demosSet: 0 };
+          repMap.set(deal.setter, { ...r, demosSet: r.demosSet + 1 });
+        }
+        if (deal.closer) {
+          const r = repMap.get(deal.closer) ?? { cashCollected: 0, dealsClosed: 0, demosSet: 0 };
+          repMap.set(deal.closer, { ...r, dealsClosed: r.dealsClosed + 1, cashCollected: r.cashCollected + deal.grossAmount });
+        }
+      }
+      const leaderboard = Array.from(repMap.entries())
+        .map(([name, s]) => ({
+          name,
+          cashCollected: s.cashCollected,
+          dealsClosed:   s.dealsClosed,
+          demosSet:      s.demosSet,
+          callsMade:     0,
+          callsAnswered: 0,
+          demosShowed:   0,
+          pitched:       0,
+          answerRate:    0,
+        }))
+        .sort((a, b) => b.cashCollected - a.cashCollected);
+
       const dash = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
       await kv.set("sns-dashboard-v1", {
         ...dash,
         dashboard: { ...dash.dashboard, cashCollectedMTD, netRevenueMTD, totalDealsClosedMTD },
+        reps: { ...dash.reps, leaderboard },
       });
     } catch (e) {
       console.error("Dashboard patch error:", e);
