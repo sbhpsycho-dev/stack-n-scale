@@ -10,14 +10,10 @@ const SETTERS = [
 
 const APP_URL = "https://stack-n-scale.vercel.app";
 
-export async function POST(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  const bypassOk = process.env.NEXTAUTH_SECRET && authHeader === `Bearer ${process.env.NEXTAUTH_SECRET}`;
-  if (!bypassOk) {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "admin") {
-      return new Response("Unauthorized", { status: 401 });
-    }
+export async function POST() {
+  const session = await getServerSession(authOptions);
+  if (!session || session.user.role !== "admin") {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   const results = await Promise.allSettled(
