@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 import type { Session } from "next-auth";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts, getWeekId } from "@/lib/payout-calc";
+import { syncDealToSheets } from "@/lib/sheets-sync";
+import { BLANK, type SalesData } from "@/lib/sales-data";
 
 function authGuard(session: Session | null) {
   return !session || (session.user.role !== "admin" && session.user.role !== "staff");
@@ -72,9 +74,9 @@ export async function POST(req: Request) {
     processorFee: Number(body.processorFee),
     netAmount,
     leadSource:   body.leadSource,
+    dmSetter:     body.dmSetter ?? null,
     setter:       body.setter ?? null,
     closer:       body.closer ?? null,
-    dmSetter:     null,
     payouts:      {} as Deal["payouts"],
     payoutStatus: "pending",
     notes:        body.notes ?? "",
@@ -100,6 +102,32 @@ export async function POST(req: Request) {
   if (!weekDealIds.includes(id)) {
     await kv.set(weekKey, { ...week, weekId, dealIds: [...weekDealIds, id], status: "pending" });
   }
+
+  // Sync to Google Sheets immediately — fire and forget
+  syncDealToSheets(partial).catch(e => console.error("Sheets sync error:", e));
+
+  // Patch admin dashboard MTD totals from deals so admin page stays live
+  void (async () => {
+    try {
+      const now = new Date();
+      const monthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      const allIds = (await kv.get<string[]>("sns:deals:index")) ?? [];
+      const allDeals = (await Promise.all(allIds.map(i => kv.get<Deal>(`sns:deals:${i}`)))).filter((d): d is Deal => d !== null);
+      const mtd = allDeals.filter(d => d.date >= monthStr);
+
+      const cashCollectedMTD    = parseFloat(mtd.reduce((s, d) => s + d.grossAmount, 0).toFixed(2));
+      const netRevenueMTD       = parseFloat(mtd.reduce((s, d) => s + d.netAmount, 0).toFixed(2));
+      const totalDealsClosedMTD = mtd.length;
+
+      const dash = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
+      await kv.set("sns-dashboard-v1", {
+        ...dash,
+        dashboard: { ...dash.dashboard, cashCollectedMTD, netRevenueMTD, totalDealsClosedMTD },
+      });
+    } catch (e) {
+      console.error("Dashboard patch error:", e);
+    }
+  })();
 
   return Response.json({ deal: partial }, { status: 201 });
 }
