@@ -28,7 +28,7 @@ export const authOptions: NextAuthOptions = {
           if (staffRegistry) {
             const staff = staffRegistry.find((s) => verifyPassword(pw, s.password));
             if (staff) {
-              return { id: staff.id, name: staff.name, role: "staff", clientId: staff.id };
+              return { id: staff.id, name: staff.name, role: "staff", clientId: staff.id, sheetId: staff.sheetId ?? null };
             }
           }
 
@@ -59,14 +59,16 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role: "admin" | "client" }).role;
+        token.role     = (user as { role: "admin" | "client" | "staff" }).role;
         token.clientId = (user as { clientId: string | null }).clientId;
+        token.sheetId  = (user as { sheetId?: string | null }).sheetId ?? null;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.role = token.role;
+      session.user.role     = token.role;
       session.user.clientId = token.clientId;
+      session.user.sheetId  = token.sheetId ?? null;
       return session;
     },
   },
