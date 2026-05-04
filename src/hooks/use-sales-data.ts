@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { type SalesData, SEED } from "@/lib/sales-data";
+import { type SalesData, BLANK } from "@/lib/sales-data";
 
 function lsKey(clientId: string | null) {
   return `sns-dashboard-${clientId ?? "pending"}`;
 }
 
 function loadLocal(clientId: string | null): SalesData {
-  if (typeof window === "undefined") return SEED;
+  if (typeof window === "undefined") return BLANK;
   try {
     const raw = localStorage.getItem(lsKey(clientId));
-    return raw ? (JSON.parse(raw) as SalesData) : SEED;
+    return raw ? (JSON.parse(raw) as SalesData) : BLANK;
   } catch {
-    return SEED;
+    return BLANK;
   }
 }
 
@@ -28,26 +28,10 @@ export function useSalesData(clientId: string | null) {
       fetch("/api/data")
         .then((r) => r.json())
         .then((remote: SalesData) => {
-          const local = loadLocal(clientId);
-          const remoteIsBlank = remote.dashboard.cashCollectedMTD === SEED.dashboard.cashCollectedMTD
-            && remote.dashboard.leadsThisMonth === SEED.dashboard.leadsThisMonth;
-          const localHasData = local.dashboard.cashCollectedMTD !== SEED.dashboard.cashCollectedMTD
-            || local.dashboard.leadsThisMonth !== SEED.dashboard.leadsThisMonth;
-
-          if (remoteIsBlank && localHasData) {
-            // KV has no real data but localStorage does — push local up to KV
-            fetch("/api/data", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(local),
-            }).catch(() => {});
-            setData(local);
-          } else {
-            setData(remote);
-            try {
-              localStorage.setItem(lsKey(clientId), JSON.stringify(remote));
-            } catch { /* ignore */ }
-          }
+          setData(remote);
+          try {
+            localStorage.setItem(lsKey(clientId), JSON.stringify(remote));
+          } catch { /* ignore */ }
         })
         .catch(() => { /* stay on local cache */ })
         .finally(() => { if (isInitial) setLoading(false); });
@@ -83,7 +67,7 @@ export function useSalesData(clientId: string | null) {
     [clientId],
   );
 
-  const reset = useCallback(() => update(SEED), [update]);
+  const reset = useCallback(() => update(BLANK), [update]);
 
   return { data, update, reset, loading };
 }
