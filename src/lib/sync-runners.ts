@@ -1,14 +1,14 @@
 import { kv } from "@vercel/kv";
-import { SEED, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint, type NameAmount } from "@/lib/sales-data";
+import { BLANK, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint, type NameAmount } from "@/lib/sales-data";
 import { getIntegrations, saveIntegrations } from "@/lib/integrations";
 
 const clientKey = (id: string) => id === "admin" ? "sns-dashboard-v1" : `sns-client-${id}`;
 
 async function getClientData(clientId: string): Promise<SalesData> {
   try {
-    return (await kv.get<SalesData>(clientKey(clientId))) ?? SEED;
+    return (await kv.get<SalesData>(clientKey(clientId))) ?? BLANK;
   } catch {
-    return SEED;
+    return BLANK;
   }
 }
 

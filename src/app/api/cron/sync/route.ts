@@ -1,6 +1,6 @@
 import { kv } from "@vercel/kv";
 import { syncAll } from "@/lib/sync-runners";
-import { SEED, type SalesData } from "@/lib/sales-data";
+import { BLANK, type SalesData } from "@/lib/sales-data";
 
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const adminData = (await kv.get<SalesData>("sns-dashboard-v1")) ?? SEED;
+    const adminData = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
     const registry = adminData.clientRegistry ?? [];
 
     await Promise.allSettled([
