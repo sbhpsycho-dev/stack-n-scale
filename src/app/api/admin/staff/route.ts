@@ -59,23 +59,26 @@ export async function DELETE(req: Request) {
   return Response.json({ ok: true });
 }
 
-// Admin resets a staff member's password
+// Admin updates a staff member — password reset and/or sheetId
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { id, password } = await req.json() as { id: string; password: string };
-  if (!id || !password?.trim()) {
-    return Response.json({ ok: false, error: "id and password required" }, { status: 400 });
+  const { id, password, sheetId } = await req.json() as { id: string; password?: string; sheetId?: string };
+  if (!id) return Response.json({ ok: false, error: "id required" }, { status: 400 });
+  if (!password?.trim() && sheetId === undefined) {
+    return Response.json({ ok: false, error: "password or sheetId required" }, { status: 400 });
   }
 
   const existing = (await kv.get<StaffMeta[]>(STAFF_KV_KEY)) ?? [];
-  const member = existing.find((s) => s.id === id);
-  if (!member) return Response.json({ ok: false, error: "Staff member not found" }, { status: 404 });
+  const idx = existing.findIndex((s) => s.id === id);
+  if (idx === -1) return Response.json({ ok: false, error: "Staff member not found" }, { status: 404 });
 
-  member.password = hashPassword(password.trim());
+  if (password?.trim()) existing[idx].password = hashPassword(password.trim());
+  if (sheetId !== undefined) existing[idx].sheetId = sheetId.trim() || undefined;
+
   await kv.set(STAFF_KV_KEY, existing);
   return Response.json({ ok: true });
 }
