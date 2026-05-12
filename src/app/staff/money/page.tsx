@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PayoutSplitChart } from "@/components/charts/payout-charts";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Loader2, RefreshCw } from "lucide-react";
+import { toast, toastError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,29 +65,82 @@ function CC({ title, children }: { title: string; children: React.ReactNode }) {
 export default function MoneyPage() {
   const [data, setData] = useState<MoneyData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [approving, setApproving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/money");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/money");
+      if (res.ok) {
+        setData(await res.json());
+      } else {
+        setError("Failed to load financial data.");
+      }
+    } catch {
+      setError("Network error. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function approveWeek() {
     setApproving(true);
-    await fetch("/api/payouts/approve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    setApproving(false);
+    try {
+      const res = await fetch("/api/payouts/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        toast("Payouts approved", { description: "All reps have been notified." });
+      } else {
+        toastError("Failed to approve payouts", "Please try again or contact support.");
+      }
+    } catch {
+      toastError("Network error", "Payouts could not be approved.");
+    } finally {
+      setApproving(false);
+      setConfirmOpen(false);
+    }
   }
 
   if (loading && !data) {
-    return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-orange-500" /></div>;
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Money Clarity</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">What did you actually make? Real-time breakdown.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-muted/40 animate-pulse" />
+          ))}
+        </div>
+        <div className="h-32 rounded-xl bg-muted/40 animate-pulse" />
+        <div className="h-48 rounded-xl bg-muted/40 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <button
+          onClick={load}
+          className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   const w = data?.week;
@@ -102,95 +157,109 @@ export default function MoneyPage() {
   ] : [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Money Clarity</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">What did you actually make? Real-time breakdown.</p>
-        </div>
-        <button
-          onClick={load}
-          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-      </div>
+    <>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Approve this week's payouts?"
+        description="This will mark all pending deals as approved and notify reps. This action cannot be undone."
+        confirmLabel="Approve Payouts"
+        confirmVariant="primary"
+        loading={approving}
+        onConfirm={approveWeek}
+        onCancel={() => setConfirmOpen(false)}
+      />
 
-      {/* Section 1 — This Week */}
-      <CC title="This Week">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-          <MetricCard label="Gross"          value={w?.gross ?? 0}        prefix="$" variant="orange"  index={0} />
-          <MetricCard label="Payouts Out"    value={w?.totalPayouts ?? 0} prefix="$" variant="black"   index={1} />
-          <MetricCard label="Evan Net"       value={w?.evanTakeHome ?? 0} prefix="$" variant="green"   index={2} />
-          <MetricCard label="Deals"          value={w?.dealCount ?? 0}               variant="default" index={3} />
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Money Clarity</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">What did you actually make? Real-time breakdown.</p>
+          </div>
+          <button
+            onClick={load}
+            aria-label="Refresh data"
+            className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
         </div>
-        <button
-          onClick={approveWeek}
-          disabled={approving}
-          className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {approving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Approve This Week&apos;s Payouts
-        </button>
-      </CC>
 
-      {/* Section 2 — MTD Breakdown */}
-      <CC title="Month to Date">
-        <div className="space-y-1">
-          {mtdRows.map(([label, val], i) => {
-            const isEvan    = label === "Evan Take Home";
-            const isGross   = label === "Gross";
-            const isFee     = label === "Processor Fees";
-            return (
-              <div
-                key={label}
-                className={`flex justify-between items-center py-1.5 text-sm ${
-                  isEvan ? "font-bold text-green-400 border-t border-border mt-1 pt-2" :
-                  isFee  ? "text-red-400" : isGross ? "font-semibold text-orange-400" : ""
-                }`}
-              >
-                <span className={isEvan ? "" : "text-muted-foreground"}>{label}</span>
-                <span>{isFee ? `-${fmt$(val)}` : fmt$(val)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </CC>
-
-      {/* Section 3 — Pie chart */}
-      {data?.pie && data.pie.length > 0 && (
-        <CC title="Where the Money Goes (MTD)">
-          <PayoutSplitChart data={data.pie} />
+        {/* Section 1 — This Week */}
+        <CC title="This Week">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <MetricCard label="Gross"          value={w?.gross ?? 0}        prefix="$" variant="orange"  index={0} />
+            <MetricCard label="Payouts Out"    value={w?.totalPayouts ?? 0} prefix="$" variant="black"   index={1} />
+            <MetricCard label="Evan Net"       value={w?.evanTakeHome ?? 0} prefix="$" variant="green"   index={2} />
+            <MetricCard label="Deals"          value={w?.dealCount ?? 0}               variant="default" index={3} />
+          </div>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={approving}
+            className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {approving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Approve This Week&apos;s Payouts
+          </button>
         </CC>
-      )}
 
-      {/* Section 4 — Monthly History */}
-      {data?.monthlyHistory && data.monthlyHistory.length > 0 && (
-        <CC title="Monthly History (Last 12 Months)">
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  {["Month", "Gross", "Fees", "Payouts", "Evan Net"].map(h => (
-                    <th key={h} className="text-left px-3 py-2 font-semibold text-muted-foreground">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...data.monthlyHistory].reverse().map((row, i) => (
-                  <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-medium">{fmtMonth(row.month)}</td>
-                    <td className="px-3 py-2 text-orange-400">{fmt$(row.gross)}</td>
-                    <td className="px-3 py-2 text-red-400">-{fmt$(row.fees)}</td>
-                    <td className="px-3 py-2">{fmt$(row.totalPayouts)}</td>
-                    <td className="px-3 py-2 text-green-400 font-semibold">{fmt$(row.evanTakeHome)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Section 2 — MTD Breakdown */}
+        <CC title="Month to Date">
+          <div className="space-y-1">
+            {mtdRows.map(([label, val]) => {
+              const isEvan    = label === "Evan Take Home";
+              const isGross   = label === "Gross";
+              const isFee     = label === "Processor Fees";
+              return (
+                <div
+                  key={label}
+                  className={`flex justify-between items-center py-1.5 text-sm ${
+                    isEvan ? "font-bold text-green-400 border-t border-border mt-1 pt-2" :
+                    isFee  ? "text-red-400" : isGross ? "font-semibold text-orange-400" : ""
+                  }`}
+                >
+                  <span className={isEvan ? "" : "text-muted-foreground"}>{label}</span>
+                  <span>{isFee ? `-${fmt$(val)}` : fmt$(val)}</span>
+                </div>
+              );
+            })}
           </div>
         </CC>
-      )}
-    </div>
+
+        {/* Section 3 — Pie chart */}
+        {data?.pie && data.pie.length > 0 && (
+          <CC title="Where the Money Goes (MTD)">
+            <PayoutSplitChart data={data.pie} />
+          </CC>
+        )}
+
+        {/* Section 4 — Monthly History */}
+        {data?.monthlyHistory && data.monthlyHistory.length > 0 && (
+          <CC title="Monthly History (Last 12 Months)">
+            <div className="rounded-xl border border-border overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr>
+                    {["Month", "Gross", "Fees", "Payouts", "Evan Net"].map(h => (
+                      <th key={h} className="text-left px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...data.monthlyHistory].reverse().map((row, i) => (
+                    <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2 font-medium whitespace-nowrap">{fmtMonth(row.month)}</td>
+                      <td className="px-3 py-2 text-orange-400">{fmt$(row.gross)}</td>
+                      <td className="px-3 py-2 text-red-400">-{fmt$(row.fees)}</td>
+                      <td className="px-3 py-2">{fmt$(row.totalPayouts)}</td>
+                      <td className="px-3 py-2 text-green-400 font-semibold">{fmt$(row.evanTakeHome)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CC>
+        )}
+      </div>
+    </>
   );
 }

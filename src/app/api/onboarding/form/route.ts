@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
-import { appendToSheet, setupClientFolder, uploadTextToDrive } from "@/lib/drive";
+import { appendToSheet, getOrCreateDriveFolder, uploadTextToDrive } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -10,6 +10,7 @@ const DISCORD_API  = "https://discord.com/api/v10";
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN ?? "";
 const GUILD_ID     = process.env.DISCORD_GUILD_ID ?? "";
 const CAELUM_ID    = process.env.DISCORD_CAELUM_USER_ID ?? "";
+const EVAN_ID      = process.env.EVAN_DISCORD_USER_ID ?? "";
 const ADMIN2_ID    = process.env.DISCORD_ADMIN2_USER_ID ?? "";
 const GENERAL_CH   = process.env.DISCORD_GENERAL_CHANNEL_ID ?? "";
 const CLIENT_ID    = process.env.DISCORD_CLIENT_ID ?? "";
@@ -133,57 +134,37 @@ export async function POST(req: Request) {
     ].join("\n");
     const formFile = Buffer.from(formText, "utf8").toString("base64");
 
-    // 4. Send form received confirmation email + Drive doc trigger (non-blocking)
-    // If Drive folder exists, fire immediately; otherwise create it first then fire
-    if (existing?.driveFolder) {
-      const emailPayload = {
-        onboardingFolderId: existing.driveFolder.onboardingFolderId,
-        notesFolderId: existing.driveFolder.notesFolderId,
-        formData,
-      };
-      if (existing.driveFolder.onboardingFolderId) {
-        uploadTextToDrive(existing.driveFolder.onboardingFolderId, "Onboarding Form.txt", formText)
-          .catch(e => console.error("Drive upload error:", e));
-      }
-      triggerEmail("form_received", email, name, emailPayload)
-        .catch(e => console.error("Form received email error:", e));
-      triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
-        .catch(e => console.error("Drive docs error:", e));
-    } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-      after(async () => {
-        try {
-          const folders = await setupClientFolder(existing?.name || name);
-          const driveFolder = {
-            url: folders.folderUrl,
-            id: folders.folderId,
-            idVerificationFolderId: folders.idVerificationFolderId,
-            onboardingFolderId: folders.onboardingFolderId,
-            notesFolderId: folders.notesFolderId,
-            docs: folders.docs,
-          };
-          const updated = await kv.get<CoachingClient>(clientKey);
-          if (updated) await kv.set(clientKey, { ...updated, driveFolder });
-          const emailPayload = {
-            onboardingFolderId: folders.onboardingFolderId,
-            notesFolderId: folders.notesFolderId,
-            formData,
-          };
-          await uploadTextToDrive(folders.onboardingFolderId, "Onboarding Form.txt", formText)
-            .catch(e => console.error("Drive upload error:", e));
-          triggerEmail("form_received", email, name, emailPayload)
-            .catch(e => console.error("Form received email error:", e));
-          triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
-            .catch(e => console.error("Drive docs error:", e));
-        } catch (e) {
-          console.error("Drive folder setup error (form):", e);
-          triggerEmail("form_received", email, name, { formData })
-            .catch(err => console.error("Form received email error:", err));
+    // 4. Send form received confirmation email + Drive doc upload (non-blocking via after).
+    // Always use after() so the upload survives past the response — re-reads KV to pick up
+    // any driveFolder the ID route may have created between our initial read and now.
+    after(async () => {
+      try {
+        const latest = await kv.get<CoachingClient>(clientKey);
+        let onboardingFolderId = latest?.driveFolder?.onboardingFolderId;
+        let notesFolderId = latest?.driveFolder?.notesFolderId;
+
+        if (!onboardingFolderId) {
+          const folder = await getOrCreateDriveFolder(clientKey, latest?.name || name);
+          onboardingFolderId = folder?.onboardingFolderId;
+          notesFolderId = folder?.notesFolderId;
         }
-      });
-    } else {
-      triggerEmail("form_received", email, name, { formData })
-        .catch(e => console.error("Form received email error:", e));
-    }
+
+        const emailPayload = { onboardingFolderId, notesFolderId, formData };
+
+        if (onboardingFolderId) {
+          await uploadTextToDrive(onboardingFolderId, "Onboarding Form.txt", formText)
+            .catch(e => console.error("Drive upload error:", e));
+        }
+        triggerEmail("form_received", email, name, emailPayload)
+          .catch(e => console.error("Form received email error:", e));
+        triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
+          .catch(e => console.error("Drive docs error:", e));
+      } catch (e) {
+        console.error("Drive folder setup error (form):", e);
+        triggerEmail("form_received", email, name, { formData })
+          .catch(err => console.error("Form received email error:", err));
+      }
+    });
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth
     let discordOAuthUrl: string | null = null;
@@ -199,6 +180,7 @@ export async function POST(req: Request) {
           { id: CAELUM_ID,  type: 1, allow: "3072" },     // Caelum: VIEW + SEND
           { id: botUser.id, type: 1, allow: "3072" },     // bot: VIEW + SEND
           ...(ADMIN2_ID ? [{ id: ADMIN2_ID, type: 1, allow: "3072" }] : []),
+          ...(EVAN_ID   ? [{ id: EVAN_ID,   type: 1, allow: "3072" }] : []),
         ];
         const channel = await discordRequest(`/guilds/${GUILD_ID}/channels`, "POST", {
           name: channelName,

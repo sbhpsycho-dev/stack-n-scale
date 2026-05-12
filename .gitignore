@@ -43,3 +43,5 @@ next-env.d.ts
 .vercel
 .env*.local
 .gstack/
+
+sa_key_raw.pem

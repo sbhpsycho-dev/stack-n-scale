@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [integrations, setIntegrations] = useState<ClientIntegrations>({});
   const [syncingSource, setSyncingSource] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [lastSyncedBySource, setLastSyncedBySource] = useState<Record<string, string>>({});
 
   // Dashboard config (business type + widget visibility)
   const [config, setConfig] = useState<DashboardConfig>(DEFAULT_CONFIG);
@@ -160,7 +161,9 @@ export default function Dashboard() {
     setSyncingSource(source);
     try {
       await fetch(`/api/sync/${source}`, { method: "POST" });
-      setLastSynced(new Date().toISOString());
+      const now = new Date().toISOString();
+      setLastSynced(now);
+      setLastSyncedBySource(prev => ({ ...prev, [source]: now }));
     } finally {
       setSyncingSource(null);
     }
@@ -366,11 +369,18 @@ export default function Dashboard() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="bg-muted border border-border h-9 mb-6 flex-wrap">
             {config.tabs.dashboard  && <TabsTrigger value="dashboard"    className="text-xs px-4">Dashboard</TabsTrigger>}
+            {!isAdmin && (
+              <TabsTrigger value="my-performance" className="text-xs px-4 relative">
+                <BarChart2 className="h-3 w-3 mr-1" />My Performance
+                {!replog.some(e => e.date === todayStr) && (
+                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                )}
+              </TabsTrigger>
+            )}
             {config.tabs.pipeline   && <TabsTrigger value="pipeline"     className="text-xs px-4">Pipeline</TabsTrigger>}
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
             {config.tabs.resources  && <TabsTrigger value="resources"    className="text-xs px-4">Resources</TabsTrigger>}
-            {!isAdmin && <TabsTrigger value="my-performance" className="text-xs px-4"><BarChart2 className="h-3 w-3 mr-1" />My Performance</TabsTrigger>}
             {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
             <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
             {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
@@ -395,7 +405,7 @@ export default function Dashboard() {
                     <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-semibold text-orange-400">No data yet</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Connect your integrations to start seeing live metrics.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Connect integrations to pull live data automatically, or use <strong>Edit Data</strong> to enter numbers manually.</p>
                       </div>
                       <Button size="sm" variant="ghost" onClick={() => setTab("integrations")}
                         className="text-xs h-7 shrink-0 text-orange-400 hover:text-orange-300 border border-orange-500/30">
@@ -1157,6 +1167,21 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground mt-0.5">Log your daily numbers and track your personal stats over time.</p>
                   </div>
 
+                  {/* Weekly check-in CTA */}
+                  <Card className="bg-card border-orange-500/20">
+                    <CardContent className="px-4 py-3 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Weekly Check-In</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Takes 3–5 min. Reflect on your week and share it with your coach.</p>
+                      </div>
+                      <Link href="/checkin">
+                        <Button size="sm" className="h-8 text-xs shrink-0 bg-orange-500 hover:bg-orange-600 text-white">
+                          Submit Check-In →
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+
                   {/* Daily entry form */}
                   <Card className="bg-card border-border">
                     <CardHeader className="pb-2 pt-4 px-4">
@@ -1349,6 +1374,11 @@ export default function Dashboard() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground ml-6">{labels[source].desc}</p>
+                          {connected && lastSyncedBySource[source] && (
+                            <p className="text-[10px] text-muted-foreground/60 ml-6 mt-1">
+                              Synced {new Date(lastSyncedBySource[source]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          )}
                           {!connected && (
                             <p className="text-xs text-orange-400/70 mt-2 ml-6 italic">
                               Go to <button onClick={() => router.push("/setup")} className="underline hover:text-orange-400">Setup</button> to connect this integration.

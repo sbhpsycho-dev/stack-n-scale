@@ -12,6 +12,7 @@ interface Props {
   onBack: () => void;
   onContinue: () => void;
   onSkip: () => void;
+  continueLabel?: string;
 }
 
 const BLANK_REP: Rep = { name: "", callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, dealsClosed: 0, cashCollected: 0, answerRate: 0 };
@@ -28,7 +29,7 @@ function numInput(val: number, onChange: (v: number) => void) {
   );
 }
 
-export function StepReps({ draft, onChange, onBack, onContinue, onSkip }: Props) {
+export function StepReps({ draft, onChange, onBack, onContinue, onSkip, continueLabel }: Props) {
   const leaderboard = draft.reps.leaderboard;
 
   function updateRep(i: number, patch: Partial<Rep>) {
@@ -119,7 +120,7 @@ export function StepReps({ draft, onChange, onBack, onContinue, onSkip }: Props)
         </div>
       )}
 
-      <StepNav step={4} totalSteps={6} onBack={onBack} onContinue={onContinue} onSkip={onSkip} />
+      <StepNav step={4} totalSteps={6} onBack={onBack} onContinue={onContinue} onSkip={onSkip} continueLabel={continueLabel} />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
-import { appendToSheet, setupClientFolder } from "@/lib/drive";
+import { appendToSheet, getOrCreateDriveFolder, uploadFileToDrive } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 import { sendDiscordDM } from "@/lib/discord";
 
@@ -76,6 +76,15 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: "Invalid image file. Please upload a real photo." }, { status: 400, headers: CORS_HEADERS });
     }
 
+    // Buffer files once here — reused for both Vercel Blob and Drive uploads so
+    // we don't risk reading a consumed/GC'd File object inside after()
+    const [idFrontBuf, selfieBuf] = await Promise.all([
+      idFront.arrayBuffer().then(b => Buffer.from(b)),
+      selfie.arrayBuffer().then(b => Buffer.from(b)),
+    ]);
+    const sigBase64 = signature ? signature.replace(/^data:image\/\w+;base64,/, "") : null;
+    const sigBuf = sigBase64 ? Buffer.from(sigBase64, "base64") : null;
+
     // Update KV — mark idVerification as submitted
     const clientKey = `sns:coaching:client:${email}`;
     let existing  = await kv.get<CoachingClient>(clientKey);
@@ -107,58 +116,57 @@ export async function POST(req: Request) {
 
     // Upload ID files to Vercel Blob — public so Make.com can fetch them for Drive upload
     const slug = email.replace(/[^a-z0-9]/gi, "-");
-    const sigBase64 = signature ? signature.replace(/^data:image\/\w+;base64,/, "") : null;
     const [idFrontBlob, selfieBlob, sigBlob] = await Promise.all([
-      put(`id-verification/${slug}/id-front`, await idFront.arrayBuffer(), { access: "public", contentType: idFront.type || "image/jpeg" })
+      put(`id-verification/${slug}/id-front`, idFrontBuf, { access: "public", contentType: idFront.type || "image/jpeg" })
         .catch(e => { console.error("Blob upload error (id-front):", e); return null; }),
-      put(`id-verification/${slug}/selfie`, await selfie.arrayBuffer(), { access: "public", contentType: selfie.type || "image/jpeg" })
+      put(`id-verification/${slug}/selfie`, selfieBuf, { access: "public", contentType: selfie.type || "image/jpeg" })
         .catch(e => { console.error("Blob upload error (selfie):", e); return null; }),
-      sigBase64
-        ? put(`id-verification/${slug}/signature`, Buffer.from(sigBase64, "base64"), { access: "public", contentType: "image/png" })
+      sigBuf
+        ? put(`id-verification/${slug}/signature`, sigBuf, { access: "public", contentType: "image/png" })
             .catch(e => { console.error("Blob upload error (signature):", e); return null; })
         : Promise.resolve(null),
     ]);
-    const idFrontUrl  = idFrontBlob?.url;
-    const selfieUrl   = selfieBlob?.url;
+    const idFrontUrl   = idFrontBlob?.url;
+    const selfieUrl    = selfieBlob?.url;
     const signatureUrl = sigBlob?.url;
 
-    // Send ID received confirmation email + Drive doc trigger (non-blocking)
-    if (existing?.driveFolder?.idVerificationFolderId) {
-      const idVerificationFolderId = existing.driveFolder.idVerificationFolderId;
-      triggerEmail("id_received", email, name, { idVerificationFolderId })
-        .catch(e => console.error("ID received email error:", e));
-      triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
-        .catch(e => console.error("Drive docs error:", e));
-    } else if (process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
-      after(async () => {
-        try {
-          const folders = await setupClientFolder(existing?.name || name);
-          const driveFolder = {
-            url: folders.folderUrl,
-            id: folders.folderId,
-            idVerificationFolderId: folders.idVerificationFolderId,
-            onboardingFolderId: folders.onboardingFolderId,
-            notesFolderId: folders.notesFolderId,
-            docs: folders.docs,
-          };
-          const updated = await kv.get<CoachingClient>(clientKey);
-          if (updated) await kv.set(clientKey, { ...updated, driveFolder });
-          triggerEmail("id_received", email, name, { idVerificationFolderId: folders.idVerificationFolderId })
-            .catch(e => console.error("ID received email error:", e));
-          triggerDriveDocs("id_received", email, name, {
-            idVerificationFolderId: folders.idVerificationFolderId,
-            idFrontUrl, selfieUrl, signatureUrl,
-          }).catch(e => console.error("Drive docs error:", e));
-        } catch (e) {
-          console.error("Drive folder setup error (id-submit):", e);
-          triggerEmail("id_received", email, name, {})
-            .catch(err => console.error("ID received email error:", err));
+    // Direct Drive upload + email (non-blocking). Re-reads KV to get latest driveFolder state
+    // (the form route may have created/updated it between our initial read and now).
+    after(async () => {
+      try {
+        const latest = await kv.get<CoachingClient>(clientKey);
+        let idVerificationFolderId = latest?.driveFolder?.idVerificationFolderId;
+
+        if (!idVerificationFolderId) {
+          const folder = await getOrCreateDriveFolder(clientKey, latest?.name || name);
+          idVerificationFolderId = folder?.idVerificationFolderId;
         }
-      });
-    } else {
-      triggerEmail("id_received", email, name, {})
-        .catch(e => console.error("ID received email error:", e));
-    }
+
+        if (idVerificationFolderId) {
+          const mimeExt: Record<string, string> = { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp", heic: "heic" };
+          const ext = (mime: string) => mimeExt[mime.split("/")[1]] ?? mime.split("/")[1] ?? "jpg";
+          await Promise.all([
+            uploadFileToDrive(idVerificationFolderId, `ID Front — ${name}.${ext(idFront.type)}`, idFront.type, idFrontBuf)
+              .catch(e => console.error("Drive upload error (id-front):", e)),
+            uploadFileToDrive(idVerificationFolderId, `Selfie — ${name}.${ext(selfie.type)}`, selfie.type, selfieBuf)
+              .catch(e => console.error("Drive upload error (selfie):", e)),
+            sigBuf
+              ? uploadFileToDrive(idVerificationFolderId, `Signature — ${name}.png`, "image/png", sigBuf)
+                  .catch(e => console.error("Drive upload error (signature):", e))
+              : Promise.resolve(),
+          ]);
+        }
+
+        triggerEmail("id_received", email, name, { idVerificationFolderId })
+          .catch(e => console.error("ID received email error:", e));
+        triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
+          .catch(e => console.error("Drive docs webhook error:", e));
+      } catch (e) {
+        console.error("ID Drive upload error:", e);
+        triggerEmail("id_received", email, name, {})
+          .catch(err => console.error("ID received email error:", err));
+      }
+    });
 
     // If onboarding form was also submitted, send Discord link via email with a fresh token
     let discordOAuthUrl: string | undefined;
@@ -183,6 +191,14 @@ export async function POST(req: Request) {
         await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl });
         triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
           .catch(e => console.error("Discord link email error:", e));
+        fetch(`${DISCORD_API}/channels/${discordRecord.channelId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: `✅ **${name}** — onboarding form + ID both received. Standing by for review.`,
+          }),
+          signal: AbortSignal.timeout(8000),
+        }).catch(e => console.error("Both-complete channel msg error:", e));
       }
     } catch (e) {
       console.error("Both-complete check error:", e);
@@ -217,7 +233,7 @@ export async function POST(req: Request) {
           `**Email:** ${email}`,
           `**Consent:** Yes`,
           existing?.driveFolder?.url ? `📁 Drive: ${existing.driveFolder.url}` : "",
-          `\nReview → /admin/onboarding`,
+          `\nReview → ${process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app"}/admin/onboarding`,
         ].filter(Boolean).join("\n");
         const adminIds = [
           process.env.DISCORD_CAELUM_USER_ID,

@@ -1,5 +1,9 @@
 import { google } from "googleapis";
 import { Readable } from "stream";
+import { kv } from "@vercel/kv";
+import type { CoachingClient } from "@/lib/coaching-types";
+
+type DriveFolder = NonNullable<CoachingClient["driveFolder"]>;
 
 function getAuth() {
   const client_email = process.env.GOOGLE_SA_EMAIL;
@@ -63,18 +67,31 @@ async function listTemplates(): Promise<{ id: string; name: string }[]> {
   );
 }
 
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseMs = 600): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (e) {
+      last = e;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, baseMs * 2 ** i));
+    }
+  }
+  throw last;
+}
+
 export async function uploadTextToDrive(folderId: string, fileName: string, content: string): Promise<string> {
-  const d = drive();
-  const res = await d.files.create({
-    requestBody: {
-      name: fileName,
-      mimeType: "application/vnd.google-apps.document",
-      parents: [folderId],
-    },
-    media: { mimeType: "text/plain", body: Readable.from([content]) },
-    fields: "id",
+  return withRetry(async () => {
+    const d = drive();
+    const res = await d.files.create({
+      requestBody: {
+        name: fileName,
+        mimeType: "application/vnd.google-apps.document",
+        parents: [folderId],
+      },
+      media: { mimeType: "text/plain", body: Readable.from([content]) },
+      fields: "id",
+    });
+    return res.data.id!;
   });
-  return res.data.id!;
 }
 
 export async function uploadFileToDrive(
@@ -83,13 +100,16 @@ export async function uploadFileToDrive(
   mimeType: string,
   buffer: ArrayBuffer | Buffer
 ): Promise<string> {
-  const d = drive();
-  const res = await d.files.create({
-    requestBody: { name: fileName, parents: [folderId] },
-    media: { mimeType, body: Readable.from(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)) },
-    fields: "id",
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  return withRetry(async () => {
+    const d = drive();
+    const res = await d.files.create({
+      requestBody: { name: fileName, parents: [folderId] },
+      media: { mimeType, body: Readable.from(buf) },
+      fields: "id",
+    });
+    return res.data.id!;
   });
-  return res.data.id!;
 }
 
 export type ClientDocs = {
@@ -109,6 +129,54 @@ export async function appendToSheet(spreadsheetId: string, row: string[], range 
     valueInputOption: "RAW",
     requestBody: { values: [row] },
   });
+}
+
+// Atomically get or create a client's Drive folder, preventing duplicate creation
+// under concurrent form + ID submissions. Uses a KV setnx lock.
+export async function getOrCreateDriveFolder(
+  clientKey: string,
+  clientName: string
+): Promise<DriveFolder | null> {
+  if (!process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) return null;
+
+  const fresh = await kv.get<CoachingClient>(clientKey);
+  if (fresh?.driveFolder) return fresh.driveFolder;
+  const cached = await kv.get<DriveFolder>(`sns:folder-cache:${clientKey}`);
+  if (cached) return cached;
+
+  const lockKey = `sns:folder-lock:${clientKey}`;
+  const locked = await kv.set(lockKey, "1", { nx: true, ex: 60 });
+  if (!locked) {
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const polled = await kv.get<CoachingClient>(clientKey);
+      if (polled?.driveFolder) return polled.driveFolder;
+    }
+    return null;
+  }
+
+  try {
+    const folders = await setupClientFolder(clientName);
+    const driveFolder: DriveFolder = {
+      url: folders.folderUrl,
+      id: folders.folderId,
+      idVerificationFolderId: folders.idVerificationFolderId,
+      onboardingFolderId: folders.onboardingFolderId,
+      notesFolderId: folders.notesFolderId,
+      docs: folders.docs,
+    };
+    const client = await kv.get<CoachingClient>(clientKey);
+    if (client) {
+      await kv.set(clientKey, { ...client, driveFolder });
+    } else {
+      // Client record not yet created (e.g. GHL webhook still pending) — cache folder
+      // separately so it's found next time without creating a duplicate.
+      await kv.set(`sns:folder-cache:${clientKey}`, driveFolder, { ex: 60 * 60 * 24 * 7 });
+    }
+    return driveFolder;
+  } finally {
+    await kv.del(lockKey);
+  }
 }
 
 export async function setupClientFolder(clientName: string): Promise<ClientDocs> {

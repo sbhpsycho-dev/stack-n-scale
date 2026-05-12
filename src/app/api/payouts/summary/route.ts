@@ -33,6 +33,7 @@ export async function GET(req: Request) {
     (acc, d) => ({
       caelum:       acc.caelum       + d.payouts.caelum,
       mediaBuyer:   acc.mediaBuyer   + d.payouts.mediaBuyer,
+      dmSetter:     acc.dmSetter     + d.payouts.dmSetter,
       setter:       acc.setter       + d.payouts.setter,
       closer:       acc.closer       + d.payouts.closer,
       totalPayouts: acc.totalPayouts + d.payouts.totalPayouts,
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
       gross:        acc.gross        + d.grossAmount,
       fees:         acc.fees         + d.processorFee,
     }),
-    { caelum: 0, mediaBuyer: 0, setter: 0, closer: 0, totalPayouts: 0, evanTakeHome: 0, gross: 0, fees: 0 }
+    { caelum: 0, mediaBuyer: 0, dmSetter: 0, setter: 0, closer: 0, totalPayouts: 0, evanTakeHome: 0, gross: 0, fees: 0 }
   );
 
   // Persist updated totals

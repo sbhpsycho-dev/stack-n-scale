@@ -29,8 +29,9 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-background">
       <StaffSidebar />
-      <main className="pl-56">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+      {/* Desktop: offset for fixed sidebar. Mobile: offset for fixed top bar */}
+      <main className="lg:pl-56 pt-14 lg:pt-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           {children}
         </div>
       </main>

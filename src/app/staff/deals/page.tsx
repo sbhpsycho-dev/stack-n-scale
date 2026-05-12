@@ -5,6 +5,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Plus, Download, X } from "lucide-react";
 import type { Deal, DealPayout } from "@/lib/deal-types";
+import { toast, toastError } from "@/lib/toast";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -17,9 +18,12 @@ function statusBadge(s: Deal["payoutStatus"]) {
     s === "paid"     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
     s === "approved" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                        "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+  const label =
+    s === "paid"     ? "Paid" :
+    s === "approved" ? "Approved" : "Pending";
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}>
-      {s}
+      {label}
     </span>
   );
 }
@@ -68,7 +72,7 @@ const EMPTY: FormData = {
 function calcPreview(f: FormData): DealPayout | null {
   const gross = parseFloat(f.grossAmount);
   const fee   = parseFloat(f.processorFee);
-  if (isNaN(gross) || isNaN(fee)) return null;
+  if (isNaN(gross) || gross <= 0 || isNaN(fee) || fee < 0) return null;
   const net        = gross - fee;
   const caelum     = Math.round(net * 0.15);
   const mediaBuyer = f.leadSource === "ad" ? Math.round(gross * 0.05) : 0;
@@ -78,19 +82,40 @@ function calcPreview(f: FormData): DealPayout | null {
   const setter      = f.setter.trim()   ? Math.round(eachShare) : 0;
   const closer      = f.closer.trim()   ? Math.round(gross * 0.10) : 0;
   const totalPayouts = caelum + mediaBuyer + dmSetter + setter + closer;
-  return { caelum, mediaBuyer, dmSetter, setter, closer, totalPayouts, evanTakeHome: net - totalPayouts };
+  const remaining = net - totalPayouts;
+  const companyReinvestment = Math.round(remaining * 0.10);
+  return { caelum, mediaBuyer, dmSetter, setter, closer, totalPayouts, companyReinvestment, evanTakeHome: remaining - companyReinvestment };
 }
 
 function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved: (d: Deal) => void; reps: string[] }) {
   const [form, setForm] = useState<FormData>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [feeError, setFeeError] = useState("");
 
   const set = (k: keyof FormData, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+  function validateFee(grossStr: string, feeStr: string) {
+    const gross = parseFloat(grossStr);
+    const fee   = parseFloat(feeStr);
+    if (!isNaN(gross) && !isNaN(fee) && fee > gross) {
+      setFeeError("Fee can't exceed gross amount");
+    } else {
+      setFeeError("");
+    }
+  }
+
   const preview = calcPreview(form);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (feeError) return;
+    const gross = parseFloat(form.grossAmount);
+    const fee   = parseFloat(form.processorFee);
+    if (isNaN(gross) || gross <= 0) { setError("Enter a valid gross amount."); return; }
+    if (isNaN(fee) || fee < 0)      { setError("Enter a valid processor fee."); return; }
+    if (fee > gross)                 { setError("Fee can't exceed gross amount."); return; }
+
     setSaving(true);
     setError("");
     try {
@@ -99,8 +124,8 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          grossAmount:  parseFloat(form.grossAmount),
-          processorFee: parseFloat(form.processorFee),
+          grossAmount:  gross,
+          processorFee: fee,
           dmSetter: form.dmSetter.trim() || null,
           setter:   form.setter.trim()   || null,
           closer:   form.closer.trim()   || null,
@@ -108,11 +133,14 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
       });
       if (!res.ok) {
         const j = await res.json();
-        setError(j.error ?? "Failed to save");
+        setError(j.error ?? "Failed to save. Please try again.");
         return;
       }
       const { deal } = await res.json();
       onSaved(deal);
+      toast("Deal logged", { description: `${form.clientName} · ${fmt$(gross)}` });
+    } catch {
+      setError("Network error. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -121,24 +149,36 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
   const inp = "w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500/60 placeholder:text-muted-foreground";
   const sel = `${inp} cursor-pointer`;
 
+  const setterCount = [form.dmSetter.trim(), form.setter.trim()].filter(Boolean).length;
+  const repHint = setterCount === 2
+    ? "2 setters: each gets 10% of gross"
+    : setterCount === 1
+    ? "1 setter: gets 20% of gross"
+    : "Add a setter to assign payout";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-deal-title"
+    >
       <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="font-bold text-base">Log New Deal</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <h2 id="add-deal-title" className="font-bold text-base">Log New Deal</h2>
+          <button onClick={onClose} aria-label="Close dialog" className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</label>
-              <input type="date" className={inp} value={form.date} onChange={e => set("date", e.target.value)} required />
+              <label htmlFor="deal-date" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</label>
+              <input id="deal-date" type="date" className={inp} value={form.date} onChange={e => set("date", e.target.value)} required />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Offer</label>
-              <select className={sel} value={form.offer} onChange={e => set("offer", e.target.value as "5K" | "10K")}>
+              <label htmlFor="deal-offer" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Offer</label>
+              <select id="deal-offer" className={sel} value={form.offer} onChange={e => set("offer", e.target.value as "5K" | "10K")}>
                 <option value="5K">5K</option>
                 <option value="10K">10K</option>
               </select>
@@ -146,59 +186,76 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client Name</label>
-            <input className={inp} placeholder="e.g. John Smith" value={form.clientName} onChange={e => set("clientName", e.target.value)} required />
+            <label htmlFor="deal-client" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client Name</label>
+            <input id="deal-client" className={inp} placeholder="e.g. John Smith" value={form.clientName} onChange={e => set("clientName", e.target.value)} required />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Gross Amount</label>
-              <input type="number" className={inp} placeholder="5000" value={form.grossAmount} onChange={e => set("grossAmount", e.target.value)} required />
+              <label htmlFor="deal-gross" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Gross Amount ($)</label>
+              <input
+                id="deal-gross" type="number" className={inp} placeholder="5000"
+                min="1" value={form.grossAmount}
+                onChange={e => { set("grossAmount", e.target.value); validateFee(e.target.value, form.processorFee); }}
+                required
+              />
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Processor Fee ($)</label>
-              <input type="number" className={inp} placeholder="150" value={form.processorFee} onChange={e => set("processorFee", e.target.value)} required />
+              <label htmlFor="deal-fee" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Processor Fee ($)</label>
+              <input
+                id="deal-fee" type="number" className={`${inp} ${feeError ? "border-red-500/60" : ""}`}
+                placeholder="150" min="0" value={form.processorFee}
+                onChange={e => { set("processorFee", e.target.value); validateFee(form.grossAmount, e.target.value); }}
+                required
+              />
+              {feeError && <p className="text-[11px] text-red-400 mt-1">{feeError}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Processor</label>
-              <select className={sel} value={form.processor} onChange={e => set("processor", e.target.value as FormData["processor"])}>
+              <label htmlFor="deal-processor" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Processor</label>
+              <select id="deal-processor" className={sel} value={form.processor} onChange={e => set("processor", e.target.value as FormData["processor"])}>
                 <option value="fanbasis">Fanbasis</option>
                 <option value="stripe">Stripe</option>
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Lead Source</label>
-              <select className={sel} value={form.leadSource} onChange={e => set("leadSource", e.target.value as FormData["leadSource"])}>
+              <label htmlFor="deal-source" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Lead Source</label>
+              <select id="deal-source" className={sel} value={form.leadSource} onChange={e => set("leadSource", e.target.value as FormData["leadSource"])}>
                 <option value="organic">Organic</option>
                 <option value="ad">Ad</option>
               </select>
             </div>
           </div>
 
-          <datalist id="rep-list">
-            {reps.map(name => <option key={name} value={name} />)}
-          </datalist>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">DM Setter (optional)</label>
-              <input list="rep-list" className={inp} placeholder="Name" value={form.dmSetter} onChange={e => set("dmSetter", e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Setter (optional)</label>
-              <input list="rep-list" className={inp} placeholder="Name" value={form.setter} onChange={e => set("setter", e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Closer (optional)</label>
-              <input list="rep-list" className={inp} placeholder="Name" value={form.closer} onChange={e => set("closer", e.target.value)} />
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Reps (optional)</label>
+            <p className="text-[11px] text-muted-foreground mb-1.5">{repHint}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["dmSetter", "setter", "closer"] as const).map((field) => {
+                const labels: Record<typeof field, string> = { dmSetter: "DM Setter", setter: "Setter", closer: "Closer" };
+                return (
+                  <div key={field}>
+                    <label htmlFor={`deal-${field}`} className="text-[10px] text-muted-foreground mb-0.5 block">{labels[field]}</label>
+                    <select
+                      id={`deal-${field}`}
+                      className={sel}
+                      value={form[field]}
+                      onChange={e => set(field, e.target.value)}
+                    >
+                      <option value="">— None —</option>
+                      {reps.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Notes</label>
-            <textarea className={`${inp} resize-none h-16`} placeholder="Optional notes" value={form.notes} onChange={e => set("notes", e.target.value)} />
+            <label htmlFor="deal-notes" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Notes</label>
+            <textarea id="deal-notes" className={`${inp} resize-none h-16`} placeholder="Optional notes" value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
 
           {preview && <PayoutPreview p={preview} />}
@@ -209,7 +266,7 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
               Cancel
             </button>
             <button
-              type="submit" disabled={saving}
+              type="submit" disabled={saving || !!feeError}
               className="flex-1 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -228,10 +285,10 @@ type Filters = { from: string; to: string; processor: string; source: string; re
 const EMPTY_FILTERS: Filters = { from: "", to: "", processor: "", source: "", rep: "" };
 
 function exportCSV(deals: Deal[]) {
-  const headers = ["Date", "Client", "Offer", "Gross", "Fee", "Net", "Processor", "Source", "Setter", "Closer", "Caelum", "Media Buyer", "Setter Pay", "Closer Pay", "Evan Take Home", "Status"];
+  const headers = ["Date", "Client", "Offer", "Gross", "Fee", "Net", "Processor", "Source", "DM Setter", "Setter", "Closer", "Caelum", "Media Buyer", "Setter Pay", "Closer Pay", "Evan Take Home", "Status"];
   const rows = deals.map(d => [
     d.date, d.clientName, d.offer, d.grossAmount, d.processorFee, d.netAmount,
-    d.processor, d.leadSource, d.setter ?? "", d.closer ?? "",
+    d.processor, d.leadSource, (d as any).dmSetter ?? "", d.setter ?? "", d.closer ?? "",
     d.payouts.caelum.toFixed(2), d.payouts.mediaBuyer.toFixed(2),
     d.payouts.setter.toFixed(2), d.payouts.closer.toFixed(2),
     d.payouts.evanTakeHome.toFixed(2), d.payoutStatus,
@@ -249,6 +306,7 @@ export default function DealsPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [showModal, setShowModal] = useState(false);
   const [reps, setReps] = useState<string[]>([]);
+  const [dateError, setDateError] = useState("");
 
   useEffect(() => {
     fetch("/api/staff/reps").then(r => r.ok ? r.json() : []).then((list: { name: string }[]) => {
@@ -264,14 +322,31 @@ export default function DealsPage() {
     if (f.processor) p.set("processor", f.processor);
     if (f.source)    p.set("source", f.source);
     if (f.rep)       p.set("rep", f.rep);
-    const res = await fetch(`/api/deals?${p}`);
-    if (res.ok) setDeals((await res.json()).deals);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/deals?${p}`);
+      if (res.ok) setDeals((await res.json()).deals);
+      else toastError("Failed to load deals");
+    } catch {
+      toastError("Network error", "Could not fetch deals.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(filters); }, [load, filters]);
 
-  const setFilter = (k: keyof Filters, v: string) => setFilters(prev => ({ ...prev, [k]: v }));
+  function setFilter(k: keyof Filters, v: string) {
+    if (k === "to" && filters.from && v && v < filters.from) {
+      setDateError("End date must be after start date");
+      return;
+    }
+    if (k === "from" && filters.to && v && v > filters.to) {
+      setDateError("Start date must be before end date");
+      return;
+    }
+    setDateError("");
+    setFilters(prev => ({ ...prev, [k]: v }));
+  }
 
   const totals = deals.reduce(
     (acc, d) => ({
@@ -302,6 +377,7 @@ export default function DealsPage() {
         <div className="flex gap-2">
           <button
             onClick={() => exportCSV(deals)}
+            aria-label="Export deals as CSV"
             className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-border text-xs hover:bg-muted transition-colors text-muted-foreground"
           >
             <Download className="h-3.5 w-3.5" /> Export
@@ -324,40 +400,51 @@ export default function DealsPage() {
 
       {/* Filters */}
       <Card className="bg-card border-border">
-        <CardContent className="px-4 py-3 flex flex-wrap gap-2">
-          <input type="date" className={inp} value={filters.from} onChange={e => setFilter("from", e.target.value)} placeholder="From" />
-          <input type="date" className={inp} value={filters.to}   onChange={e => setFilter("to",   e.target.value)} placeholder="To" />
-          <select className={inp} value={filters.processor} onChange={e => setFilter("processor", e.target.value)}>
-            <option value="">All Processors</option>
-            <option value="fanbasis">Fanbasis</option>
-            <option value="stripe">Stripe</option>
-          </select>
-          <select className={inp} value={filters.source} onChange={e => setFilter("source", e.target.value)}>
-            <option value="">All Sources</option>
-            <option value="ad">Ad</option>
-            <option value="organic">Organic</option>
-          </select>
-          <input className={inp} placeholder="Rep name" value={filters.rep} onChange={e => setFilter("rep", e.target.value)} />
-          <button
-            onClick={() => setFilters(EMPTY_FILTERS)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Reset
-          </button>
+        <CardContent className="px-4 py-3 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <input type="date" className={inp} value={filters.from} onChange={e => setFilter("from", e.target.value)} placeholder="From" />
+            <input type="date" className={inp} value={filters.to}   onChange={e => setFilter("to",   e.target.value)} placeholder="To" />
+            <select className={inp} value={filters.processor} onChange={e => setFilter("processor", e.target.value)}>
+              <option value="">All Processors</option>
+              <option value="fanbasis">Fanbasis</option>
+              <option value="stripe">Stripe</option>
+            </select>
+            <select className={inp} value={filters.source} onChange={e => setFilter("source", e.target.value)}>
+              <option value="">All Sources</option>
+              <option value="ad">Ad</option>
+              <option value="organic">Organic</option>
+            </select>
+            <input className={inp} placeholder="Rep name" value={filters.rep} onChange={e => setFilter("rep", e.target.value)} />
+            <button
+              onClick={() => { setFilters(EMPTY_FILTERS); setDateError(""); }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+          {dateError && <p className="text-[11px] text-red-400">{dateError}</p>}
         </CardContent>
       </Card>
 
       {/* Table */}
-      <div className="rounded-xl border border-border overflow-hidden">
+      <div className="rounded-xl border border-border overflow-x-auto">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-orange-500" /></div>
         ) : deals.length === 0 ? (
-          <div className="py-16 text-center text-xs text-muted-foreground">No deals found. Log your first deal above.</div>
+          <div className="py-16 text-center space-y-3">
+            <p className="text-xs text-muted-foreground">No deals found.</p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+            >
+              Log your first deal →
+            </button>
+          </div>
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
               <tr>
-                {["Date", "Client", "Offer", "Gross", "Net", "Processor", "Source", "Setter/Closer", "Caelum", "Media Buyer", "Sales", "Evan", "Status"].map(h => (
+                {["Date", "Client", "Offer", "Gross", "Net", "Processor", "Source", "DM Setter", "Setter/Closer", "Caelum", "Media Buyer", "Sales", "Evan", "Status"].map(h => (
                   <th key={h} className="text-left px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -372,6 +459,7 @@ export default function DealsPage() {
                   <td className="px-3 py-2">{fmt$(d.netAmount)}</td>
                   <td className="px-3 py-2 capitalize">{d.processor}</td>
                   <td className="px-3 py-2 capitalize">{d.leadSource}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{(d as any).dmSetter ?? "—"}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {d.setter ?? "—"}{d.closer ? ` / ${d.closer}` : ""}
                   </td>

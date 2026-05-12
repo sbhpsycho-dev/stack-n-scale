@@ -73,30 +73,6 @@ export async function GET(req: Request) {
 
   const fmt$ = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  const telegramText = [
-    `📋 *SNS Daily Brief — ${dateLabel}*`,
-    "",
-    `💰 *Revenue*`,
-    `Yesterday: ${fmt$(yesterdayGross)}`,
-    `MTD Gross: ${fmt$(mtdGross)}`,
-    `MTD Evan Take Home: ${fmt$(mtdEvanNet)}`,
-    paceToGoal !== null ? `Pace to ${fmt$(monthlyGoal)}: ${paceToGoal}%` : "",
-    "",
-    `📅 *Pipeline*`,
-    `Calls Booked Yesterday: ${yesterdayDeals.length}`,
-    pipeline ? `Calls Showed: ${pipeline.callsAnswered ?? 0}` : "",
-    showRate !== null ? `Show Rate: ${showRate}%` : "",
-    `Deals Closed: ${yesterdayDeals.length}`,
-    "",
-    `👥 *Students*`,
-    `Active: ${active}`,
-    `🟢 On Track: ${onTrack}`,
-    `🟡 At Risk: ${atRisk}`,
-    `🔴 Off Track: ${offTrack.length}`,
-    `⚠️ Missing Check-In: ${missingIn.length}`,
-    needsAttention.length ? `\n🚨 *Needs Your Attention*\n${needsAttention.join("\n")}` : "",
-  ].filter(line => line !== "").join("\n");
-
   // Discord DMs to admins (fire-and-forget, non-blocking)
   const discordMsg = [
     `📋 **SNS Daily Brief — ${dateLabel}**`,
@@ -135,6 +111,5 @@ export async function GET(req: Request) {
     },
     students: { active, onTrack, atRisk, offTrack: offTrack.length, missingCheckIn: missingIn.length },
     needsAttention,
-    telegramText,
   });
 }

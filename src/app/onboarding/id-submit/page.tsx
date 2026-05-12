@@ -9,11 +9,35 @@ function FileField({ label, name, onChange, accept = "image/*" }: {
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  function processFile(file: File | null) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (!file) { setFileName(null); setPreviewUrl(null); setFileError(null); onChange(null); return; }
+    if (!file.type.startsWith("image/")) {
+      setFileError("Please upload an image file (JPG, PNG, HEIC, etc.).");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError("File must be under 10MB.");
+      return;
+    }
+    setFileError(null);
+    setFileName(file.name);
+    setPreviewUrl(URL.createObjectURL(file));
+    onChange(file);
+  }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    setFileName(file?.name ?? null);
-    onChange(file);
+    processFile(e.target.files?.[0] ?? null);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    processFile(e.dataTransfer.files?.[0] ?? null);
   }
 
   return (
@@ -23,15 +47,30 @@ function FileField({ label, name, onChange, accept = "image/*" }: {
       </label>
       <div
         onClick={() => ref.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
         style={{
-          background: "#0a0a0a", border: `1px solid ${fileName ? gold : "#2a2a2a"}`, borderRadius: 4,
-          padding: "16px 14px", color: fileName ? "#f5f0e8" : "#4a3a20", fontSize: 13,
+          background: "#0a0a0a",
+          border: `1px ${dragging ? "dashed" : "solid"} ${fileName ? gold : dragging ? gold : "#2a2a2a"}`,
+          borderRadius: 4, padding: "16px 14px",
+          color: fileName ? "#f5f0e8" : "#4a3a20", fontSize: 13,
           fontFamily: "Georgia, serif", cursor: "pointer", textAlign: "center",
           transition: "border-color 0.15s",
         }}
       >
-        {fileName ?? "Click to select file"}
+        {fileName ?? "Click or drag to upload"}
       </div>
+      {previewUrl && (
+        <img
+          src={previewUrl}
+          alt="Preview"
+          style={{ maxHeight: 120, maxWidth: "100%", objectFit: "contain", borderRadius: 4, border: "1px solid #2a2a2a" }}
+        />
+      )}
+      {fileError && (
+        <span style={{ fontSize: 11, color: "#ef4444", fontFamily: "Georgia, serif" }}>{fileError}</span>
+      )}
       <input ref={ref} type="file" name={name} accept={accept} onChange={handleChange} style={{ display: "none" }} />
     </div>
   );

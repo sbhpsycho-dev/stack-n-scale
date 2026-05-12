@@ -6,7 +6,8 @@ const MASTER_LOG_ID = "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
 const SETTER_KPI_ID = "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
 
 export async function GET(req: Request) {
-  if (req.headers.get("x-cron-secret") !== process.env.CRON_SECRET) {
+  const authHeader = req.headers.get("authorization");
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response("Unauthorized", { status: 401 });
   }
 

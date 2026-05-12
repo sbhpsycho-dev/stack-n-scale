@@ -1,4 +1,4 @@
-const STEPS = ["Welcome", "Dashboard", "Pipeline", "Ads", "Reps", "Integrations"];
+const STEPS = ["Welcome", "Integrations", "Dashboard", "Pipeline", "Ads", "Reps"];
 
 export function ProgressBar({ step }: { step: number }) {
   return (

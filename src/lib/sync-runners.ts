@@ -360,7 +360,14 @@ export async function syncSheets(clientId: string): Promise<void> {
 }
 
 export async function syncAll(clientId: string): Promise<void> {
-  const results = await Promise.allSettled([syncMeta(clientId), syncStripe(clientId), syncGHL(clientId), syncSheets(clientId)]);
+  // Run sequentially — each sync does a read-modify-write on the same KV key, so
+  // parallel execution causes last-writer-wins data loss (e.g. Sheets overwrites Stripe).
+  const results = await Promise.allSettled([
+    syncMeta(clientId)
+      .then(() => syncStripe(clientId))
+      .then(() => syncGHL(clientId))
+      .then(() => syncSheets(clientId)),
+  ]);
   const anyOk = results.some(r => r.status === "fulfilled");
 
   // Derive cross-source metrics from fully merged data

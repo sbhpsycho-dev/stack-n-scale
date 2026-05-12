@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
@@ -106,8 +107,9 @@ export async function POST(req: Request) {
   // Sync to Google Sheets immediately — fire and forget
   syncDealToSheets(partial).catch(e => console.error("Sheets sync error:", e));
 
-  // Patch admin dashboard MTD totals + rep leaderboard from deals so admin page stays live
-  void (async () => {
+  // Patch admin dashboard MTD totals + rep leaderboard from deals so admin page stays live.
+  // Uses after() so the patch survives past the response being sent.
+  after(async () => {
     try {
       const now = new Date();
       const monthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
@@ -119,7 +121,9 @@ export async function POST(req: Request) {
       const netRevenueMTD       = parseFloat(mtd.reduce((s, d) => s + d.netAmount, 0).toFixed(2));
       const totalDealsClosedMTD = mtd.length;
 
-      // Rebuild rep leaderboard from all deals (all-time, not just MTD)
+      // Rebuild rep leaderboard from all deals (all-time, not just MTD).
+      // Preserve callsMade/callsAnswered/demosShowed/pitched from the existing leaderboard
+      // since those fields come from GHL/Sheets, not the deal log.
       type RepStats = { cashCollected: number; dealsClosed: number; demosSet: number };
       const repMap = new Map<string, RepStats>();
       for (const deal of allDeals) {
@@ -132,21 +136,26 @@ export async function POST(req: Request) {
           repMap.set(deal.closer, { ...r, dealsClosed: r.dealsClosed + 1, cashCollected: r.cashCollected + deal.grossAmount });
         }
       }
-      const leaderboard = Array.from(repMap.entries())
-        .map(([name, s]) => ({
-          name,
-          cashCollected: s.cashCollected,
-          dealsClosed:   s.dealsClosed,
-          demosSet:      s.demosSet,
-          callsMade:     0,
-          callsAnswered: 0,
-          demosShowed:   0,
-          pitched:       0,
-          answerRate:    0,
-        }))
-        .sort((a, b) => b.cashCollected - a.cashCollected);
 
       const dash = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
+      const prevLeaderboard = dash.reps.leaderboard ?? [];
+      const leaderboard = Array.from(repMap.entries())
+        .map(([name, s]) => {
+          const prev = prevLeaderboard.find(r => r.name === name);
+          return {
+            name,
+            cashCollected: s.cashCollected,
+            dealsClosed:   s.dealsClosed,
+            demosSet:      s.demosSet,
+            callsMade:     prev?.callsMade     ?? 0,
+            callsAnswered: prev?.callsAnswered  ?? 0,
+            demosShowed:   prev?.demosShowed   ?? 0,
+            pitched:       prev?.pitched       ?? 0,
+            answerRate:    prev?.answerRate     ?? 0,
+          };
+        })
+        .sort((a, b) => b.cashCollected - a.cashCollected);
+
       await kv.set("sns-dashboard-v1", {
         ...dash,
         dashboard: { ...dash.dashboard, cashCollectedMTD, netRevenueMTD, totalDealsClosedMTD },
@@ -155,7 +164,7 @@ export async function POST(req: Request) {
     } catch (e) {
       console.error("Dashboard patch error:", e);
     }
-  })();
+  });
 
   return Response.json({ deal: partial }, { status: 201 });
 }

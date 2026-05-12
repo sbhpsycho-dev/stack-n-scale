@@ -67,23 +67,6 @@ async function appendToSheet(payload: CheckInPayload, score: number, submittedAt
 }
 
 async function sendRedAlert(payload: CheckInPayload, score: number) {
-  // Telegram
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId   = process.env.TELEGRAM_EVAN_CHAT_ID;
-  if (botToken && chatId) {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        parse_mode: "Markdown",
-        text: `🔴 *${payload.fullName}* scored *${score}/10*. Reach out today.\n\n_"${payload.couldDoBetter.slice(0, 200)}"_`,
-      }),
-      signal: AbortSignal.timeout(5000),
-    }).catch(e => console.error("Telegram alert error:", e));
-  }
-
-  // Discord fallback
   const discordUrl = process.env.DISCORD_WEBHOOK_CHECKIN_ALERT;
   if (discordUrl) {
     await fetch(discordUrl, {

@@ -35,6 +35,7 @@ function RecipientRows({ deals }: { deals: Deal[] }) {
   const recipients: { name: string; key: keyof Deal["payouts"] }[] = [
     { name: "Caelum",      key: "caelum" },
     { name: "Media Buyer", key: "mediaBuyer" },
+    { name: "DM Setter",   key: "dmSetter" },
     { name: "Setter",      key: "setter" },
     { name: "Closer",      key: "closer" },
     { name: "Evan",        key: "evanTakeHome" },
@@ -82,7 +83,7 @@ function DealRow({ deal, onPaid }: { deal: Deal; onPaid: (id: string) => void })
       <td className="px-3 py-2 text-orange-400">{fmt$(deal.grossAmount)}</td>
       <td className="px-3 py-2">{fmt$(deal.payouts.caelum)}</td>
       <td className="px-3 py-2">{deal.payouts.mediaBuyer > 0 ? fmt$(deal.payouts.mediaBuyer) : "—"}</td>
-      <td className="px-3 py-2">{fmt$(deal.payouts.setter + deal.payouts.closer)}</td>
+      <td className="px-3 py-2">{fmt$(deal.payouts.dmSetter + deal.payouts.setter + deal.payouts.closer)}</td>
       <td className="px-3 py-2 text-green-400 font-semibold">{fmt$(deal.payouts.evanTakeHome)}</td>
       <td className="px-3 py-2">
         {deal.payoutStatus === "paid" ? (

@@ -148,18 +148,19 @@ export default function SetupPage() {
                 transition={{ duration: 0.2 }}
               >
                 {step === 0 && <StepWelcome name={clientName} onContinue={next} />}
-                {step === 1 && <StepDashboard draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
-                {step === 2 && <StepPipeline draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
-                {step === 3 && <StepAds draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
-                {step === 4 && <StepReps draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
-                {step === 5 && (
+                {step === 1 && (
                   <StepIntegrations
                     integrations={integrations}
                     onChange={setIntegrations}
                     onBack={back}
-                    onFinish={finish}
+                    onFinish={next}
+                    continueLabel="Continue"
                   />
                 )}
+                {step === 2 && <StepDashboard draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
+                {step === 3 && <StepPipeline draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
+                {step === 4 && <StepAds draft={draft} onChange={setDraft} onBack={back} onContinue={next} onSkip={next} />}
+                {step === 5 && <StepReps draft={draft} onChange={setDraft} onBack={back} onContinue={finish} onSkip={finish} continueLabel="Finish Setup" />}
               </motion.div>
             </AnimatePresence>
           </div>

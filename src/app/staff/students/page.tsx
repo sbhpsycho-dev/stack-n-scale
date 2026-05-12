@@ -11,17 +11,27 @@ type ClientWithProgress = CoachingClient & { progress: StudentProgress | null };
 export default function StudentsPage() {
   const [clients, setClients] = useState<ClientWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
   const [filterCoach, setFilterCoach] = useState<string>("all");
 
-  useEffect(() => {
+  function load() {
+    setLoading(true);
+    setError("");
     fetch("/api/staff/students")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Server error ${r.status}`);
+        return r.json();
+      })
       .then(setClients)
-      .catch(() => {})
+      .catch((err) => {
+        setError(err.message ?? "Failed to load students. Check your connection.");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { load(); }, []);
 
   const coaches = Array.from(new Set(clients.map((c) => c.coachAssigned).filter(Boolean))) as string[];
 
@@ -35,10 +45,26 @@ export default function StudentsPage() {
     return matchSearch && matchStatus && matchCoach;
   });
 
+  const hasActiveFilters = search || filterStatus !== "all" || filterCoach !== "all";
+
   if (loading) {
     return (
       <div className="flex justify-center py-24">
         <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <button
+          onClick={load}
+          className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -90,7 +116,21 @@ export default function StudentsPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-16">No students found</p>
+        <div className="text-center py-16 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            {hasActiveFilters
+              ? "No students match your filters. Try clearing the search or status filter."
+              : "No students yet."}
+          </p>
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setSearch(""); setFilterStatus("all"); setFilterCoach("all"); }}
+              className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((c) => (

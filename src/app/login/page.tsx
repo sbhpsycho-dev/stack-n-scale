@@ -76,6 +76,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShow((s) => !s)}
+                  aria-label={show ? "Hide password" : "Show password"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -105,6 +106,13 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
+          <p className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t border-border">
+            Forgot your password?{" "}
+            <a href="mailto:evan@stacknscale.co" className="text-orange-400 hover:text-orange-300 underline-offset-2 hover:underline">
+              Contact your admin
+            </a>
+          </p>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-4">

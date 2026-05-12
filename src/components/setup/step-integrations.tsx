@@ -13,6 +13,7 @@ interface Props {
   onChange: (i: ClientIntegrations) => void;
   onBack: () => void;
   onFinish: () => void;
+  continueLabel?: string;
 }
 
 type SyncStatus = "idle" | "syncing" | "done" | "error";
@@ -22,6 +23,7 @@ function IntegrationCard({
   description,
   connected,
   syncing,
+  syncError,
   children,
   onSync,
 }: {
@@ -29,6 +31,7 @@ function IntegrationCard({
   description: string;
   connected: boolean;
   syncing: boolean;
+  syncError?: string;
   children: React.ReactNode;
   onSync: () => void;
 }) {
@@ -60,26 +63,40 @@ function IntegrationCard({
         )}
       </div>
       <div className="space-y-2">{children}</div>
+      {syncError && (
+        <p className="text-[11px] text-red-400 mt-2">{syncError}</p>
+      )}
     </div>
   );
 }
 
-export function StepIntegrations({ integrations, onChange, onBack, onFinish }: Props) {
+export function StepIntegrations({ integrations, onChange, onBack, onFinish, continueLabel }: Props) {
   const [status, setStatus] = useState<Record<string, SyncStatus>>({});
+  const [syncErrors, setSyncErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   async function syncIntegration(source: string) {
     setStatus((s) => ({ ...s, [source]: "syncing" }));
+    setSyncErrors((e) => ({ ...e, [source]: "" }));
     try {
-      await fetch("/api/integrations", {
+      const saveRes = await fetch("/api/integrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(integrations),
       });
-      await fetch(`/api/sync/${source}`, { method: "POST" });
+      if (!saveRes.ok) {
+        const j = await saveRes.json().catch(() => ({}));
+        throw new Error(j.error ?? "Failed to save credentials");
+      }
+      const syncRes = await fetch(`/api/sync/${source}`, { method: "POST" });
+      if (!syncRes.ok) {
+        const j = await syncRes.json().catch(() => ({}));
+        throw new Error(j.error ?? `Sync failed for ${source}`);
+      }
       setStatus((s) => ({ ...s, [source]: "done" }));
-    } catch {
+    } catch (err) {
       setStatus((s) => ({ ...s, [source]: "error" }));
+      setSyncErrors((e) => ({ ...e, [source]: err instanceof Error ? err.message : "Sync failed. Check credentials and try again." }));
     }
   }
 
@@ -121,6 +138,7 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
           description="Auto-pulls ad spend, leads, CPL, ROAS, CTR"
           connected={metaConnected}
           syncing={status.meta === "syncing"}
+          syncError={syncErrors.meta}
           onSync={() => syncIntegration("meta")}
         >
           <div>
@@ -149,6 +167,7 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
           description="Auto-pulls pipeline stages, rep leaderboard, leads"
           connected={ghlConnected}
           syncing={status.ghl === "syncing"}
+          syncError={syncErrors.ghl}
           onSync={() => syncIntegration("ghl")}
         >
           <div>
@@ -177,6 +196,7 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
           description="Auto-pulls cash collected, MRR, refunds"
           connected={stripeConnected}
           syncing={status.stripe === "syncing"}
+          syncError={syncErrors.stripe}
           onSync={() => syncIntegration("stripe")}
         >
           <div>
@@ -196,6 +216,7 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
           description="Maps your spreadsheet columns to dashboard fields"
           connected={sheetsConnected}
           syncing={status.sheets === "syncing"}
+          syncError={syncErrors.sheets}
           onSync={() => syncIntegration("sheets")}
         >
           <div>
@@ -215,7 +236,7 @@ export function StepIntegrations({ integrations, onChange, onBack, onFinish }: P
         totalSteps={6}
         onBack={onBack}
         onContinue={handleFinish}
-        continueLabel="Finish Setup"
+        continueLabel={continueLabel ?? "Finish Setup"}
         loading={saving}
       />
     </div>

@@ -126,9 +126,9 @@ export async function syncDealToSheets(deal: Deal): Promise<void> {
     const alreadyIn  = rows.some(r => r[0] === deal.date && r[1]?.toLowerCase().startsWith(key));
     if (!alreadyIn) {
       const displayName = name.trim().split(" ")[0];
-      displayName.charAt(0).toUpperCase() + displayName.slice(1);
+      const capitalizedName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
       await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:N", [
-        [deal.date, displayName, "", "", "", "", "", "", "", "", 1, deal.grossAmount, "", ""],
+        [deal.date, capitalizedName, "", "", "", "", "", "", "", "", 1, deal.grossAmount, "", ""],
       ]);
     }
   }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, RefreshCw } from "lucide-react";
+import type { SocialAccount } from "@/app/api/staff/kpi/social/route";
 import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart } from "@/components/charts/revenue-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart } from "@/components/charts/ads-charts";
 import { CashPerRepChart } from "@/components/charts/rep-charts";
@@ -74,6 +75,20 @@ function Spin() {
   return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-orange-500" /></div>;
 }
 
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 gap-3">
+      <p className="text-sm text-muted-foreground text-center max-w-xs">{message}</p>
+      <button
+        onClick={onRetry}
+        className="h-8 px-4 rounded-lg bg-muted text-xs hover:bg-muted/80 transition-colors"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 function fmt$(n: number) { return `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`; }
 
 // ─── Tab components ─────────────────────────────────────────────────────────
@@ -85,32 +100,41 @@ interface PayoutMTD {
   salesTeamOwedMTD: number;
 }
 
-function OverviewTab() {
+function OverviewTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<InsightsData | null>(null);
   const [payouts, setPayouts] = useState<PayoutMTD | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [insRes, moneyRes] = await Promise.all([
-      fetch("/api/staff/insights"),
-      fetch("/api/staff/money"),
-    ]);
-    if (insRes.ok) setData(await insRes.json());
-    if (moneyRes.ok) {
-      const m = await moneyRes.json();
-      setPayouts({
-        evanTakeHomeMTD:  m.mtd?.evanTakeHome  ?? 0,
-        totalPayoutsMTD:  m.mtd?.totalPayouts  ?? 0,
-        caelumOwedMTD:    m.mtd?.caelumOwed    ?? 0,
-        salesTeamOwedMTD: m.mtd?.salesTeamOwed ?? 0,
-      });
+    setError("");
+    try {
+      const [insRes, moneyRes] = await Promise.all([
+        fetch("/api/staff/insights"),
+        fetch("/api/staff/money"),
+      ]);
+      if (insRes.ok) setData(await insRes.json());
+      else setError("Failed to load overview data.");
+      if (moneyRes.ok) {
+        const m = await moneyRes.json();
+        setPayouts({
+          evanTakeHomeMTD:  m.mtd?.evanTakeHome  ?? 0,
+          totalPayoutsMTD:  m.mtd?.totalPayouts  ?? 0,
+          caelumOwedMTD:    m.mtd?.caelumOwed    ?? 0,
+          salesTeamOwedMTD: m.mtd?.salesTeamOwed ?? 0,
+        });
+      }
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
   return (
     <div className="space-y-4">
@@ -166,19 +190,28 @@ function OverviewTab() {
   );
 }
 
-function RevenueTab() {
+function RevenueTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<RevenueData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/kpi/revenue");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/kpi/revenue");
+      if (res.ok) setData(await res.json());
+      else setError("Failed to load revenue data.");
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
   const goalPct = data.monthlyGoal > 0 ? Math.min(100, Math.round((data.cashCollectedMTD / data.monthlyGoal) * 100)) : 0;
@@ -229,19 +262,28 @@ function RevenueTab() {
   );
 }
 
-function AdsTab() {
+function AdsTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<AdsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/kpi/ads");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/kpi/ads");
+      if (res.ok) setData(await res.json());
+      else setError("Failed to load ads data.");
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
   return (
@@ -275,19 +317,28 @@ function AdsTab() {
   );
 }
 
-function SettersTab() {
+function SettersTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<SettersData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/kpi/setters");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/kpi/setters");
+      if (res.ok) setData(await res.json());
+      else setError("Failed to load setter data. Ensure the Setter KPI sheet is shared with the service account.");
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
   return (
@@ -352,19 +403,28 @@ function SettersTab() {
   );
 }
 
-function TrendsTab() {
+function TrendsTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<TrendsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/kpi/trends");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/kpi/trends");
+      if (res.ok) setData(await res.json());
+      else setError("Failed to load trend data.");
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
   const fmtK = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`;
@@ -438,19 +498,28 @@ function TrendsTab() {
   );
 }
 
-function ClientsTab() {
+function ClientsTab({ refreshSignal }: { refreshSignal: number }) {
   const [data, setData] = useState<ClientsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/staff/kpi/clients");
-    if (res.ok) setData(await res.json());
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/staff/kpi/clients");
+      if (res.ok) setData(await res.json());
+      else setError("Failed to load client data.");
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshSignal]);
 
   if (loading && !data) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
   const healthColor = (score: number) =>
@@ -498,9 +567,146 @@ function ClientsTab() {
   );
 }
 
+// ─── Social Tab ──────────────────────────────────────────────────────────────
+
+const PLATFORM_ICONS: Record<string, ReactNode> = {
+  instagram: <span className="text-[10px] font-bold leading-none">IG</span>,
+  tiktok:    <span className="text-[10px] font-bold leading-none">TK</span>,
+  youtube:   <span className="text-[10px] font-bold leading-none">YT</span>,
+  twitter:   <span className="text-[10px] font-bold leading-none">X</span>,
+};
+
+const PLATFORM_COLOR: Record<string, string> = {
+  instagram: "text-pink-400",
+  tiktok:    "text-sky-400",
+  youtube:   "text-red-400",
+  twitter:   "text-blue-400",
+};
+
+function fmtFollowers(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+  return n.toString();
+}
+
+function SocialAccountCard({ account }: { account: SocialAccount }) {
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="px-4 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className={PLATFORM_COLOR[account.platform]}>{PLATFORM_ICONS[account.platform]}</span>
+          <span className="text-xs font-semibold truncate">{account.handle}</span>
+          <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+            account.brand === "personal"
+              ? "bg-orange-500/15 text-orange-400"
+              : "bg-emerald-500/15 text-emerald-400"
+          }`}>
+            {account.brand === "personal" ? "Personal" : "SNS"}
+          </span>
+        </div>
+        {account.error ? (
+          <p className="text-xs text-muted-foreground">{account.error}</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-base font-bold">{fmtFollowers(account.followers)}</p>
+              <p className="text-[10px] text-muted-foreground">Followers</p>
+            </div>
+            {account.platform !== "youtube" && (
+              <div>
+                <p className="text-base font-bold">{fmtFollowers(account.following)}</p>
+                <p className="text-[10px] text-muted-foreground">Following</p>
+              </div>
+            )}
+            <div className={account.platform === "youtube" ? "col-span-2" : ""}>
+              <p className="text-base font-bold">{fmtFollowers(account.posts)}</p>
+              <p className="text-[10px] text-muted-foreground">{account.platform === "youtube" ? "Videos" : "Posts"}</p>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SocialTab({ refreshSignal }: { refreshSignal: number }) {
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async (force = false) => {
+    setLoading(true);
+    setError("");
+    try {
+      const url = force ? "/api/staff/kpi/social?refresh=1" : "/api/staff/kpi/social";
+      const res = await fetch(url);
+      if (!res.ok) { setError("Failed to load social stats."); return; }
+      const data = await res.json();
+      setAccounts(data.accounts ?? []);
+      setRefreshedAt(data.refreshedAt ?? null);
+      setFromCache(data.fromCache ?? false);
+    } catch {
+      setError("Network error. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (refreshSignal > 0) load(true); }, [load, refreshSignal]);
+
+  const personal = accounts.filter(a => a.brand === "personal");
+  const sns      = accounts.filter(a => a.brand === "sns");
+
+  if (loading && accounts.length === 0) return <Spin />;
+  if (error) return <ErrorState message={error} onRetry={() => load(false)} />;
+
+  return (
+    <div className="space-y-5">
+      {refreshedAt && (
+        <p className="text-[11px] text-muted-foreground">
+          {fromCache ? "Cached" : "Live"} · Last refreshed {new Date(refreshedAt).toLocaleString()}
+          {fromCache && <span className="ml-1 text-orange-400">· Click refresh for live data (takes ~30s)</span>}
+        </p>
+      )}
+
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Caelum Harris ENT — Personal Brand
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {personal.length > 0
+            ? personal.map((a, i) => <SocialAccountCard key={i} account={a} />)
+            : <p className="text-xs text-muted-foreground col-span-4">No data — click refresh.</p>}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          StackNScale Enterprises
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {sns.length > 0
+            ? sns.map((a, i) => <SocialAccountCard key={i} account={a} />)
+            : <p className="text-xs text-muted-foreground col-span-3">No data — confirm SNS handles and click refresh.</p>}
+        </div>
+        {sns.some(a => a.error?.includes("confirm")) && (
+          <p className="text-[11px] text-orange-400 mt-2">
+            Some SNS accounts could not be found. Confirm handles are live: @stacknscaleent (IG/TikTok), StackNScale Enterprises (YouTube).
+          </p>
+        )}
+      </div>
+
+      {loading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Fetching live data from Apify...</div>}
+    </div>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "revenue" | "ads" | "setters" | "trends" | "clients";
+type Tab = "overview" | "revenue" | "ads" | "setters" | "trends" | "clients" | "social";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview"       },
   { id: "revenue",  label: "Revenue"        },
@@ -508,11 +714,21 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "setters",  label: "Setters"        },
   { id: "trends",   label: "Monthly Trend"  },
   { id: "clients",  label: "Client Health"  },
+  { id: "social",   label: "Social"         },
 ];
+
+// Per-tab refresh signals — only the active tab increments when refresh is clicked
+type TabRefreshSignals = Record<Tab, number>;
 
 export default function InsightsPage() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshSignals, setRefreshSignals] = useState<TabRefreshSignals>({
+    overview: 0, revenue: 0, ads: 0, setters: 0, trends: 0, clients: 0, social: 0,
+  });
+
+  function handleRefresh() {
+    setRefreshSignals(prev => ({ ...prev, [tab]: prev[tab] + 1 }));
+  }
 
   return (
     <div className="space-y-5">
@@ -522,7 +738,8 @@ export default function InsightsPage() {
           <p className="text-xs text-muted-foreground mt-0.5">Live data across revenue, ads, setters, and client health</p>
         </div>
         <button
-          onClick={() => setRefreshKey(k => k + 1)}
+          onClick={handleRefresh}
+          aria-label="Refresh current tab"
           className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -546,14 +763,15 @@ export default function InsightsPage() {
         ))}
       </div>
 
-      {/* Tab content — keyed by tab+refreshKey to remount on refresh */}
-      <div key={`${tab}-${refreshKey}`}>
-        {tab === "overview" && <OverviewTab />}
-        {tab === "revenue"  && <RevenueTab />}
-        {tab === "ads"      && <AdsTab />}
-        {tab === "setters"  && <SettersTab />}
-        {tab === "trends"   && <TrendsTab />}
-        {tab === "clients"  && <ClientsTab />}
+      {/* Tab content — each tab mounts once and listens to its own refresh signal */}
+      <div>
+        {tab === "overview" && <OverviewTab refreshSignal={refreshSignals.overview} />}
+        {tab === "revenue"  && <RevenueTab  refreshSignal={refreshSignals.revenue}  />}
+        {tab === "ads"      && <AdsTab      refreshSignal={refreshSignals.ads}      />}
+        {tab === "setters"  && <SettersTab  refreshSignal={refreshSignals.setters}  />}
+        {tab === "trends"   && <TrendsTab   refreshSignal={refreshSignals.trends}   />}
+        {tab === "clients"  && <ClientsTab  refreshSignal={refreshSignals.clients}  />}
+        {tab === "social"   && <SocialTab   refreshSignal={refreshSignals.social}   />}
       </div>
     </div>
   );

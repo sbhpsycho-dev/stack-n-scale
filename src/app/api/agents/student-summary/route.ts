@@ -62,6 +62,17 @@ export async function GET(req: Request) {
     ...topPerf.map((s, i) => `${i + 1}. ${s.studentName} — Score: ${s.healthScore}`),
   ].filter(Boolean).join("\n");
 
+  // Telegram notification
+  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
+  const telegramChatId   = process.env.TELEGRAM_CHAT_ID;
+  if (telegramBotToken && telegramChatId) {
+    void fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
+    }).catch(e => console.error("Telegram send error:", e));
+  }
+
   // Discord DMs to admins (fire-and-forget)
   const discordMsg = [
     `📊 **Weekly Student Summary — Week of ${weekLabel}**`,

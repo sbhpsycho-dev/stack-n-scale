@@ -23,6 +23,7 @@ export interface DealPayout {
   setter: number;
   closer: number;
   totalPayouts: number;
+  companyReinvestment: number;
   evanTakeHome: number;
 }
 
@@ -42,6 +43,7 @@ export interface WeeklyPayout {
   totals: {
     caelum: number;
     mediaBuyer: number;
+    dmSetter: number;
     setter: number;
     closer: number;
     totalPayouts: number;
