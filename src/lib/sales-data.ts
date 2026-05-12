@@ -69,6 +69,7 @@ export type SalesData = {
     revenueOverTime: TimePoint[];
     netByProduct: NameAmount[];
     netByProcessor: NameAmount[];
+    leadsBySource: NameAmount[];
   };
   pipeline: {
     callsMade: number;
@@ -123,7 +124,7 @@ export const BLANK: SalesData = {
     totalRefundPct: 0, monthlyGoal: 0, cashCollectedLastMonth: 0,
     avgLeadResponseTimeMin: 0,
     reactivation: { contacted: 0, replied: 0, booked: 0, closed: 0 },
-    checkInScores: [], revenueOverTime: [], netByProduct: [], netByProcessor: [],
+    checkInScores: [], revenueOverTime: [], netByProduct: [], netByProcessor: [], leadsBySource: [],
   },
   pipeline: {
     callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0,
@@ -188,6 +189,10 @@ export const SEED: SalesData = {
       { name: "Stripe",   amount: 17500 },
       { name: "PayPal",   amount: 2300  },
       { name: "Fanbasis", amount: 201   },
+    ],
+    leadsBySource: [
+      { name: "Ad",      amount: 87 },
+      { name: "Organic", amount: 38 },
     ],
   },
   pipeline: {

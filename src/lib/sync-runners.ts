@@ -141,63 +141,147 @@ export async function syncStripe(clientId: string): Promise<void> {
 
 export async function syncGHL(clientId: string): Promise<void> {
   const integrations = await getIntegrations(clientId);
-  if (!integrations.ghl?.apiKey || !integrations.ghl?.locationId) return;
 
-  const { apiKey, locationId } = integrations.ghl;
-  const headers = { Authorization: `Bearer ${apiKey}`, Version: "2021-07-28" };
+  // Fall back to env vars for the admin account
+  const apiKey     = integrations.ghl?.apiKey     ?? process.env.GHL_API_KEY     ?? "";
+  const locationId = integrations.ghl?.locationId ?? process.env.GHL_LOCATION_ID ?? "";
+  if (!apiKey || !locationId) return;
+
+  const ghlHeaders = { Authorization: `Bearer ${apiKey}`, Version: "2021-07-28" };
   const since = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-  const contactsRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&startDate=${since}&limit=100`, { headers });
+  // ── Contacts — count + source breakdown ────────────────────────────────────
+  const contactsRes = await fetch(
+    `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&startDate=${since}&limit=100`,
+    { headers: ghlHeaders }
+  );
   const contactsData = await contactsRes.json();
-  const leadsThisMonth = contactsData?.meta?.total ?? contactsData?.contacts?.length ?? 0;
+  const contacts: { source?: string }[] = contactsData?.contacts ?? [];
+  const leadsThisMonth = contactsData?.meta?.total ?? contacts.length;
 
-  const oppsRes = await fetch(`https://services.leadconnectorhq.com/opportunities/search?location_id=${locationId}&date=${since}&limit=100`, { headers });
+  const sourceMap: Record<string, number> = {};
+  contacts.forEach((c) => {
+    const src = c.source?.trim() || "Unknown";
+    sourceMap[src] = (sourceMap[src] ?? 0) + 1;
+  });
+  const leadsBySource: NameAmount[] = Object.entries(sourceMap)
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  // ── Pipeline stages — map id → name ────────────────────────────────────────
+  const stageNameMap: Record<string, string> = {};
+  try {
+    const pipelinesRes = await fetch(
+      `https://services.leadconnectorhq.com/opportunities/pipelines?locationId=${locationId}`,
+      { headers: ghlHeaders }
+    );
+    const pipelinesData = await pipelinesRes.json();
+    const pipelines: { stages?: { id: string; name: string }[] }[] = pipelinesData?.pipelines ?? [];
+    pipelines.forEach((p) => {
+      (p.stages ?? []).forEach((s) => { stageNameMap[s.id] = s.name; });
+    });
+  } catch {
+    // Non-fatal — fall back to raw status strings
+  }
+
+  // ── Opportunities — full field extraction ──────────────────────────────────
+  const oppsRes = await fetch(
+    `https://services.leadconnectorhq.com/opportunities/search?location_id=${locationId}&date=${since}&limit=100`,
+    { headers: ghlHeaders }
+  );
   const oppsData = await oppsRes.json();
-  const opps: { status: string; assignedTo?: string; monetaryValue?: number }[] = oppsData?.opportunities ?? [];
+  const opps: {
+    id?: string;
+    name?: string;
+    status?: string;
+    assignedTo?: string;
+    monetaryValue?: number;
+    source?: string;
+    pipelineStageId?: string;
+    createdAt?: string;
+    contact?: { firstName?: string; lastName?: string; email?: string };
+  }[] = oppsData?.opportunities ?? [];
 
+  // Stage breakdown — prefer human-readable stage names over raw status
   const stageMap: Record<string, number> = {};
-  opps.forEach((o) => { stageMap[o.status ?? "Unknown"] = (stageMap[o.status ?? "Unknown"] ?? 0) + 1; });
-  const stageBreakdown: StageCount[] = Object.entries(stageMap).map(([stage, count]) => ({ stage, count }));
+  opps.forEach((o) => {
+    const stageName = (o.pipelineStageId && stageNameMap[o.pipelineStageId])
+      ? stageNameMap[o.pipelineStageId]
+      : o.status ?? "Unknown";
+    stageMap[stageName] = (stageMap[stageName] ?? 0) + 1;
+  });
+  const stageBreakdown: StageCount[] = Object.entries(stageMap)
+    .map(([stage, count]) => ({ stage, count }))
+    .sort((a, b) => b.count - a.count);
 
-  const closed = opps.filter((o) => o.status === "won").length;
-  const totalOpps = opps.length;
-  const closeRate = totalOpps > 0 ? parseFloat(((closed / totalOpps) * 100).toFixed(2)) : 0;
+  // Pipeline funnel — derive from stage names (best-effort fuzzy match)
+  const stageCount = (keywords: string[]) =>
+    opps.filter((o) => {
+      const name = (
+        (o.pipelineStageId && stageNameMap[o.pipelineStageId]) ?? o.status ?? ""
+      ).toLowerCase();
+      return keywords.some((k) => name.includes(k));
+    }).length;
 
+  const demosSet    = stageCount(["demo set", "booked", "appointment"]);
+  const demosShowed = stageCount(["demo showed", "showed", "show"]);
+  const pitched     = stageCount(["pitched", "pitch", "presented"]);
+
+  const won = opps.filter((o) => o.status === "won");
+  const closed      = won.length;
+  const totalOpps   = opps.length;
+  const closeRate   = totalOpps > 0 ? parseFloat(((closed / totalOpps) * 100).toFixed(2)) : 0;
+
+  // Rep leaderboard — full cash + deals, preserve manual call/demo counts
   const existing = await getClientData(clientId);
   const existingLeaderboard = existing.reps.leaderboard ?? [];
 
   const repMap: Record<string, { cashCollected: number; dealsClosed: number }> = {};
-  opps.forEach((o) => {
-    const rep = o.assignedTo ?? "Unassigned";
+  won.forEach((o) => {
+    const rep = o.assignedTo?.trim() || "Unassigned";
     if (!repMap[rep]) repMap[rep] = { cashCollected: 0, dealsClosed: 0 };
-    if (o.status === "won") { repMap[rep].dealsClosed += 1; repMap[rep].cashCollected += o.monetaryValue ?? 0; }
+    repMap[rep].dealsClosed += 1;
+    repMap[rep].cashCollected += o.monetaryValue ?? 0;
   });
   const leaderboard: Rep[] = Object.entries(repMap)
     .map(([name, s]) => {
       const prev = existingLeaderboard.find((r) => r.name === name);
       return {
         name,
-        callsMade: prev?.callsMade ?? 0,
+        callsMade:     prev?.callsMade     ?? 0,
         callsAnswered: prev?.callsAnswered ?? 0,
-        demosSet: prev?.demosSet ?? 0,
-        demosShowed: prev?.demosShowed ?? 0,
-        pitched: prev?.pitched ?? 0,
-        dealsClosed: s.dealsClosed,
+        demosSet:      prev?.demosSet      ?? 0,
+        demosShowed:   prev?.demosShowed   ?? 0,
+        pitched:       prev?.pitched       ?? 0,
+        dealsClosed:   s.dealsClosed,
         cashCollected: s.cashCollected,
-        answerRate: prev?.answerRate ?? 0,
+        answerRate:    prev?.answerRate    ?? 0,
       };
     })
     .sort((a, b) => b.cashCollected - a.cashCollected);
 
-  const topRepCash = leaderboard[0]?.cashCollected ?? existing.reps.topRepCash;
-  const totalRepCash = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
+  const topRepCash  = leaderboard[0]?.cashCollected ?? existing.reps.topRepCash;
+  const totalRepCash  = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
   const totalRepDeals = leaderboard.reduce((s, r) => s + r.dealsClosed, 0);
-  const avgDealSize = totalRepDeals > 0 ? Math.round(totalRepCash / totalRepDeals) : existing.reps.avgDealSize;
+  const avgDealSize   = totalRepDeals > 0 ? Math.round(totalRepCash / totalRepDeals) : existing.reps.avgDealSize;
 
   await saveClientData(clientId, {
     ...existing,
-    dashboard: { ...existing.dashboard, leadsThisMonth, totalDealsClosedMTD: closed },
-    pipeline: { ...existing.pipeline, closed, closeRate, stageBreakdown },
+    dashboard: {
+      ...existing.dashboard,
+      leadsThisMonth,
+      totalDealsClosedMTD: closed,
+      ...(leadsBySource.length > 0 ? { leadsBySource } : {}),
+    },
+    pipeline: {
+      ...existing.pipeline,
+      closed,
+      closeRate,
+      stageBreakdown,
+      ...(demosSet    > 0 ? { demosSet }    : {}),
+      ...(demosShowed > 0 ? { demosShowed } : {}),
+      ...(pitched     > 0 ? { pitched }     : {}),
+    },
     reps: {
       ...existing.reps,
       dealClose: closed,
