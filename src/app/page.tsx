@@ -764,13 +764,20 @@ export default function Dashboard() {
                   )}
 
                   {config.widgets.leadsOverTime && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <ChartCard title="Leads Over Time">
-                        <LeadsOverTimeChart data={a.leadsOverTime} />
-                      </ChartCard>
-                      <ChartCard title="Leads by Campaign">
-                        <LeadsByCampaignChart data={a.leadsByCampaign} />
-                      </ChartCard>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <ChartCard title="Leads Over Time">
+                          <LeadsOverTimeChart data={a.leadsOverTime} />
+                        </ChartCard>
+                        <ChartCard title="Leads by Campaign">
+                          <LeadsByCampaignChart data={a.leadsByCampaign} />
+                        </ChartCard>
+                      </div>
+                      {(d.leadsBySource?.length ?? 0) > 0 && (
+                        <ChartCard title="Leads by Source">
+                          <LeadsByCampaignChart data={(d.leadsBySource ?? []).map(s => ({ campaign: s.name, leads: s.amount }))} />
+                        </ChartCard>
+                      )}
                     </div>
                   )}
 
