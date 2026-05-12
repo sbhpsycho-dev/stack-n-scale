@@ -1,0 +1,71 @@
+{
+  "name": "SNS — GHL Opportunity Won → Next.js",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "YOUR_MAKE_WEBHOOK_ID",
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "data": { "editable": "true" },
+              "label": "SNS GHL Opportunity Webhook"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "https://stack-n-scale.vercel.app/api/webhooks/ghl",
+        "method": "post",
+        "headers": [
+          { "name": "x-ghl-secret", "value": "YOUR_GHL_WEBHOOK_SECRET" },
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{{toJSON(1)}}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us1.make.com"
+  }
+}
