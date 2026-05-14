@@ -1,13 +1,11 @@
 import { kv } from "@vercel/kv";
 import { syncAll } from "@/lib/sync-runners";
 import { BLANK, type SalesData } from "@/lib/sales-data";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 export async function GET(req: Request) {
-  const cronSecret = process.env.CRON_SECRET;
   // Only accept the secret via Authorization header — never via URL params (they appear in logs)
-  const authHeader = req.headers.get("authorization");
-  const authorized = cronSecret && authHeader === `Bearer ${cronSecret}`;
-  if (!authorized) {
+  if (!verifyCronSecret(req.headers.get("authorization"))) {
     return new Response("Unauthorized", { status: 401 });
   }
 

@@ -2,6 +2,7 @@ import { kv } from "@vercel/kv";
 import type { WeeklyPayout, Deal } from "@/lib/deal-types";
 import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
 import { sendDiscordDM } from "@/lib/discord";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 const EVAN_ID = process.env.EVAN_DISCORD_USER_ID!;
 
@@ -26,7 +27,7 @@ function pct(part: number, total: number) {
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(authHeader)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

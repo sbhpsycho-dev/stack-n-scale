@@ -6,7 +6,7 @@ import { calculatePayouts } from "@/lib/payout-calc";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== "admin" && session.user.role !== "staff")) {
+  if (!session || session.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 

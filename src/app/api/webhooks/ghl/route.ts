@@ -24,10 +24,9 @@ type GHLPayload = {
 
 export async function POST(req: Request) {
   const secret = process.env.GHL_WEBHOOK_SECRET;
-  if (secret) {
-    const provided = req.headers.get("x-ghl-secret");
-    if (provided !== secret) return new Response("Unauthorized", { status: 401 });
-  }
+  if (!secret) return new Response("Webhook not configured", { status: 500 });
+  const provided = req.headers.get("x-ghl-secret");
+  if (provided !== secret) return new Response("Unauthorized", { status: 401 });
 
   let payload: GHLPayload;
   try {
@@ -88,11 +87,13 @@ export async function POST(req: Request) {
   const discordUrl = process.env.DISCORD_WEBHOOK_DEAL_CLOSED ?? "";
   if (discordUrl) {
     const formatted = `$${grossAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const safeName   = clientName.replace(/@(?:everyone|here)/g, "@​$&").replace(/[[\]()]/g, "").slice(0, 100);
+    const safeSetter = setter ? setter.replace(/@(?:everyone|here)/g, "@​$&").replace(/[[\]()]/g, "").slice(0, 100) : null;
     fetch(discordUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        content: `🔥 **DEAL CLOSED — GHL**\n**${clientName}** — ${formatted}${setter ? `\nSetter: **${setter}**` : ""}`,
+        content: `🔥 **DEAL CLOSED — GHL**\n**${safeName}** — ${formatted}${safeSetter ? `\nSetter: **${safeSetter}**` : ""}`,
       }),
       signal: AbortSignal.timeout(5000),
     }).catch(() => {});

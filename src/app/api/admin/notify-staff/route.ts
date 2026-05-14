@@ -3,12 +3,11 @@ import { authOptions } from "@/lib/auth";
 import { sendDiscordDM } from "@/lib/discord";
 
 const SETTERS = [
-  { name: "Kian",  discordId: "1485467469014634547", password: "kian2026"  },
-  { name: "Elias", discordId: "392810193194582017",  password: "elias2026" },
-  { name: "Kolen", discordId: "1306377540746739743", password: "kolen2026" },
-];
+  { name: "Kian",  discordId: process.env.DISCORD_REP_ID_KIAN   ?? "" },
+  { name: "Elias", discordId: process.env.DISCORD_REP_ID_ELIAS  ?? "" },
+].filter(s => s.discordId.length > 0);
 
-const APP_URL = "https://stack-n-scale.vercel.app";
+const APP_URL = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -17,10 +16,10 @@ export async function POST() {
   }
 
   const results = await Promise.allSettled(
-    SETTERS.map(({ name, discordId, password }) =>
+    SETTERS.map(({ name, discordId }) =>
       sendDiscordDM(
         discordId,
-        `Hey ${name}! 👋\n\nYour Stack N Scale staff dashboard is ready.\n\n🔗 **Login:** ${APP_URL}/login\n🔑 **Password:** \`${password}\`\n\nLog in, change your password in settings, and start logging your daily numbers. Lmk if you have any issues.`
+        `Hey ${name}! 👋\n\nYour Stack N Scale staff dashboard is ready.\n\n🔗 **Login:** ${APP_URL}/login\n\nUse the password your admin provided. Log in, go to Settings to change it, then start logging your daily numbers. Lmk if you have any issues.`
       )
     )
   );

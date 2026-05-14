@@ -15,9 +15,11 @@ export const authOptions: NextAuthOptions = {
         const pw = credentials?.password;
         if (!pw) return null;
 
-        // Admin check first
-        if (pw === process.env.SNS_PASSWORD) {
-          return { id: "admin", name: "Evan", role: "admin", clientId: null };
+        // Admin check — requires ADMIN_PASSWORD_HASH (bcrypt hash of admin password)
+        const adminHash = process.env.ADMIN_PASSWORD_HASH;
+        const isAdmin = adminHash ? verifyPassword(pw, adminHash) : false;
+        if (isAdmin) {
+          return { id: "admin", name: process.env.ADMIN_NAME ?? "Evan", role: "admin", clientId: null };
         }
 
         try {

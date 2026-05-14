@@ -1,9 +1,9 @@
 const GHL_BASE = "https://services.leadconnectorhq.com";
 
-function headers() {
+function headers(apiKey = process.env.GHL_API_KEY ?? "") {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${process.env.GHL_API_KEY}`,
+    Authorization: `Bearer ${apiKey}`,
     Version: "2021-07-28",
   };
 }

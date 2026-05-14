@@ -37,9 +37,9 @@ export async function POST(req: Request) {
   if (!email || !rawName) return new Response("Missing customer info", { status: 400 });
 
   const clientKey = `sns:coaching:client:${email}`;
-  const existing = await kv.get<CoachingClient>(clientKey);
 
-  // Skip if already created — Stripe can fire duplicate events
+  // Fast-path: skip expensive API calls if client already exists
+  const existing = await kv.get<CoachingClient>(clientKey);
   if (existing) return new Response("ok", { status: 200 });
 
   const [firstName, ...rest] = rawName.split(" ");
@@ -75,13 +75,15 @@ export async function POST(req: Request) {
     name: rawName,
     email,
     phone,
-    status: "payment_received",
+    status: "id_pending",
     createdAt: new Date().toISOString(),
     idVerification: "pending",
     driveFolder,
   };
 
-  await kv.set(clientKey, client);
+  // Atomic set — only creates if key does not exist (prevents duplicate clients on concurrent events)
+  const created = await kv.set(clientKey, client, { nx: true });
+  if (!created) return new Response("ok", { status: 200 });
 
   // Create lead record for follow-up tracking
   const leadId = randomUUID();
@@ -98,7 +100,10 @@ export async function POST(req: Request) {
 
   after(async () => {
     const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
+    const APP_URL = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
+    const idVerificationUrl = `${APP_URL}/onboarding/id-submit?email=${encodeURIComponent(email)}&name=${encodeURIComponent(rawName)}`;
     await triggerEmail("welcome", email, rawName, { skoolLink: SKOOL_LINK }).catch(e => console.error("Welcome email error:", e));
+    await triggerEmail("id_verification_request", email, rawName, { idVerificationUrl }).catch(e => console.error("ID verification request email error:", e));
     await triggerCampaign(email, rawName, amountTotal, "stripe").catch(e => console.error("Campaign trigger error:", e));
 
     const amountDollars = (amountTotal / 100).toFixed(2);

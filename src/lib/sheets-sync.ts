@@ -3,8 +3,8 @@ import { kv } from "@vercel/kv";
 import type { Deal } from "./deal-types";
 import type { StaffMeta } from "./staff-registry";
 
-const MASTER_LOG_ID = "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
-const SETTER_KPI_ID = "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
+const MASTER_LOG_ID = process.env.GOOGLE_SHEETS_MASTER_LOG_ID ?? "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
+const SETTER_KPI_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID ?? "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
 const STAFF_KV_KEY  = "sns-staff-registry";
 
 export async function getRepSheets(): Promise<Record<string, string>> {

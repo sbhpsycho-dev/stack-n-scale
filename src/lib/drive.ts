@@ -184,9 +184,9 @@ export async function setupClientFolder(clientName: string): Promise<ClientDocs>
 
   // Create subfolders in parallel
   const [idFolder, onboardingFolder, notesFolder] = await Promise.all([
-    createFolder("ID Verification", root.id),
-    createFolder("Onboarding", root.id),
-    createFolder("Notes", root.id),
+    createFolder("ID Verification Forms", root.id),
+    createFolder("Onboarding Forms", root.id),
+    createFolder("Other Client Agreements", root.id),
   ]);
 
   // Copy templates into root folder

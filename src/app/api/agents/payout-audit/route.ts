@@ -2,6 +2,7 @@ import { kv } from "@vercel/kv";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts } from "@/lib/payout-calc";
 import { sendDiscordDM } from "@/lib/discord";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 const TOLERANCE = 1;
 
@@ -15,7 +16,7 @@ function fmt$(n: number) {
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(authHeader)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

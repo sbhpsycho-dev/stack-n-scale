@@ -1,4 +1,4 @@
-type EmailType = "welcome" | "rejection" | "approval" | "discord_link" | "form_received" | "id_received";
+type EmailType = "welcome" | "rejection" | "approval" | "discord_link" | "form_received" | "id_received" | "id_verification_request";
 
 export async function triggerEmail(
   type: EmailType,
@@ -12,6 +12,7 @@ export async function triggerEmail(
     idVerificationFolderId?: string;
     formData?: Record<string, string>;
     skoolLink?: string;
+    idVerificationUrl?: string;
   }
 ) {
   const url = process.env.MAKE_EMAIL_WEBHOOK_URL;

@@ -7,13 +7,14 @@ const PUBLIC_KEY   = process.env.DISCORD_PUBLIC_KEY!;
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN!;
 const APP_ID       = process.env.DISCORD_CLIENT_ID!;
 
-// rep first name (lowercase) → Discord user ID
-const REP_IDS: Record<string, string> = {
-  caelum: "747511465443065876",
-  kian:   "1485467469014634547",
-  elias:  "392810193194582017",
-  kolen:  "1306377540746739743",
-};
+// rep first name (lowercase) → Discord user ID — loaded from env vars
+const REP_IDS: Record<string, string> = Object.fromEntries(
+  [
+    ["caelum", process.env.DISCORD_REP_ID_CAELUM],
+    ["kian",   process.env.DISCORD_REP_ID_KIAN],
+    ["elias",  process.env.DISCORD_REP_ID_ELIAS],
+  ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+);
 
 // ─── Crypto ──────────────────────────────────────────────────────────────────
 

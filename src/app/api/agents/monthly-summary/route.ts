@@ -5,12 +5,11 @@ import { BLANK } from "@/lib/sales-data";
 import type { SalesData } from "@/lib/sales-data";
 import type { Deal } from "@/lib/deal-types";
 import { sendDiscordDM } from "@/lib/discord";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = req.headers.get("authorization");
-  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
+  const isCron = verifyCronSecret(req.headers.get("authorization"));
 
   if (!isCron && (!session || (session.user.role !== "admin" && session.user.role !== "staff"))) {
     return new Response("Unauthorized", { status: 401 });

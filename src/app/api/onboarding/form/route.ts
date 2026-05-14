@@ -31,8 +31,15 @@ const MAX_TEXT_LEN = 2000;
 const EMAIL_REGEX  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function sanitizeForSheets(val: string): string {
-  // Strip leading formula characters to prevent CSV/Sheets injection
-  return val.replace(/^[=+\-@\t\r]/, "'");
+  // Strip all leading formula characters and control chars to prevent Sheets injection
+  return val.replace(/^[=+\-@\t\r]+/, "'").replace(/[\x00-\x1f]/g, " ");
+}
+
+function sanitizeDiscord(val: string): string {
+  return val
+    .replace(/@(?:everyone|here)/g, "@​$&") // zero-width space breaks pings
+    .replace(/```/g, "\\`\\`\\`")
+    .slice(0, 400);
 }
 
 function validateTextField(val: unknown, fieldName: string): string | null {
@@ -44,6 +51,18 @@ function validateTextField(val: unknown, fieldName: string): string | null {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    // Rate limit: 1 submission per email per hour
+    const rawEmail = (typeof body?.email === "string" ? body.email : "").toLowerCase().trim();
+    if (rawEmail) {
+      const rateLimitKey = `sns:onboarding:ratelimit:${rawEmail}`;
+      const last = await kv.get<number>(rateLimitKey);
+      if (last && Date.now() - last < 60_000) {
+        return Response.json({ ok: false, error: "Too many requests — please wait before resubmitting." }, { status: 429 });
+      }
+      await kv.set(rateLimitKey, Date.now(), { ex: 3600 });
+    }
+
     const {
       name, email, motivation, whySNS,
       goal30Days, goal3Months, goal6Months, goal1Year,
@@ -190,34 +209,35 @@ export async function POST(req: Request) {
         }) as { id: string };
 
         // Post intake summary in private channel
+        const sd = sanitizeDiscord;
         await discordRequest(`/channels/${channel.id}/messages`, "POST", {
           content: [
-            `📋 **New Client Intake — ${name}**`,
-            `📧 ${email}`,
+            `📋 **New Client Intake — ${sd(name)}**`,
+            `📧 ${sd(email)}`,
             ``,
-            `**What motivated you to get started?**`, motivation,
+            `**What motivated you to get started?**`, sd(motivation),
             ``,
-            `**Why Stack N Scale Enterprises?**`, whySNS,
+            `**Why Stack N Scale Enterprises?**`, sd(whySNS),
             ``,
-            `**30-Day Goal**`, goal30Days,
+            `**30-Day Goal**`, sd(goal30Days),
             ``,
-            `**3-Month Goal**`, goal3Months,
+            `**3-Month Goal**`, sd(goal3Months),
             ``,
-            `**6-Month Goal**`, goal6Months,
+            `**6-Month Goal**`, sd(goal6Months),
             ``,
-            `**1-Year Goal**`, goal1Year,
+            `**1-Year Goal**`, sd(goal1Year),
             ``,
-            `**Biggest Challenge**`, biggestChallenge,
+            `**Biggest Challenge**`, sd(biggestChallenge),
             ``,
-            `**Success in 90 Days**`, successIn90Days,
-            additionalNotes ? `\n**Additional Notes**\n${additionalNotes}` : "",
+            `**Success in 90 Days**`, sd(successIn90Days),
+            additionalNotes ? `\n**Additional Notes**\n${sd(additionalNotes)}` : "",
           ].join("\n"),
         });
 
         // Welcome in #general student chat
         if (GENERAL_CH) {
           discordRequest(`/channels/${GENERAL_CH}/messages`, "POST", {
-            content: `👋 Welcome **${name}** to Stack N Scale Enterprises! We're glad to have you. Check your email to connect your private channel.`,
+            content: `👋 Welcome **${sanitizeDiscord(name)}** to Stack N Scale Enterprises! We're glad to have you. Check your email to connect your private channel.`,
           }).catch(() => {});
         }
 

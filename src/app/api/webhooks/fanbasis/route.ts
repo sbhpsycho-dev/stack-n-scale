@@ -32,10 +32,9 @@ type FanbasisPayload = {
 
 export async function POST(req: Request) {
   const secret = process.env.FANBASIS_WEBHOOK_SECRET;
-  if (secret) {
-    const provided = req.headers.get("x-webhook-secret");
-    if (provided !== secret) return new Response("Unauthorized", { status: 401 });
-  }
+  if (!secret) return new Response("Webhook not configured", { status: 500 });
+  const provided = req.headers.get("x-webhook-secret");
+  if (provided !== secret) return new Response("Unauthorized", { status: 401 });
 
   let payload: FanbasisPayload;
   try {

@@ -1,11 +1,11 @@
 import { kv } from "@vercel/kv";
 import type { CoachingClient } from "@/lib/coaching-types";
+import { verifyWebhookSecret } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const secret = req.headers.get("x-webhook-secret");
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+  if (!verifyWebhookSecret(req.headers.get("x-webhook-secret"))) {
     return new Response("Unauthorized", { status: 401 });
   }
 

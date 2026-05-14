@@ -107,12 +107,12 @@ export async function syncStripe(clientId: string): Promise<void> {
 
   const dailyMap: Record<string, number> = {};
   txns.forEach((t) => {
-    const date = new Date(t.created * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const date = new Date(t.created * 1000).toISOString().slice(0, 10); // YYYY-MM-DD (UTC, consistent)
     dailyMap[date] = (dailyMap[date] ?? 0) + t.net / 100;
   });
   const revenueOverTime: TimePoint[] = Object.entries(dailyMap)
     .map(([date, amount]) => ({ date, amount: parseFloat(amount.toFixed(2)) }))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   // Last month cash for trend calculation
   const lastMonthStart = Math.floor(new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime() / 1000);
@@ -446,13 +446,12 @@ export async function syncSheets(clientId: string): Promise<void> {
 export async function syncAll(clientId: string): Promise<void> {
   // Run sequentially — each sync does a read-modify-write on the same KV key, so
   // parallel execution causes last-writer-wins data loss (e.g. Sheets overwrites Stripe).
-  const results = await Promise.allSettled([
-    syncMeta(clientId)
-      .then(() => syncStripe(clientId))
-      .then(() => syncGHL(clientId))
-      .then(() => syncSheets(clientId)),
-  ]);
-  const anyOk = results.some(r => r.status === "fulfilled");
+  // Each step is isolated: one failing does not block the others.
+  let anyOk = false;
+  await syncMeta(clientId).then(() => { anyOk = true; }).catch(e => console.error(`[syncAll] Meta failed for ${clientId}:`, e));
+  await syncStripe(clientId).then(() => { anyOk = true; }).catch(e => console.error(`[syncAll] Stripe failed for ${clientId}:`, e));
+  await syncGHL(clientId).then(() => { anyOk = true; }).catch(e => console.error(`[syncAll] GHL failed for ${clientId}:`, e));
+  await syncSheets(clientId).then(() => { anyOk = true; }).catch(e => console.error(`[syncAll] Sheets failed for ${clientId}:`, e));
 
   // Derive cross-source metrics from fully merged data
   const merged = await getClientData(clientId);

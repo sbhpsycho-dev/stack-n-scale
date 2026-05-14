@@ -1,13 +1,14 @@
 import { kv } from "@vercel/kv";
 import type { Deal } from "@/lib/deal-types";
 import { getSheetsToken, sheetsGet, sheetsAppend, buildMasterLogRow, buildRepRow, getRepSheets } from "@/lib/sheets-sync";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
-const MASTER_LOG_ID = "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
-const SETTER_KPI_ID = "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
+const MASTER_LOG_ID = process.env.GOOGLE_SHEETS_MASTER_LOG_ID;
+const SETTER_KPI_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID;
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(authHeader)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -17,6 +18,10 @@ export async function GET(req: Request) {
   const deals   = (
     await Promise.all(dealIds.map(id => kv.get<Deal>(`sns:deals:${id}`)))
   ).filter((d): d is Deal => d !== null);
+
+  if (!MASTER_LOG_ID || !SETTER_KPI_ID) {
+    return Response.json({ ok: false, error: "GOOGLE_SHEETS_MASTER_LOG_ID and GOOGLE_SHEETS_SETTER_KPI_ID must be set" }, { status: 500 });
+  }
 
   if (!deals.length) return Response.json({ ok: true, synced: 0 });
 
@@ -46,8 +51,8 @@ export async function GET(req: Request) {
     const dateSetterMap: Record<string, { name: string; deals: number; gross: number }> = {};
     for (const deal of deals) {
       for (const raw of [deal.dmSetter, deal.setter].filter(Boolean) as string[]) {
-        const key  = `${deal.date}__${raw.trim().toLowerCase().split(" ")[0]}`;
-        const name = raw.trim().split(" ")[0];
+        const name = raw.trim();
+        const key  = `${deal.date}__${name.toLowerCase()}`;
         dateSetterMap[key] = {
           name,
           deals: (dateSetterMap[key]?.deals ?? 0) + 1,
@@ -58,7 +63,7 @@ export async function GET(req: Request) {
 
     const existingRows = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:B");
     const logged = new Set<string>(
-      (existingRows.values ?? []).map((r: string[]) => `${r[0]}__${r[1]?.toLowerCase().split(" ")[0]}`)
+      (existingRows.values ?? []).map((r: string[]) => `${r[0]}__${r[1]?.toLowerCase()}`)
     );
 
     const toAdd = Object.entries(dateSetterMap)

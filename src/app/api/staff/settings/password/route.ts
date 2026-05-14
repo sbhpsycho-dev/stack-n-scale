@@ -18,8 +18,8 @@ export async function POST(req: Request) {
   if (!currentPassword || !newPassword) {
     return Response.json({ ok: false, error: "Both passwords are required" }, { status: 400 });
   }
-  if (newPassword.length < 6) {
-    return Response.json({ ok: false, error: "New password must be at least 6 characters" }, { status: 400 });
+  if (newPassword.length < 12) {
+    return Response.json({ ok: false, error: "New password must be at least 12 characters" }, { status: 400 });
   }
 
   const registry = await kv.get<StaffMeta[]>(STAFF_KV_KEY);

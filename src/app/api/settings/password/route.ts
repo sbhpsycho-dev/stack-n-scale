@@ -6,7 +6,7 @@ import { verifyPassword, hashPassword } from "@/lib/password";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role === "admin") return new Response("Unauthorized", { status: 401 });
+  if (!session || session.user.role !== "client") return new Response("Unauthorized", { status: 401 });
 
   const { currentPassword, newPassword } = await req.json();
   if (!currentPassword || !newPassword) return Response.json({ ok: false, error: "Missing fields" }, { status: 400 });

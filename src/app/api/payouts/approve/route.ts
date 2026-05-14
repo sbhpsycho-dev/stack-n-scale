@@ -7,12 +7,13 @@ import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const EVAN_ID   = process.env.EVAN_DISCORD_USER_ID!;
 
-const REP_IDS: Record<string, string> = {
-  caelum: "747511465443065876",
-  kian:   "1485467469014634547",
-  elias:  "392810193194582017",
-  kolen:  "1306377540746739743",
-};
+const REP_IDS: Record<string, string> = Object.fromEntries(
+  [
+    ["caelum", process.env.DISCORD_REP_ID_CAELUM],
+    ["kian",   process.env.DISCORD_REP_ID_KIAN],
+    ["elias",  process.env.DISCORD_REP_ID_ELIAS],
+  ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+);
 
 function fmt$(n: number) {
   return `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
