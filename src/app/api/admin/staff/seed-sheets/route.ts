@@ -7,7 +7,7 @@ import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 const SETTER_SHEET_IDS: Record<string, string> = {
   kian:  "16U8r2DftWYKO6rfN9NKns42JqShj-HVqckd-Zhg5vfk",
   elias: "1FNk4rFjuFq4uU_NLWfhLs-PmNyFMiIn9vw_G5_zgNmc",
-  kolen: "1nBFfyqmxYuOEUZSPsSckBUbMqCYu4BoW5OQT8ts31N0",
+  naomi: "11WVAec9S8flwbHc-yDLbVv3T2R1_9tENJRIJyWR5eaU",
 };
 
 export async function POST() {
