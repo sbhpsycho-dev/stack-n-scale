@@ -69,5 +69,5 @@ export function useSalesData(clientId: string | null) {
 
   const reset = useCallback(() => update(BLANK), [update]);
 
-  return { data, update, reset, loading };
+  return { data, update, reset, loading, refresh: fetchRemote };
 }

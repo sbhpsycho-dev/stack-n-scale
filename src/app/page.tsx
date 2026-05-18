@@ -52,10 +52,12 @@ export default function Dashboard() {
   const isAdmin = session?.user?.role === "admin";
   const clientId = isAdmin ? "admin" : (session?.user?.clientId ?? null);
 
-  const { data, update, reset, loading } = useSalesData(clientId);
+  const { data, update, reset, loading, refresh } = useSalesData(clientId);
   const [editOpen, setEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
+  const [kpiSyncing, setKpiSyncing] = useState(false);
+  const [kpiSyncMsg, setKpiSyncMsg] = useState("");
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
@@ -166,6 +168,26 @@ export default function Dashboard() {
       setLastSyncedBySource(prev => ({ ...prev, [source]: now }));
     } finally {
       setSyncingSource(null);
+    }
+  }
+
+  async function syncKpiData() {
+    setKpiSyncing(true);
+    setKpiSyncMsg("");
+    try {
+      const res  = await fetch("/api/agents/kpi-aggregator");
+      const json = await res.json();
+      if (json.ok) {
+        setKpiSyncMsg("Synced!");
+        refresh(false);
+      } else {
+        setKpiSyncMsg("Sync failed");
+      }
+    } catch {
+      setKpiSyncMsg("Sync error");
+    } finally {
+      setKpiSyncing(false);
+      setTimeout(() => setKpiSyncMsg(""), 4000);
     }
   }
   const { dashboard: d, pipeline: p, ads: a, reps: r, clients = [] } = data;
@@ -341,6 +363,13 @@ export default function Dashboard() {
                 className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
                 Onboarding
               </Link>
+            )}
+            {isAdmin && (
+              <Button size="sm" variant="ghost" onClick={syncKpiData} disabled={kpiSyncing}
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
+                <RefreshCw className={`h-3.5 w-3.5 ${kpiSyncing ? "animate-spin" : ""}`} />
+                {kpiSyncMsg || "Sync KPI"}
+              </Button>
             )}
             <Button size="sm" variant="ghost" onClick={reset}
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">

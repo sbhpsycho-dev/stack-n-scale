@@ -58,20 +58,29 @@ export async function GET() {
     const headers = rows[0].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
     const col = (name: string) => headers.indexOf(name);
 
-    const nameIdx      = col("name") >= 0 ? col("name") : col("settername") >= 0 ? col("settername") : 0;
-    const cashIdx      = col("cashcollected");
-    const demosSetIdx  = col("demosset");
-    const demosShowIdx = col("demosshowed") >= 0 ? col("demosshowed") : col("showedups");
+    const nameIdx      = col("name") >= 0 ? col("name")
+                       : col("settername") >= 0 ? col("settername")
+                       : col("setter") >= 0 ? col("setter") : 0;
+    const cashIdx      = col("cashcollected") >= 0 ? col("cashcollected")
+                       : col("grosscollected($)") >= 0 ? col("grosscollected($)")
+                       : col("grossdealvalue($)") >= 0 ? col("grossdealvalue($)")
+                       : col("grossdealvalue") >= 0 ? col("grossdealvalue")
+                       : col("grosscollected");
+    const demosSetIdx  = col("demosset") >= 0 ? col("demosset") : col("zoomsbooked");
+    const demosShowIdx = col("demosshowed") >= 0 ? col("demosshowed")
+                       : col("showedups") >= 0 ? col("showedups")
+                       : col("zoomsshowed");
     const closedIdx    = col("dealsclosed") >= 0 ? col("dealsclosed") : col("closed");
 
     // Aggregate by name — handles both summary rows (one per setter) and daily log rows
+    const HEADER_LABELS = new Set(["name", "setter name", "setter", "settername"]);
     type Totals = { cashCollected: number; demosSet: number; demosShowed: number; dealsClosed: number };
     const repMap = new Map<string, Totals>();
     for (const row of rows.slice(1) as string[][]) {
       const name = row[nameIdx]?.trim() ?? "";
-      if (!name) continue;
-      const cash        = parseFloat((row[cashIdx]      ?? "0").replace(/[$,]/g, "")) || 0;
-      const demosSet    = parseFloat((row[demosSetIdx]  ?? "0").replace(/[$,]/g, "")) || 0;
+      if (!name || HEADER_LABELS.has(name.toLowerCase())) continue;
+      const cash        = cashIdx >= 0     ? parseFloat((row[cashIdx]     ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+      const demosSet    = demosSetIdx >= 0 ? parseFloat((row[demosSetIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
       const demosShowed = parseFloat((row[demosShowIdx] ?? "0").replace(/[$,]/g, "")) || 0;
       const closed      = parseFloat((row[closedIdx]    ?? "0").replace(/[$,]/g, "")) || 0;
       const prev        = repMap.get(name) ?? { cashCollected: 0, demosSet: 0, demosShowed: 0, dealsClosed: 0 };
