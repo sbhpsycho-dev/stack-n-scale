@@ -149,6 +149,7 @@ export const BLANK: SalesData = {
 
 export const SEED: SalesData = {
   dashboard: {
+    cashCollectedYTD: 0,
     cashCollectedMTD: 20001,
     leadsThisMonth: 125,
     totalDealsClosedMTD: 14,
