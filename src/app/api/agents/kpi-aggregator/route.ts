@@ -302,6 +302,7 @@ export async function GET(req: Request) {
   const data: SalesData = {
     ...BLANK,
     dashboard: {
+      cashCollectedYTD:      0,
       cashCollectedMTD,
       cashCollectedLastMonth,
       netRevenueMTD,
