@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PayoutSplitChart } from "@/components/charts/payout-charts";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle } from "lucide-react";
 import { toast, toastError } from "@/lib/toast";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ function CC({ title, children }: { title: string; children: React.ReactNode }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function MoneyPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [data, setData] = useState<MoneyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -186,21 +189,31 @@ export default function MoneyPage() {
 
         {/* Section 1 — This Week */}
         <CC title="This Week">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <MetricCard label="Gross"          value={w?.gross ?? 0}        prefix="$" variant="orange"  index={0} />
             <MetricCard label="Payouts Out"    value={w?.totalPayouts ?? 0} prefix="$" variant="black"   index={1} />
             <MetricCard label="Evan Net"       value={w?.evanTakeHome ?? 0} prefix="$" variant="green"   index={2} />
             <MetricCard label="Deals"          value={w?.dealCount ?? 0}               variant="default" index={3} />
           </div>
-          <button
-            onClick={() => setConfirmOpen(true)}
-            disabled={approving}
-            className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {approving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Approve This Week&apos;s Payouts
-          </button>
         </CC>
+
+        {/* Approve action — admin only */}
+        {isAdmin && (
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-blue-400">Approve This Week&apos;s Payouts</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Mark all pending deals as paid and notify your reps.</p>
+            </div>
+            <button
+              onClick={() => setConfirmOpen(true)}
+              disabled={approving}
+              className="shrink-0 py-3 px-6 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-blue-500/20"
+            >
+              {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              Approve Payouts
+            </button>
+          </div>
+        )}
 
         {/* Section 2 — MTD Breakdown */}
         <CC title="Month to Date">

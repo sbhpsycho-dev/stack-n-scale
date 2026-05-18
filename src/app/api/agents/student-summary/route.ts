@@ -47,31 +47,6 @@ export async function GET(req: Request) {
 
   const weekLabel = weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-  const telegramText = [
-    `📊 *Weekly Student Summary — Week of ${weekLabel}*`,
-    "",
-    `✅ Check-Ins Received: ${checkedIn.length} / ${valid.length}`,
-    missing.length ? `❌ Missing Check-Ins: ${missing.join(", ")}` : "",
-    "",
-    `🟢 On Track (8-10): ${green.length} students`,
-    orange.length ? `🟡 At Risk (6-7): ${orange.length} students — ${orange.map(s => s.studentName).join(", ")}` : "",
-    red.length    ? `🔴 Off Track (1-5): ${red.length} students — ${red.map(s => s.studentName).join(", ")} ⚠️ CALL THESE TODAY` : "",
-    "",
-    topPerf.length ? `🏆 Top Performers This Week:` : "",
-    ...topPerf.map((s, i) => `${i + 1}. ${s.studentName} — Score: ${s.healthScore}`),
-  ].filter(Boolean).join("\n");
-
-  // Telegram notification
-  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-  const telegramChatId   = process.env.TELEGRAM_CHAT_ID;
-  if (telegramBotToken && telegramChatId) {
-    void fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: telegramChatId, text: telegramText, parse_mode: "Markdown" }),
-    }).catch(e => console.error("Telegram send error:", e));
-  }
-
   // Discord DMs to admins (fire-and-forget)
   const discordMsg = [
     `📊 **Weekly Student Summary — Week of ${weekLabel}**`,
@@ -100,6 +75,5 @@ export async function GET(req: Request) {
     orange: orange.map(s => s.studentName),
     red: red.map(s => s.studentName),
     topPerformers: topPerf.map(s => ({ name: s.studentName, score: s.healthScore })),
-    telegramText,
   });
 }

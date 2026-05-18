@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/agents/kpi-aggregator",
+      "schedule": "0 6 * * *"
+    },
+    {
       "path": "/api/agents/daily-brief",
       "schedule": "0 11 * * *"
     },

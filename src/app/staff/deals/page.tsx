@@ -374,7 +374,7 @@ export default function DealsPage() {
           <h1 className="text-xl font-bold tracking-tight">Deal Log</h1>
           <p className="text-xs text-muted-foreground mt-0.5">All closed deals with auto-calculated payouts</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={() => exportCSV(deals)}
             aria-label="Export deals as CSV"
@@ -384,9 +384,9 @@ export default function DealsPage() {
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="h-8 px-3 flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold transition-colors"
+            className="h-10 px-5 flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors shadow-md shadow-orange-500/20"
           >
-            <Plus className="h-3.5 w-3.5" /> Add Deal
+            <Plus className="h-4 w-4" /> Add Deal
           </button>
         </div>
       </div>
@@ -431,13 +431,13 @@ export default function DealsPage() {
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-orange-500" /></div>
         ) : deals.length === 0 ? (
-          <div className="py-16 text-center space-y-3">
-            <p className="text-xs text-muted-foreground">No deals found.</p>
+          <div className="py-16 text-center space-y-4">
+            <p className="text-sm text-muted-foreground">No deals found.</p>
             <button
               onClick={() => setShowModal(true)}
-              className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors shadow-md shadow-orange-500/20"
             >
-              Log your first deal →
+              <Plus className="h-4 w-4" /> Log a Deal
             </button>
           </div>
         ) : (

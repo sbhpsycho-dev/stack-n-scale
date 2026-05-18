@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, LayoutDashboard, DollarSign, Megaphone, Users, TrendingUp, Activity, Share2 } from "lucide-react";
 import type { SocialAccount } from "@/app/api/staff/kpi/social/route";
 import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart } from "@/components/charts/revenue-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart } from "@/components/charts/ads-charts";
@@ -707,14 +707,14 @@ function SocialTab({ refreshSignal }: { refreshSignal: number }) {
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "revenue" | "ads" | "setters" | "trends" | "clients" | "social";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview"       },
-  { id: "revenue",  label: "Revenue"        },
-  { id: "ads",      label: "Ads"            },
-  { id: "setters",  label: "Setters"        },
-  { id: "trends",   label: "Monthly Trend"  },
-  { id: "clients",  label: "Client Health"  },
-  { id: "social",   label: "Social"         },
+const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: "overview", label: "Overview",      icon: LayoutDashboard },
+  { id: "revenue",  label: "Revenue",       icon: DollarSign      },
+  { id: "ads",      label: "Ads",           icon: Megaphone       },
+  { id: "setters",  label: "Setters",       icon: Users           },
+  { id: "trends",   label: "Monthly Trend", icon: TrendingUp      },
+  { id: "clients",  label: "Client Health", icon: Activity        },
+  { id: "social",   label: "Social",        icon: Share2          },
 ];
 
 // Per-tab refresh signals — only the active tab increments when refresh is clicked
@@ -740,27 +740,31 @@ export default function InsightsPage() {
         <button
           onClick={handleRefresh}
           aria-label="Refresh current tab"
-          className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+          className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground text-xs"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
       </div>
 
       {/* Tab nav */}
       <div className="flex gap-1 border-b border-border overflow-x-auto pb-0">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors border-b-2 -mb-px ${
-              tab === t.id
-                ? "border-orange-500 text-orange-500"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TABS.map(t => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                tab === t.id
+                  ? "border-orange-500 text-orange-500"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content — each tab mounts once and listens to its own refresh signal */}
