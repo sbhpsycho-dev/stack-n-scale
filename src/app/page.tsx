@@ -175,7 +175,7 @@ export default function Dashboard() {
     setKpiSyncing(true);
     setKpiSyncMsg("");
     try {
-      const res  = await fetch("/api/agents/kpi-aggregator");
+      const res  = await fetch("/api/admin/sync-leaderboard", { method: "POST" });
       const json = await res.json();
       if (json.ok) {
         setKpiSyncMsg("Synced!");
@@ -471,6 +471,9 @@ export default function Dashboard() {
                         {kpiVisible("mrr") && (
                           <MetricCard label="MRR" value={d.mrr} prefix="$" variant="black" index={5}
                             onClick={() => toggleCard("mrr")} selected={expandedCard === "mrr"} />
+                        )}
+                        {isAdmin && (
+                          <MetricCard label="Cash Collected YTD" value={d.cashCollectedYTD ?? 0} prefix="$" variant="green" index={6} />
                         )}
                       </div>
 

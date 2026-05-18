@@ -48,6 +48,7 @@ export type Client = {
 
 export type SalesData = {
   dashboard: {
+    cashCollectedYTD: number;
     cashCollectedMTD: number;
     leadsThisMonth: number;
     totalDealsClosedMTD: number;
@@ -119,6 +120,7 @@ export type SalesData = {
 
 export const BLANK: SalesData = {
   dashboard: {
+    cashCollectedYTD: 0,
     cashCollectedMTD: 0, leadsThisMonth: 0, totalDealsClosedMTD: 0,
     netRevenueMTD: 0, costPerClose: 0, mrr: 0, totalRefund: 0,
     totalRefundPct: 0, monthlyGoal: 0, cashCollectedLastMonth: 0,
