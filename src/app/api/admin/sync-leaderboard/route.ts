@@ -50,24 +50,40 @@ export async function POST() {
   let pipeCallsMTD = 0, pipeAnswMTD = 0, pipeDSetMTD = 0, pipeDShowMTD = 0, pipeClosedMTD = 0;
 
   if (setterRows) {
-    const headers   = setterRows[0].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
+    // Find first data row (cell 0 is a date) — skips merged title rows
+    let dataStartIdx = 1;
+    for (let i = 0; i < Math.min(5, setterRows.length); i++) {
+      const c0 = (setterRows[i][0] ?? "").trim();
+      if (c0.match(/^\d{1,2}\/\d{1,2}\/\d{4}/) || c0.match(/^\d{4}-\d{2}-\d{2}/)) {
+        dataStartIdx = i;
+        break;
+      }
+    }
+    // Use row just before data as header (if it exists), else empty
+    const maybeHeader = dataStartIdx > 0 ? (setterRows[dataStartIdx - 1] ?? []) : [];
+    const headers   = maybeHeader.map((h: string) => (h ?? "").trim().toLowerCase().replace(/\s+/g, ""));
     const col       = (n: string) => headers.indexOf(n);
-    const dateIdx   = col("date");
-    const nameIdx   = col("settername") >= 0 ? col("settername") : col("setter") >= 0 ? col("setter") : col("name") >= 0 ? col("name") : 1;
-    const cashIdx   = col("cashcollected") >= 0 ? col("cashcollected") : col("grosscollected($)") >= 0 ? col("grosscollected($)") : col("grossdealvalue($)") >= 0 ? col("grossdealvalue($)") : col("grossdealvalue") >= 0 ? col("grossdealvalue") : col("grosscollected");
-    const dSetIdx   = col("demosset") >= 0 ? col("demosset") : col("zoomsbooked");
-    const dShowIdx  = col("demosshowed") >= 0 ? col("demosshowed") : col("showedups") >= 0 ? col("showedups") : col("zoomsshowed");
-    const closedIdx = col("dealsclosed") >= 0 ? col("dealsclosed") : col("closed");
-    const callsIdx  = col("callsmade") >= 0 ? col("callsmade") : col("callsdialed");
-    const answIdx   = col("callsanswered") >= 0 ? col("callsanswered") : col("callsconnected");
+    // Named lookup first, positional fallback to confirmed sheet layout
+    const dateIdx   = col("date")          >= 0 ? col("date")          : 0;
+    const nameIdx   = col("settername")    >= 0 ? col("settername")    : col("setter") >= 0 ? col("setter") : col("name") >= 0 ? col("name") : 1;
+    const callsIdx  = col("callsmade")     >= 0 ? col("callsmade")     : col("callsdialed")    >= 0 ? col("callsdialed")    : 2;
+    const answIdx   = col("callsanswered") >= 0 ? col("callsanswered") : col("callsconnected") >= 0 ? col("callsconnected") : 3;
+    const dSetIdx   = col("demosset")      >= 0 ? col("demosset")      : col("zoomsbooked")    >= 0 ? col("zoomsbooked")    : 6;
+    const dShowIdx  = col("demosshowed")   >= 0 ? col("demosshowed")   : col("showedups")      >= 0 ? col("showedups")      : col("zoomsshowed") >= 0 ? col("zoomsshowed") : 7;
+    const closedIdx = col("dealsclosed")   >= 0 ? col("dealsclosed")   : col("closed")         >= 0 ? col("closed")         : 10;
+    const cashIdx   = col("cashcollected") >= 0 ? col("cashcollected")
+                    : col("grosscollected($)") >= 0 ? col("grosscollected($)")
+                    : col("grossdealvalue($)") >= 0 ? col("grossdealvalue($)")
+                    : col("grossdealvalue")    >= 0 ? col("grossdealvalue")
+                    : col("grosscollected")    >= 0 ? col("grosscollected") : 11;
     const ps        = (row: string[], i: number) => i >= 0 ? parseFloat((row[i] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
 
-    for (const row of setterRows.slice(1) as string[][]) {
+    for (const row of setterRows.slice(dataStartIdx) as string[][]) {
       const name = row[nameIdx]?.trim() ?? "";
       if (!name || HEADER_LABELS.has(name.toLowerCase())) continue;
-      const rawDate = dateIdx >= 0 ? (row[dateIdx]?.trim() ?? "") : "";
+      const rawDate = (row[dateIdx]?.trim() ?? "");
       const parsed  = rawDate ? parseSheetDate(rawDate) : null;
-      if (parsed && parsed.ym !== thisYM) continue; // MTD only
+      if (!parsed || parsed.ym !== thisYM) continue; // MTD only, skip undated rows
 
       const cash = ps(row, cashIdx), dSet = ps(row, dSetIdx), dShow = ps(row, dShowIdx);
       const closed = ps(row, closedIdx), calls = ps(row, callsIdx), answ = ps(row, answIdx);
