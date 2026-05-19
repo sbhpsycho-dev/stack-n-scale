@@ -7,6 +7,9 @@ import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 import type { Lead } from "@/lib/lead-types";
+import type { Deal } from "@/lib/deal-types";
+import { calculatePayouts } from "@/lib/payout-calc";
+import { syncDealToSheets } from "@/lib/sheets-sync";
 
 export const runtime = "nodejs";
 
@@ -35,6 +38,37 @@ export async function POST(req: Request) {
   const phone = session.customer_details?.phone ?? undefined;
 
   if (!email || !rawName) return new Response("Missing customer info", { status: 400 });
+
+  const amountTotal = session.amount_total ?? 0;
+
+  // ── Deal record — idempotent on session.id, fires for new AND returning clients
+  const dealId = `stripe-${session.id}`;
+  if (amountTotal > 0 && !(await kv.get(`sns:deals:${dealId}`))) {
+    const grossAmount  = amountTotal / 100;
+    const processorFee = parseFloat((grossAmount * 0.029 + 0.30).toFixed(2));
+    const deal: Deal = {
+      id:           dealId,
+      date:         new Date(session.created * 1000).toISOString().split("T")[0],
+      clientName:   rawName,
+      offer:        (session.metadata?.offer === "10K" ? "10K" : "5K") as Deal["offer"],
+      grossAmount,
+      processor:    "stripe",
+      processorFee,
+      netAmount:    parseFloat((grossAmount - processorFee).toFixed(2)),
+      leadSource:   (session.metadata?.leadSource === "organic" ? "organic" : "ad") as Deal["leadSource"],
+      dmSetter:     session.metadata?.dmSetter   ?? null,
+      setter:       session.metadata?.setter     ?? null,
+      closer:       session.metadata?.closer     ?? null,
+      payouts:      {} as Deal["payouts"],
+      payoutStatus: "pending",
+      notes:        session.metadata?.notes      ?? "",
+    };
+    deal.payouts = calculatePayouts(deal);
+    await kv.set(`sns:deals:${dealId}`, deal);
+    const idx = (await kv.get<string[]>("sns:deals:index")) ?? [];
+    await kv.set("sns:deals:index", [dealId, ...idx]);
+    syncDealToSheets(deal).catch(e => console.error("Sheets sync error:", e));
+  }
 
   const clientKey = `sns:coaching:client:${email}`;
 
@@ -95,8 +129,6 @@ export async function POST(req: Request) {
   await kv.set(`sns:leads:${leadId}`, lead);
   const leadIndex = (await kv.get<string[]>("sns:leads:index")) ?? [];
   await kv.set("sns:leads:index", [leadId, ...leadIndex]);
-
-  const amountTotal = session.amount_total ?? 0;
 
   after(async () => {
     const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";

@@ -5,6 +5,9 @@ import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
 import type { Lead } from "@/lib/lead-types";
+import type { Deal } from "@/lib/deal-types";
+import { calculatePayouts } from "@/lib/payout-calc";
+import { syncDealToSheets } from "@/lib/sheets-sync";
 
 export const runtime = "nodejs";
 
@@ -56,6 +59,34 @@ export async function POST(req: Request) {
     const alreadyProcessed = await kv.get(paymentKey);
     if (alreadyProcessed) return new Response("ok", { status: 200 });
     await kv.set(paymentKey, true, { ex: 60 * 60 * 24 * 7 });
+  }
+
+  // ── Deal record ────────────────────────────────────────────────────────────────
+  if (amountCents > 0) {
+    const dealId      = payload.payment_id ? `fanbasis-${payload.payment_id}` : `fanbasis-${Date.now()}`;
+    const grossAmount = amountCents / 100;
+    const deal: Deal  = {
+      id:           dealId,
+      date:         new Date().toISOString().split("T")[0],
+      clientName:   rawName,
+      offer:        ((payload as Record<string, string>).offer === "10K" ? "10K" : "5K") as Deal["offer"],
+      grossAmount,
+      processor:    "fanbasis",
+      processorFee: 0,
+      netAmount:    grossAmount,
+      leadSource:   ((payload as Record<string, string>).lead_source === "organic" ? "organic" : "ad") as Deal["leadSource"],
+      dmSetter:     (payload as Record<string, string>).dm_setter   ?? null,
+      setter:       (payload as Record<string, string>).setter      ?? null,
+      closer:       (payload as Record<string, string>).closer      ?? null,
+      payouts:      {} as Deal["payouts"],
+      payoutStatus: "pending",
+      notes:        "",
+    };
+    deal.payouts = calculatePayouts(deal);
+    await kv.set(`sns:deals:${dealId}`, deal);
+    const idx = (await kv.get<string[]>("sns:deals:index")) ?? [];
+    await kv.set("sns:deals:index", [dealId, ...idx]);
+    syncDealToSheets(deal).catch(e => console.error("Sheets sync error:", e));
   }
 
   const clientKey = `sns:coaching:client:${email}`;

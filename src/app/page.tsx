@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar, Download } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -190,6 +190,26 @@ export default function Dashboard() {
       setTimeout(() => setKpiSyncMsg(""), 4000);
     }
   }
+  async function backfillDeals() {
+    setKpiSyncing(true);
+    setKpiSyncMsg("");
+    try {
+      const res  = await fetch("/api/admin/backfill-deals", { method: "POST" });
+      const json = await res.json();
+      if (json.ok) {
+        setKpiSyncMsg(`${json.created} deals loaded`);
+        refresh(false);
+      } else {
+        setKpiSyncMsg("Backfill failed");
+      }
+    } catch {
+      setKpiSyncMsg("Backfill error");
+    } finally {
+      setKpiSyncing(false);
+      setTimeout(() => setKpiSyncMsg(""), 6000);
+    }
+  }
+
   const { dashboard: d, pipeline: p, ads: a, reps: r, clients = [] } = data;
   // Manage Clients state (admin only)
   const [newClientName, setNewClientName] = useState("");
@@ -369,6 +389,13 @@ export default function Dashboard() {
                 className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
                 <RefreshCw className={`h-3.5 w-3.5 ${kpiSyncing ? "animate-spin" : ""}`} />
                 {kpiSyncMsg || "Sync KPI"}
+              </Button>
+            )}
+            {isAdmin && (
+              <Button size="sm" variant="ghost" onClick={backfillDeals} disabled={kpiSyncing}
+                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
+                <Download className="h-3.5 w-3.5" />
+                Backfill Deals
               </Button>
             )}
             <Button size="sm" variant="ghost" onClick={reset}
