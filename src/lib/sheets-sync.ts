@@ -54,11 +54,15 @@ export async function getSheetsToken(): Promise<string> {
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 export async function sheetsGet(token: string, sheetId: string, range: string) {
-  const res = await fetch(
+  const res  = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  return res.json();
+  const json = await res.json();
+  if (!res.ok || json.error) {
+    throw new Error(`Sheets API error ${res.status}: ${json.error?.message ?? JSON.stringify(json.error)}`);
+  }
+  return json;
 }
 
 export async function sheetsAppend(token: string, sheetId: string, range: string, rows: unknown[][]) {

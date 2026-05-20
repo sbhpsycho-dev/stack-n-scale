@@ -34,6 +34,7 @@ export async function POST() {
 
   // ── 1. Setter KPI Daily Log → MTD leaderboard + pipeline ─────────────────────
   let setterRows: string[][] | null = null;
+  let sheetsError: string | null = null;
   try {
     const token = await getSheetsToken();
     for (const tab of ["Daily Log", "Sheet1"]) {
@@ -42,7 +43,9 @@ export async function POST() {
         if (res.values && res.values.length >= 2) { setterRows = res.values as string[][]; break; }
       } catch { continue; }
     }
-  } catch { /* sheet unavailable */ }
+  } catch (e) {
+    sheetsError = e instanceof Error ? e.message : String(e);
+  }
 
   type RepAgg = { cash: number; calls: number; answered: number; dSet: number; dShow: number; closed: number };
   const repMapMTD = new Map<string, RepAgg>();
@@ -216,7 +219,8 @@ export async function POST() {
   await kv.set("sns-dashboard-v1", current, { ex: 21600 });
 
   return Response.json({
-    ok:              true,
+    ok:              !sheetsError || leaderboard.length > 0,
+    sheetsError,
     leaderboardCount: leaderboard.length,
     cashMTD,
     cashYTD,

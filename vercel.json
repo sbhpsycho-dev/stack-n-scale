@@ -13,6 +13,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/sync-leaderboard",
+      "schedule": "0 */2 * * *"
+    },
+    {
       "path": "/api/agents/student-summary",
       "schedule": "0 11 * * 1"
     },
