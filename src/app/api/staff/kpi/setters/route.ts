@@ -82,8 +82,8 @@ export async function GET() {
       if (!name || HEADER_LABELS.has(name.toLowerCase())) continue;
       const cash        = cashIdx >= 0     ? parseFloat((row[cashIdx]     ?? "0").replace(/[$,]/g, "")) || 0 : 0;
       const demosSet    = demosSetIdx >= 0 ? parseFloat((row[demosSetIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
-      const demosShowed = parseFloat((row[demosShowIdx] ?? "0").replace(/[$,]/g, "")) || 0;
-      const closed      = parseFloat((row[closedIdx]    ?? "0").replace(/[$,]/g, "")) || 0;
+      const demosShowed = demosShowIdx >= 0 ? parseFloat((row[demosShowIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+      const closed      = closedIdx    >= 0 ? parseFloat((row[closedIdx]    ?? "0").replace(/[$,]/g, "")) || 0 : 0;
       const prev        = repMap.get(name) ?? { cashCollected: 0, demosSet: 0, demosShowed: 0, dealsClosed: 0 };
       repMap.set(name, {
         cashCollected: prev.cashCollected + cash,

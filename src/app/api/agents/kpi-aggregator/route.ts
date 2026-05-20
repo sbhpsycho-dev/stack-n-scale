@@ -39,6 +39,7 @@ async function fetchMetaAds(cashCollectedMTD: number, closedMTD: number): Promis
       fetch(`${base}/insights?${qp}&fields=date_start,actions&time_increment=1`),
       fetch(`${base}/insights?${qp}&level=campaign&fields=campaign_name,actions`),
     ]);
+    if (!summaryRes.ok || !dailyRes.ok || !campaignRes.ok) return null;
     const [summary, daily, campaigns] = await Promise.all([
       summaryRes.json(),
       dailyRes.json(),

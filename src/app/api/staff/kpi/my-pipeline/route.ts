@@ -48,6 +48,7 @@ export async function GET() {
       `${GHL_BASE}/opportunities/pipelines?locationId=${locationId}`,
       { headers: ghlHeaders }
     );
+    if (!res.ok) throw new Error(`GHL pipelines ${res.status}`);
     const data = await res.json();
     const pipelines: { stages?: { id: string; name: string }[] }[] = data?.pipelines ?? [];
     pipelines.forEach(p => (p.stages ?? []).forEach(s => { stageNameMap[s.id] = s.name; }));
@@ -65,6 +66,7 @@ export async function GET() {
       `${GHL_BASE}/opportunities/search?location_id=${locationId}&date=${since}&limit=100`,
       { headers: ghlHeaders }
     );
+    if (!res.ok) { return Response.json(blank); }
     const data = await res.json();
     allOpps = data?.opportunities ?? [];
   } catch { return Response.json(blank); }
