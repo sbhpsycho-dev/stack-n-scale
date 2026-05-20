@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Bell, X, Check } from "lucide-react";
+import { fmtDateTime } from "@/lib/fmt-date";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -107,7 +108,7 @@ export function NotificationBell() {
                         <p className="text-xs text-foreground line-clamp-2">{n.message}</p>
                       )}
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {new Date(n.createdAt).toLocaleString()}
+                        {fmtDateTime(n.createdAt)}
                       </p>
                     </div>
                     <button

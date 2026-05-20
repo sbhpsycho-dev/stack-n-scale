@@ -581,7 +581,6 @@ export default function Dashboard() {
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
             {config.tabs.resources  && <TabsTrigger value="resources"    className="text-xs px-4">Resources</TabsTrigger>}
-            {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
             <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
             {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
             {isAdmin  && <TabsTrigger value="onboarding"   className="text-xs px-4">Onboarding</TabsTrigger>}
@@ -1532,76 +1531,6 @@ export default function Dashboard() {
               </TabsContent>
             )}
 
-            {/* ══════════════ INTEGRATIONS ══════════════ */}
-            {tab === "integrations" && !isAdmin && (
-              <TabsContent value="integrations">
-                <motion.div key="integrations" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-4 max-w-2xl">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-base font-bold">Data Integrations</h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Connect your tools — data syncs automatically every morning.
-                        {lastSynced && ` Last synced: ${new Date(lastSynced).toLocaleString()}`}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline"
-                      onClick={async () => { setSyncingSource("all"); try { await fetch("/api/sync/all", { method: "POST" }); setLastSynced(new Date().toISOString()); } finally { setSyncingSource(null); } }}
-                      disabled={syncingSource === "all"}
-                      className="gap-1.5 text-xs border-orange-500/40 text-orange-400 hover:bg-orange-500/10">
-                      {syncingSource === "all" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                      Sync All
-                    </Button>
-                  </div>
-
-                  {(["meta", "ghl", "stripe", "sheets"] as const).map((source) => {
-                    const labels: Record<string, { title: string; desc: string }> = {
-                      meta:   { title: "Meta / Facebook Ads", desc: "Auto-pulls ad spend, leads, CPL, ROAS, CTR" },
-                      ghl:    { title: "GoHighLevel (GHL)",   desc: "Auto-pulls pipeline stages, rep leaderboard, leads" },
-                      stripe: { title: "Stripe",              desc: "Auto-pulls cash collected, MRR, refunds" },
-                      sheets: { title: "Google Sheets",       desc: "Maps spreadsheet columns to dashboard fields" },
-                    };
-                    const connected =
-                      (source === "meta" && !!(integrations.meta?.accessToken && integrations.meta?.adAccountId)) ||
-                      (source === "ghl" && !!(integrations.ghl?.apiKey && integrations.ghl?.locationId)) ||
-                      (source === "stripe" && !!integrations.stripe?.secretKey) ||
-                      (source === "sheets" && !!integrations.sheets?.sheetUrl);
-                    return (
-                      <Card key={source} className={`border ${connected ? "border-orange-500/30 bg-orange-500/5" : "border-border"}`}>
-                        <CardContent className="px-4 py-4">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              {connected
-                                ? <CheckCircle2 className="h-4 w-4 text-orange-400 shrink-0" />
-                                : <Circle className="h-4 w-4 text-muted-foreground shrink-0" />}
-                              <p className="text-sm font-semibold">{labels[source].title}</p>
-                              {connected && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Connected</Badge>}
-                            </div>
-                            {connected && (
-                              <Button size="sm" variant="ghost" onClick={() => syncSource(source)} disabled={!!syncingSource}
-                                className="h-7 gap-1 text-orange-400 hover:text-orange-300 text-xs">
-                                {syncingSource === source ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                Sync
-                              </Button>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground ml-6">{labels[source].desc}</p>
-                          {connected && lastSyncedBySource[source] && (
-                            <p className="text-[10px] text-muted-foreground/60 ml-6 mt-1">
-                              Synced {new Date(lastSyncedBySource[source]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </p>
-                          )}
-                          {!connected && (
-                            <p className="text-xs text-orange-400/70 mt-2 ml-6 italic">
-                              Go to <button onClick={() => router.push("/setup")} className="underline hover:text-orange-400">Setup</button> to connect this integration.
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </motion.div>
-              </TabsContent>
-            )}
 
             {/* ══════════════ MASTER OVERVIEW ══════════════ */}
             {tab === "master" && (

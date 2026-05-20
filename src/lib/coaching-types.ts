@@ -17,6 +17,8 @@ export type CoachingClient = {
   activeDate?: string;
   coachAssigned?: string;
   rejectionReason?: string;
+  reportedIncome?: number;
+  discordId?: string;
 };
 
 export type CoachingStatus =

@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, ArrowLeft, ExternalLink, CheckCircle2, Circle, Plus } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { fmtDate, fmtDateTime } from "@/lib/fmt-date";
 import { motion } from "framer-motion";
 
 type Detail = CoachingClient & { progress: StudentProgress | null };
@@ -32,6 +33,8 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingDiscord, setEditingDiscord] = useState(false);
+  const [discordInput, setDiscordInput] = useState("");
 
   async function load() {
     const res = await fetch(`/api/staff/students/${id}`);
@@ -52,6 +55,16 @@ export default function StudentDetailPage() {
     setNote("");
     await load();
     setSaving(false);
+  }
+
+  async function saveDiscordId() {
+    setEditingDiscord(false);
+    await fetch(`/api/staff/students/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ discordId: discordInput }),
+    });
+    await load();
   }
 
   async function advanceStatus(status: CoachingStatus) {
@@ -153,8 +166,8 @@ export default function StudentDetailPage() {
             <h2 className="text-sm font-semibold">Details</h2>
             {[
               { label: "Coach", value: detail.coachAssigned ?? "Unassigned" },
-              { label: "Started", value: detail.activeDate ? new Date(detail.activeDate).toLocaleDateString() : "—" },
-              { label: "Created", value: new Date(detail.createdAt).toLocaleDateString() },
+              { label: "Started", value: detail.activeDate ? fmtDate(detail.activeDate.slice(0, 10)) : "—" },
+              { label: "Created", value: fmtDate(detail.createdAt.slice(0, 10)) },
               { label: "ID Verification", value: detail.idVerification },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between text-xs">
@@ -162,6 +175,31 @@ export default function StudentDetailPage() {
                 <span className="font-medium">{value}</span>
               </div>
             ))}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Discord ID</span>
+              {editingDiscord ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={discordInput}
+                  onChange={e => setDiscordInput(e.target.value)}
+                  onBlur={saveDiscordId}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") saveDiscordId();
+                    if (e.key === "Escape") setEditingDiscord(false);
+                  }}
+                  placeholder="18-digit user ID"
+                  className="w-40 bg-muted border border-border rounded px-2 py-0.5 text-xs outline-none focus:border-orange-500"
+                />
+              ) : (
+                <button
+                  onClick={() => { setDiscordInput(detail.discordId ?? ""); setEditingDiscord(true); }}
+                  className="font-medium hover:opacity-70 transition-opacity"
+                >
+                  {detail.discordId ?? <span className="text-muted-foreground">set</span>}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Progress Notes */}
@@ -180,7 +218,7 @@ export default function StudentDetailPage() {
                   >
                     <p className="text-xs text-foreground">{n.text}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {n.author} · {new Date(n.createdAt).toLocaleString()}
+                      {n.author} · {fmtDateTime(n.createdAt)}
                     </p>
                   </motion.div>
                 ))

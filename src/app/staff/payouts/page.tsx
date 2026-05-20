@@ -5,6 +5,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
 import type { Deal, WeeklyPayout } from "@/lib/deal-types";
+import { fmtDate, fmtDateTime } from "@/lib/fmt-date";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ function DealRow({ deal, onPaid }: { deal: Deal; onPaid: (id: string) => void })
 
   return (
     <tr className="border-t border-border hover:bg-muted/30 transition-colors">
-      <td className="px-3 py-2">{deal.date}</td>
+      <td className="px-3 py-2">{fmtDate(deal.date)}</td>
       <td className="px-3 py-2 font-medium max-w-[120px] truncate">{deal.clientName}</td>
       <td className="px-3 py-2 text-orange-400">{fmt$(deal.grossAmount)}</td>
       <td className="px-3 py-2">{fmt$(deal.payouts.caelum)}</td>
@@ -199,7 +200,7 @@ export default function PayoutsPage() {
               <p className="text-sm font-semibold capitalize">{data.status}</p>
               {data.approvedAt && (
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Approved {new Date(data.approvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  Approved {fmtDateTime(data.approvedAt)}
                 </p>
               )}
             </div>

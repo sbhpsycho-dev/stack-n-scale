@@ -6,16 +6,6 @@ import { verifyCronSecret } from "@/lib/cron-auth";
 
 const EVAN_ID = process.env.EVAN_DISCORD_USER_ID!;
 
-function isPayoutWeek(): boolean {
-  const now  = new Date();
-  const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const day  = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const weekNum   = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  return weekNum % 2 === 0;
-}
-
 function fmt$(n: number) {
   return `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
@@ -29,10 +19,6 @@ export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (!verifyCronSecret(authHeader)) {
     return new Response("Unauthorized", { status: 401 });
-  }
-
-  if (!isPayoutWeek()) {
-    return Response.json({ skipped: true, reason: "odd week" });
   }
 
   const weekId  = getWeekId();

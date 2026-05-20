@@ -3,11 +3,18 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, RefreshCw, LayoutDashboard, DollarSign, Megaphone, Users, TrendingUp, Activity, Share2 } from "lucide-react";
+import { Loader2, RefreshCw, LayoutDashboard, DollarSign, Megaphone, Users, TrendingUp, Activity, Share2, Workflow, Check, X, Phone } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import type { DailyEntry } from "@/app/api/replog/route";
+import { useSession } from "next-auth/react";
+import { fmtDateTime } from "@/lib/fmt-date";
 import type { SocialAccount } from "@/app/api/staff/kpi/social/route";
 import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart } from "@/components/charts/revenue-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart } from "@/components/charts/ads-charts";
 import { CashPerRepChart } from "@/components/charts/rep-charts";
+import { ClientHealthHeatmap } from "@/components/staff/client-health-heatmap";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
@@ -31,8 +38,20 @@ interface RevenueData {
 interface AdsData {
   totalAdSpend: number; totalLeads: number; cpl: number; roas: number;
   ctr: number; cpc: number; impressions: number; reach: number; costPerClose: number;
+  leadsThisMonth: number;
   leadsByCampaign: { campaign: string; leads: number }[];
   leadsOverTime:   { date: string; leads: number }[];
+}
+interface PipelineData {
+  callsMade: number; callsAnswered: number; demosSet: number;
+  demosShowed: number; pitched: number; closed: number;
+  answerRate: number; showRate: number; closeRate: number; demoToClose: number;
+  stageBreakdown: { stage: string; count: number }[];
+}
+interface MyPipelineData {
+  callsMade: number; callsAnswered: number; demosSet: number;
+  demosShowed: number; pitched: number; closed: number; cashCollected: number;
+  answerRate: number; showRate: number; closeRate: number; demoToClose: number;
 }
 interface SetterRow {
   name: string; cashCollected: number; demosSet: number;
@@ -43,15 +62,6 @@ interface SettersData {
 }
 interface TrendMonth { month: string; gross: number; net: number; refunds: number }
 interface TrendsData  { months: TrendMonth[] }
-interface ClientRow {
-  name: string; email: string; status: string; healthScore: number;
-  createdAt: string; activeDate: string | null; coach: string | null;
-}
-interface ClientsData {
-  rows: ClientRow[]; active: number; churned: number; pipeline: number;
-  avgHealth: number; distribution: { status: string; count: number }[];
-}
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const ORANGE = "#f97316";
@@ -288,12 +298,13 @@ function AdsTab({ refreshSignal }: { refreshSignal: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <MetricCard label="Ad Spend"     value={data.totalAdSpend} prefix="$" variant="black"   index={0} />
-        <MetricCard label="Leads"        value={data.totalLeads}              variant="default"  index={1} />
-        <MetricCard label="CPL"          value={data.cpl}          prefix="$" variant="orange"  index={2} decimals={2} />
-        <MetricCard label="ROAS"         value={data.roas}                    variant="green"    index={3} decimals={2} suffix="x" />
-        <MetricCard label="Cost/Close"   value={data.costPerClose} prefix="$" variant="default"  index={4} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <MetricCard label="Ad Spend"        value={data.totalAdSpend}    prefix="$" variant="black"   index={0} />
+        <MetricCard label="Meta Leads"      value={data.totalLeads}                 variant="default"  index={1} />
+        <MetricCard label="Leads This Month" value={data.leadsThisMonth}            variant="orange"   index={2} />
+        <MetricCard label="CPL"             value={data.cpl}             prefix="$" variant="orange"  index={3} decimals={2} />
+        <MetricCard label="ROAS"            value={data.roas}                       variant="green"    index={4} decimals={2} suffix="x" />
+        <MetricCard label="Cost/Close"      value={data.costPerClose}    prefix="$" variant="default"  index={5} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="CTR"          value={data.ctr}  suffix="%" variant="default" index={5} decimals={2} />
@@ -498,18 +509,48 @@ function TrendsTab({ refreshSignal }: { refreshSignal: number }) {
   );
 }
 
-function ClientsTab({ refreshSignal }: { refreshSignal: number }) {
-  const [data, setData] = useState<ClientsData | null>(null);
+
+// ─── Pipeline Tab ────────────────────────────────────────────────────────────
+
+const REPLOG_FIELDS: [keyof DailyEntry, string][] = [
+  ["callsMade",     "Calls Made"],
+  ["callsAnswered", "Calls Answered"],
+  ["demosSet",      "Demos Set"],
+  ["demosShowed",   "Demos Showed"],
+  ["pitched",       "Pitched"],
+  ["closed",        "Closed"],
+  ["cashCollected", "Cash ($)"],
+];
+
+const BLANK_ENTRY = (date: string): DailyEntry => ({
+  date, callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, closed: 0, cashCollected: 0,
+});
+
+function PipelineTab({ refreshSignal }: { refreshSignal: number }) {
+  const { data: session } = useSession();
+  const isStaff = session?.user.role === "staff";
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [myEntries, setMyEntries] = useState<DailyEntry[]>([]);
+  const [myEntry, setMyEntry]     = useState<DailyEntry>(BLANK_ENTRY(todayStr));
+  const [mySaving, setMySaving]   = useState(false);
+  const [mySaved, setMySaved]     = useState(false);
+
+  const [data, setData] = useState<PipelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [ghlData, setGhlData]       = useState<MyPipelineData | null>(null);
+  const [ghlLoading, setGhlLoading] = useState(false);
+
+  // Load team pipeline data
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/staff/kpi/clients");
+      const res = await fetch("/api/staff/kpi/pipeline");
       if (res.ok) setData(await res.json());
-      else setError("Failed to load client data.");
+      else setError("Failed to load pipeline data.");
     } catch {
       setError("Network error. Check your connection.");
     } finally {
@@ -518,51 +559,213 @@ function ClientsTab({ refreshSignal }: { refreshSignal: number }) {
   }, []);
   useEffect(() => { load(); }, [load, refreshSignal]);
 
+  // Load personal replog entries
+  useEffect(() => {
+    if (!isStaff) return;
+    fetch("/api/replog").then(r => r.json()).then((entries: DailyEntry[]) => {
+      if (!Array.isArray(entries)) return;
+      setMyEntries(entries);
+      const todayEntry = entries.find(e => e.date === todayStr);
+      if (todayEntry) setMyEntry(todayEntry);
+    }).catch(() => {});
+  }, [isStaff, todayStr]);
+
+  // Load per-staff GHL pipeline data (demos, pitched, closed auto-pulled from GHL opps)
+  useEffect(() => {
+    if (!isStaff) return;
+    setGhlLoading(true);
+    fetch("/api/staff/kpi/my-pipeline")
+      .then(r => r.ok ? r.json() : null)
+      .then((d: MyPipelineData | null) => { if (d) setGhlData(d); })
+      .catch(() => {})
+      .finally(() => setGhlLoading(false));
+  }, [isStaff, refreshSignal]);
+
+  const saveEntry = async () => {
+    setMySaving(true);
+    try {
+      await fetch("/api/replog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(myEntry) });
+      setMyEntries(prev =>
+        prev.some(e => e.date === myEntry.date)
+          ? prev.map(e => e.date === myEntry.date ? myEntry : e)
+          : [myEntry, ...prev].sort((a, b) => b.date.localeCompare(a.date))
+      );
+      setMySaved(true);
+      setTimeout(() => setMySaved(false), 2500);
+      // Refresh team numbers after a brief delay so the KV pipeline update propagates
+      setTimeout(() => load(), 800);
+    } catch { /* ignore */ } finally {
+      setMySaving(false);
+    }
+  };
+
+  // MTD totals from personal entries
+  const thisYM = todayStr.slice(0, 7);
+  const mtd = myEntries.filter(e => e.date.startsWith(thisYM)).reduce(
+    (acc, e) => ({
+      callsMade:     acc.callsMade     + e.callsMade,
+      callsAnswered: acc.callsAnswered + e.callsAnswered,
+      demosSet:      acc.demosSet      + e.demosSet,
+      demosShowed:   acc.demosShowed   + e.demosShowed,
+      pitched:       acc.pitched       + e.pitched,
+      closed:        acc.closed        + e.closed,
+      cashCollected: acc.cashCollected + e.cashCollected,
+      date: "",
+    }),
+    BLANK_ENTRY("")
+  );
+
   if (loading && !data) return <Spin />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 
-  const healthColor = (score: number) =>
-    score >= 85 ? "text-green-400" : score >= 50 ? "text-orange-400" : "text-red-400";
+  const isEmpty = data.callsMade === 0 && data.demosSet === 0 && data.closed === 0;
 
   return (
     <div className="space-y-4">
+      {/* ── Personal number logger (staff only) ── */}
+      {isStaff && (
+        <>
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Phone className="h-4 w-4 text-orange-400" />
+                Log Today&apos;s Numbers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider shrink-0">Date</Label>
+                <Input type="date" value={myEntry.date}
+                  onChange={e => setMyEntry(p => ({ ...p, date: e.target.value }))}
+                  className="h-7 text-xs bg-muted border-border w-36" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {REPLOG_FIELDS.map(([key, label]) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</Label>
+                    <Input type="number" min={0} value={myEntry[key] as number}
+                      onChange={e => setMyEntry(p => ({ ...p, [key]: parseFloat(e.target.value) || 0 }))}
+                      className="h-8 text-sm bg-muted border-border" />
+                  </div>
+                ))}
+              </div>
+              <Button size="sm" onClick={saveEntry} disabled={mySaving}
+                className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs gap-1.5">
+                {mySaving
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : mySaved
+                    ? <Check className="h-3.5 w-3.5" />
+                    : <Check className="h-3.5 w-3.5" />}
+                {mySaving ? "Saving…" : mySaved ? "Saved ✓" : "Save Entry"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-orange-500/5 border-orange-500/20">
+            <CardHeader className="pb-2 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold">Your MTD Totals</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              {ghlLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <MetricCard label="Calls Made"     value={mtd.callsMade}                              variant="default" index={0} />
+                    <MetricCard label="Calls Answered" value={mtd.callsAnswered}                          variant="default" index={1} />
+                    <MetricCard label="Demos Set"      value={ghlData?.demosSet     ?? mtd.demosSet}      variant="orange"  index={2} />
+                    <MetricCard label="Demos Showed"   value={ghlData?.demosShowed  ?? mtd.demosShowed}   variant="default" index={3} />
+                    <MetricCard label="Pitched"        value={ghlData?.pitched      ?? mtd.pitched}       variant="default" index={4} />
+                    <MetricCard label="Closed"         value={ghlData?.closed       ?? mtd.closed}        variant="green"   index={5} />
+                    <MetricCard label="Cash Collected" value={ghlData?.cashCollected ?? mtd.cashCollected} variant="green"  index={6} prefix="$" />
+                  </div>
+                  {ghlData && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                      <MetricCard label="Answer Rate"  value={ghlData.answerRate}  variant="default" index={7}  decimals={1} suffix="%" />
+                      <MetricCard label="Show Rate"    value={ghlData.showRate}    variant="orange"  index={8}  decimals={1} suffix="%" />
+                      <MetricCard label="Close Rate"   value={ghlData.closeRate}   variant="green"   index={9}  decimals={1} suffix="%" />
+                      <MetricCard label="Demo → Close" value={ghlData.demoToClose} variant="default" index={10} decimals={1} suffix="%" />
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center gap-2 pt-1">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Team Pipeline</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
+
+      {/* ── Team aggregate ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard label="Active Clients"  value={data.active}    variant="green"   index={0} />
-        <MetricCard label="In Pipeline"     value={data.pipeline}  variant="orange"  index={1} />
-        <MetricCard label="Alumni"          value={data.churned}   variant="black"   index={2} />
-        <MetricCard label="Avg Health Score" value={data.avgHealth} suffix="%" variant="default" index={3} />
+        <MetricCard label="Calls Made"     value={data.callsMade}     variant="default" index={0} />
+        <MetricCard label="Calls Answered" value={data.callsAnswered}  variant="default" index={1} />
+        <MetricCard label="Demos Set"      value={data.demosSet}       variant="orange"  index={2} />
+        <MetricCard label="Demos Showed"   value={data.demosShowed}    variant="default" index={3} />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MetricCard label="Pitched"        value={data.pitched}        variant="default"  index={4} />
+        <MetricCard label="Closed"         value={data.closed}         variant="green"    index={5} />
+        <MetricCard label="Show Rate"      value={data.showRate}       variant="orange"   index={6} decimals={1} suffix="%" />
+        <MetricCard label="Close Rate"     value={data.closeRate}      variant="green"    index={7} decimals={1} suffix="%" />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+        <MetricCard label="Answer Rate"    value={data.answerRate}     variant="default"  index={8} decimals={1} suffix="%" />
+        <MetricCard label="Demo → Close"   value={data.demoToClose}    variant="default"  index={9} decimals={1} suffix="%" />
       </div>
 
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/50">
-            <tr>
-              {["Client", "Status", "Health", "Coach", "Enrolled", "Active Since"].map(h => (
-                <th key={h} className="text-left px-3 py-2 font-semibold text-muted-foreground">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.map((r, i) => (
-              <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
-                <td className="px-3 py-2 font-medium">{r.name}</td>
-                <td className="px-3 py-2 text-muted-foreground">{r.status}</td>
-                <td className={`px-3 py-2 font-semibold ${healthColor(r.healthScore)}`}>{r.healthScore}%</td>
-                <td className="px-3 py-2 text-muted-foreground">{r.coach ?? "—"}</td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  {r.activeDate
-                    ? new Date(r.activeDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isEmpty ? (
+        <Card className="bg-card border-border">
+          <CardContent className="py-8 text-center text-xs text-muted-foreground">
+            {isStaff
+              ? "Your pipeline data loads automatically from GoHighLevel. If you see zeros, ask an admin to run a sync."
+              : "No pipeline data yet — click Sync Now above to pull data from GHL and the Setter KPI sheet."}
+          </CardContent>
+        </Card>
+      ) : data.stageBreakdown.length > 0 && (
+        <CC title="Pipeline Stage Breakdown">
+          <div className="rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Stage</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Count</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.stageBreakdown.map((s, i) => {
+                  const total = data.stageBreakdown.reduce((acc, r) => acc + r.count, 0);
+                  const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
+                  return (
+                    <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2 font-medium">{s.stage}</td>
+                      <td className="px-3 py-2">{s.count}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-20 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-muted-foreground">{pct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CC>
+      )}
     </div>
   );
 }
@@ -667,7 +870,7 @@ function SocialTab({ refreshSignal }: { refreshSignal: number }) {
     <div className="space-y-5">
       {refreshedAt && (
         <p className="text-[11px] text-muted-foreground">
-          {fromCache ? "Cached" : "Live"} · Last refreshed {new Date(refreshedAt).toLocaleString()}
+          {fromCache ? "Cached" : "Live"} · Last refreshed {fmtDateTime(refreshedAt)}
           {fromCache && <span className="ml-1 text-orange-400">· Click refresh for live data (takes ~30s)</span>}
         </p>
       )}
@@ -706,28 +909,61 @@ function SocialTab({ refreshSignal }: { refreshSignal: number }) {
 
 // ─── Main page ───────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "revenue" | "ads" | "setters" | "trends" | "clients" | "social";
+type Tab = "overview" | "revenue" | "ads" | "pipeline" | "setters" | "trends" | "clients" | "social";
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "overview", label: "Overview",      icon: LayoutDashboard },
-  { id: "revenue",  label: "Revenue",       icon: DollarSign      },
-  { id: "ads",      label: "Ads",           icon: Megaphone       },
-  { id: "setters",  label: "Setters",       icon: Users           },
-  { id: "trends",   label: "Monthly Trend", icon: TrendingUp      },
-  { id: "clients",  label: "Client Health", icon: Activity        },
-  { id: "social",   label: "Social",        icon: Share2          },
+  { id: "overview",  label: "Overview",      icon: LayoutDashboard },
+  { id: "revenue",   label: "Revenue",       icon: DollarSign      },
+  { id: "ads",       label: "Ads",           icon: Megaphone       },
+  { id: "pipeline",  label: "Pipeline",      icon: Workflow        },
+  { id: "setters",   label: "Setters",       icon: Users           },
+  { id: "trends",    label: "Monthly Trend", icon: TrendingUp      },
+  { id: "clients",   label: "Client Health", icon: Activity        },
+  { id: "social",    label: "Social",        icon: Share2          },
 ];
 
 // Per-tab refresh signals — only the active tab increments when refresh is clicked
 type TabRefreshSignals = Record<Tab, number>;
 
 export default function InsightsPage() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+
   const [tab, setTab] = useState<Tab>("overview");
   const [refreshSignals, setRefreshSignals] = useState<TabRefreshSignals>({
-    overview: 0, revenue: 0, ads: 0, setters: 0, trends: 0, clients: 0, social: 0,
+    overview: 0, revenue: 0, ads: 0, pipeline: 0, setters: 0, trends: 0, clients: 0, social: 0,
   });
+  const [syncing, setSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
 
   function handleRefresh() {
     setRefreshSignals(prev => ({ ...prev, [tab]: prev[tab] + 1 }));
+  }
+
+  async function handleSyncNow() {
+    setSyncing(true);
+    setSyncDone(false);
+    setSyncFailed(false);
+    try {
+      const res = await fetch("/api/admin/sync-leaderboard", { method: "POST" });
+      // Also sync GHL opportunities (fire-and-forget — GHL errors don't block leaderboard success)
+      fetch("/api/sync/ghl", { method: "POST" }).catch(() => {});
+      if (res.ok) {
+        setSyncDone(true);
+        setRefreshSignals(prev =>
+          (Object.keys(prev) as Tab[]).reduce((acc, k) => ({ ...acc, [k]: prev[k] + 1 }), prev)
+        );
+        setTimeout(() => setSyncDone(false), 3000);
+      } else {
+        setSyncFailed(true);
+        setTimeout(() => setSyncFailed(false), 4000);
+      }
+    } catch {
+      setSyncFailed(true);
+      setTimeout(() => setSyncFailed(false), 4000);
+    } finally {
+      setSyncing(false);
+    }
   }
 
   return (
@@ -735,15 +971,37 @@ export default function InsightsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">KPI Dashboard</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Live data across revenue, ads, setters, and client health</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Live data across revenue, ads, pipeline, setters, and client health</p>
         </div>
-        <button
-          onClick={handleRefresh}
-          aria-label="Refresh current tab"
-          className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground text-xs"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={handleSyncNow}
+              disabled={syncing}
+              aria-label="Sync all data from integrations"
+              className={`h-8 px-3 flex items-center gap-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-60 ${
+                syncFailed
+                  ? "bg-red-500 hover:bg-red-600"
+                  : "bg-orange-500 hover:bg-orange-600"
+              }`}
+            >
+              {syncing
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing…</>
+                : syncDone
+                ? <><Check className="h-3.5 w-3.5" /> Synced!</>
+                : syncFailed
+                ? <><X className="h-3.5 w-3.5" /> Sync Failed</>
+                : <><RefreshCw className="h-3.5 w-3.5" /> Sync Now</>}
+            </button>
+          )}
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh current tab"
+            className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground text-xs"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Tab nav */}
@@ -769,13 +1027,14 @@ export default function InsightsPage() {
 
       {/* Tab content — each tab mounts once and listens to its own refresh signal */}
       <div>
-        {tab === "overview" && <OverviewTab refreshSignal={refreshSignals.overview} />}
-        {tab === "revenue"  && <RevenueTab  refreshSignal={refreshSignals.revenue}  />}
-        {tab === "ads"      && <AdsTab      refreshSignal={refreshSignals.ads}      />}
-        {tab === "setters"  && <SettersTab  refreshSignal={refreshSignals.setters}  />}
-        {tab === "trends"   && <TrendsTab   refreshSignal={refreshSignals.trends}   />}
-        {tab === "clients"  && <ClientsTab  refreshSignal={refreshSignals.clients}  />}
-        {tab === "social"   && <SocialTab   refreshSignal={refreshSignals.social}   />}
+        {tab === "overview"  && <OverviewTab  refreshSignal={refreshSignals.overview}  />}
+        {tab === "revenue"   && <RevenueTab   refreshSignal={refreshSignals.revenue}   />}
+        {tab === "ads"       && <AdsTab       refreshSignal={refreshSignals.ads}       />}
+        {tab === "pipeline"  && <PipelineTab  refreshSignal={refreshSignals.pipeline}  />}
+        {tab === "setters"   && <SettersTab   refreshSignal={refreshSignals.setters}   />}
+        {tab === "trends"    && <TrendsTab    refreshSignal={refreshSignals.trends}    />}
+        {tab === "clients"   && <ClientHealthHeatmap refreshSignal={refreshSignals.clients} />}
+        {tab === "social"    && <SocialTab    refreshSignal={refreshSignals.social}    />}
       </div>
     </div>
   );

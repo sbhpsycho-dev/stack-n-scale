@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { kv } from "@vercel/kv";
 import type { Deal } from "./deal-types";
 import type { StaffMeta } from "./staff-registry";
+import type { DailyEntry } from "@/app/api/replog/route";
 
 const MASTER_LOG_ID = process.env.GOOGLE_SHEETS_MASTER_LOG_ID ?? "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
 const SETTER_KPI_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID ?? "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
@@ -103,6 +104,49 @@ export function buildRepRow(deal: Deal, repKey: string): (string | number)[] {
       : deal.setter?.toLowerCase().startsWith(repKey)   ? "Setter" : "Closer";
 
   return [deal.date, deal.clientName, deal.grossAmount, cut, role, deal.id];
+}
+
+export async function sheetsUpdate(token: string, sheetId: string, range: string, rows: unknown[][]) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    {
+      method:  "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({ values: rows }),
+    }
+  );
+  return res.json();
+}
+
+const REPLOG_HEADERS = ["Date", "Name", "Calls Made", "Calls Answered", "Demos Set", "Demos Showed", "Pitched", "Closed", "Cash Collected"];
+
+export function buildReplogRow(staffName: string, entry: DailyEntry): (string | number)[] {
+  const first = staffName.trim().split(" ")[0];
+  const name  = first.charAt(0).toUpperCase() + first.slice(1);
+  return [entry.date, name, entry.callsMade, entry.callsAnswered, entry.demosSet, entry.demosShowed, entry.pitched, entry.closed, entry.cashCollected];
+}
+
+export async function syncReplogToSheets(staffName: string, entry: DailyEntry): Promise<void> {
+  const token    = await getSheetsToken();
+  const existing = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
+  const rows     = (existing.values ?? []) as string[][];
+
+  const nameKey  = staffName.trim().toLowerCase().split(" ")[0];
+  const dataRow  = buildReplogRow(staffName, entry);
+
+  if (rows.length === 0) {
+    await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:I", [REPLOG_HEADERS, dataRow]);
+    return;
+  }
+
+  // Find matching row for this date + staff name (1-indexed in Sheets)
+  const matchIdx = rows.findIndex((r, i) => i > 0 && r[0] === entry.date && r[1]?.trim().toLowerCase().startsWith(nameKey));
+  if (matchIdx >= 0) {
+    const rowNum = matchIdx + 1;
+    await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${rowNum}:I${rowNum}`, [dataRow]);
+  } else {
+    await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:I", [dataRow]);
+  }
 }
 
 // ─── Core sync — writes one deal to all sheets ───────────────────────────────

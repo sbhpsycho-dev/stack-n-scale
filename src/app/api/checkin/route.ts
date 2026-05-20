@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { kv } from "@vercel/kv";
 import { calculateHealthScore, type CheckInRecord } from "@/lib/health-score";
+import { sendChannelMessage } from "@/lib/discord";
 
 export const runtime = "nodejs";
 
@@ -138,6 +139,35 @@ async function storeCheckinInKV(payload: CheckInPayload, healthScore: number, su
   }
 }
 
+async function sendBoilerRoomDebrief(payload: CheckInPayload, healthScore: number, submittedAt: string) {
+  const channelId = process.env.DISCORD_BOILER_ROOM_CHANNEL_ID;
+  if (!channelId) return;
+
+  const emoji = healthScore >= 8 ? "🟢" : healthScore >= 6 ? "🟡" : "🔴";
+  const color  = healthScore >= 8 ? 0x22c55e : healthScore >= 6 ? 0xf97316 : 0xef4444;
+
+  const embed = {
+    title: `${emoji} Check-in — ${payload.fullName}`,
+    color,
+    fields: [
+      { name: "Week",  value: payload.programWeek,              inline: true },
+      { name: "Score", value: `${payload.satisfactionScore}/10`, inline: true },
+      { name: "Hours", value: payload.hoursWorked,               inline: true },
+      { name: "Goals", value: payload.goalsCompleted,            inline: true },
+      { name: "✅ Went Well",          value: payload.wentWell.slice(0, 300)       },
+      { name: "⚠️ Struggled With",     value: payload.struggled.slice(0, 300)      },
+      { name: "📌 Needs from Coach",   value: payload.needFromCoach.slice(0, 300)  },
+      { name: "🎯 Goals Next Week",    value: payload.nextWeekGoals.slice(0, 300)  },
+    ],
+    footer: { text: "Stack-N-Scale Check-In System" },
+    timestamp: submittedAt,
+  };
+
+  await sendChannelMessage(channelId, "", embed).catch(e =>
+    console.error("Boiler room debrief error:", e)
+  );
+}
+
 export async function POST(req: Request) {
   let payload: CheckInPayload;
   try {
@@ -169,6 +199,7 @@ export async function POST(req: Request) {
     storeCheckinInKV(payload, healthScore, submittedAt),
     healthScore <= 5 ? sendRedAlert(payload, healthScore) : Promise.resolve(),
     healthScore >= 8 ? sendPositiveSms(payload, score)   : Promise.resolve(),
+    sendBoilerRoomDebrief(payload, healthScore, submittedAt),
   ]);
 
   return Response.json({ ok: true, healthScore });

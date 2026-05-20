@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, Users, BookOpen, MessageSquare, BarChart2, Trophy, ArrowLeft, Settings, Menu } from "lucide-react";
+import { Calendar, Users, BookOpen, MessageSquare, BarChart2, Trophy, TrendingUp, ArrowLeft, Settings, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-const NAV_ITEMS = [
-  { href: "/staff/calendar",  label: "Calendar",  icon: Calendar },
-  { href: "/staff/students",  label: "Students",  icon: Users },
-  { href: "/staff/resources", label: "Resources", icon: BookOpen },
-  { href: "/staff/messages",  label: "Messages",  icon: MessageSquare },
-  { href: "/staff/insights",     label: "Insights",     icon: BarChart2 },
+const NAV_ITEMS: { href: string; label: string; icon: React.ElementType; staffOnly?: boolean }[] = [
+  { href: "/staff/calendar",    label: "Calendar",    icon: Calendar },
+  { href: "/staff/students",    label: "Students",    icon: Users },
+  { href: "/staff/resources",   label: "Resources",   icon: BookOpen },
+  { href: "/staff/messages",    label: "Messages",    icon: MessageSquare },
+  { href: "/staff/my-numbers",  label: "My Numbers",  icon: TrendingUp, staffOnly: true },
+  { href: "/staff/insights",    label: "Insights",    icon: BarChart2 },
   { href: "/staff/leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
@@ -21,7 +22,7 @@ function NavLinks({ pathname, isAdmin, onNavigate }: { pathname: string; isAdmin
   return (
     <>
       <nav className="flex-1 py-3 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.filter(item => !(item.staffOnly && isAdmin)).map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
             <Link

@@ -30,6 +30,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     note?: string;
     status?: CoachingStatus;
     coachAssigned?: string;
+    reportedIncome?: number;
+    discordId?: string;
   };
 
   const client = await kv.get<CoachingClient>(`sns:coaching:client:${id}`);
@@ -41,6 +43,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (body.coachAssigned !== undefined) {
     client.coachAssigned = body.coachAssigned;
+  }
+  if (body.reportedIncome !== undefined && typeof body.reportedIncome === "number") {
+    client.reportedIncome = body.reportedIncome;
+  }
+  if (body.discordId !== undefined && typeof body.discordId === "string") {
+    client.discordId = body.discordId.trim() || undefined;
   }
   await kv.set(`sns:coaching:client:${id}`, client);
 

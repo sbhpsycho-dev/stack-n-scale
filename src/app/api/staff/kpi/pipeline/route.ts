@@ -10,22 +10,19 @@ export async function GET() {
   }
 
   const data = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
-  const a = data.ads;
-  const d = data.dashboard;
+  const p = data.pipeline;
 
   return Response.json({
-    totalAdSpend:    a.totalAdSpend,
-    totalLeads:      a.totalLeads,
-    cpl:             a.cpl,
-    roas:            a.roas,
-    ctr:             a.ctr,
-    cpc:             a.cpc,
-    impressions:     a.impressions,
-    reach:           a.reach,
-    costPerClose:    d.costPerClose,
-    leadsThisMonth:  d.leadsThisMonth,
-    leadsByCampaign: a.leadsByCampaign ?? [],
-    cplByAdSet:      a.cplByAdSet      ?? [],
-    leadsOverTime:   a.leadsOverTime   ?? [],
+    callsMade:      p.callsMade,
+    callsAnswered:  p.callsAnswered,
+    demosSet:       p.demosSet,
+    demosShowed:    p.demosShowed,
+    pitched:        p.pitched,
+    closed:         p.closed,
+    answerRate:     p.answerRate,
+    showRate:       p.showRate,
+    closeRate:      p.closeRate,
+    demoToClose:    p.demoToClose,
+    stageBreakdown: p.stageBreakdown ?? [],
   });
 }

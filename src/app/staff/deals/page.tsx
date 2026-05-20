@@ -5,6 +5,7 @@ import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Plus, Download, X } from "lucide-react";
 import type { Deal, DealPayout } from "@/lib/deal-types";
+import { fmtDate } from "@/lib/fmt-date";
 import { toast, toastError } from "@/lib/toast";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -452,7 +453,7 @@ export default function DealsPage() {
             <tbody>
               {deals.map((d, i) => (
                 <tr key={d.id} className={`border-t border-border hover:bg-muted/30 transition-colors ${i % 2 === 0 ? "" : "bg-muted/10"}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">{d.date}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{fmtDate(d.date)}</td>
                   <td className="px-3 py-2 font-medium max-w-[120px] truncate">{d.clientName}</td>
                   <td className="px-3 py-2">{d.offer}</td>
                   <td className="px-3 py-2 text-orange-400">{fmt$(d.grossAmount)}</td>
