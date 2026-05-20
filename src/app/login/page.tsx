@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
@@ -16,16 +15,41 @@ function LoginForm() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [csrfToken, setCsrfToken] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/csrf")
+      .then((r) => r.json())
+      .then((d) => setCsrfToken(d.csrfToken ?? ""));
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("error")) setError("Incorrect password. Try again.");
   }, [searchParams]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    await signIn("credentials", { password, callbackUrl: "/" });
+
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/api/auth/callback/credentials";
+
+    [
+      { name: "csrfToken", value: csrfToken },
+      { name: "callbackUrl", value: "/" },
+      { name: "password", value: password },
+    ].forEach(({ name, value }) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
   }
 
   return (
@@ -86,7 +110,7 @@ function LoginForm() {
 
             <Button
               type="submit"
-              disabled={loading || !password}
+              disabled={loading || !password || !csrfToken}
               className="h-10 font-semibold bg-orange-500 hover:bg-orange-600 text-white mt-1"
             >
               {loading ? (
