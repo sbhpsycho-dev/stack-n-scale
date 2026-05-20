@@ -209,8 +209,7 @@ export async function updatePipelineFromReplogs(): Promise<void> {
     }
   }));
 
-  const cached = await kv.get<SalesData>("sns-dashboard-v1");
-  if (!cached) return;
+  const cached = (await kv.get<SalesData>("sns-dashboard-v1")) ?? BLANK;
 
   const answerRate = tCallsMade   > 0 ? parseFloat(((tCallsAnswered / tCallsMade)   * 100).toFixed(1)) : 0;
   const showRate   = tDemosSet    > 0 ? parseFloat(((tDemosShowed   / tDemosSet)    * 100).toFixed(1)) : 0;
@@ -229,7 +228,11 @@ export async function updatePipelineFromReplogs(): Promise<void> {
 // Sheets is treated as truth — any row with a matching date+name overwrites the KV entry.
 export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; rowsProcessed: number }> {
   const token  = await getSheetsToken();
-  const result = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
+  // Read A:L (12 cols) — sheet structure:
+  // A=Date, B=Name, C=Calls Dialed, D=Calls Connected, E=Conversations, F=Fact Finds,
+  // G=Zooms Booked (demosSet), H=Zooms Showed (demosShowed), I=No-Showed (formula),
+  // J=Show Rate (formula), K=Deals Closed, L=Gross Deal Value (cashCollected)
+  const result = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:L");
   const rows   = (result.values ?? []) as string[][];
 
   const staff = (await kv.get<StaffMeta[]>("sns-staff-registry")) ?? [];
@@ -243,8 +246,10 @@ export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; ro
   let rowsProcessed = 0;
 
   for (let i = 1; i < rows.length; i++) {
-    const [rawDate, name, callsMade, callsAnswered, demosSet, demosShowed, pitched, closed, cashCollected] = rows[i];
-    if (!rawDate || !name) continue;
+    const row = rows[i];
+    const rawDate = row[0];
+    const name    = row[1];
+    if (!rawDate || !name || typeof rawDate !== "string" || rawDate.trim() === "") continue;
 
     // Normalise date — Sheets may return M/D/YYYY or YYYY-MM-DD
     let date: string;
@@ -257,13 +262,13 @@ export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; ro
 
     const entry: DailyEntry = {
       date,
-      callsMade:     Number(callsMade)     || 0,
-      callsAnswered: Number(callsAnswered)  || 0,
-      demosSet:      Number(demosSet)       || 0,
-      demosShowed:   Number(demosShowed)    || 0,
-      pitched:       Number(pitched)        || 0,
-      closed:        Number(closed)         || 0,
-      cashCollected: Number(cashCollected)  || 0,
+      callsMade:     Number(row[2])  || 0,  // C — Calls Dialed
+      callsAnswered: Number(row[3])  || 0,  // D — Calls Connected
+      demosSet:      Number(row[6])  || 0,  // G — Zooms Booked
+      demosShowed:   Number(row[7])  || 0,  // H — Zooms Showed
+      pitched:       0,                     // not tracked in sheet
+      closed:        Number(row[10]) || 0,  // K — Deals Closed
+      cashCollected: Number(row[11]) || 0,  // L — Gross Deal Value
     };
 
     if (!byStaff.has(member.id)) byStaff.set(member.id, []);
