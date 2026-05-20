@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { kv } from "@vercel/kv";
-import { type CoachingClient } from "@/app/api/onboarding/clients/route";
+import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet, getOrCreateDriveFolder, uploadTextToDrive } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 

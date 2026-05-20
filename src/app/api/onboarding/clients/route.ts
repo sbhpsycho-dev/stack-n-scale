@@ -1,26 +1,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
-
-export type CoachingClient = {
-  ghlContactId: string;
-  name: string;
-  email: string;
-  phone?: string;
-  status: string;
-  createdAt: string;
-  idVerification: string;
-  driveFolder: {
-    url: string;
-    id: string;
-    idVerificationFolderId?: string;
-    onboardingFolderId?: string;
-    notesFolderId?: string;
-    docs?: Record<string, string>;
-  } | null;
-  activeDate?: string;
-  coachAssigned?: string;
-};
+import type { CoachingClient } from "@/lib/coaching-types";
+export type { CoachingClient } from "@/lib/coaching-types";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
