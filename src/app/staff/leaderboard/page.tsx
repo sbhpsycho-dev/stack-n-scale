@@ -1,27 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, RefreshCw, Trophy, Check, X } from "lucide-react";
-
-interface SetterRow {
-  name: string;
-  cashCollected: number;
-  demosSet: number;
-  demosShowed: number;
-  dealsClosed: number;
-  showRate: number;
-  closeRate: number;
-}
-
-interface SettersData {
-  leaderboard: SetterRow[];
-  totalCash: number;
-  totalDeals: number;
-  avgCloseRate: number;
-  source: "sheet" | "cache" | "kv" | "empty";
-}
+import { Loader2, Trophy, Check, X, RefreshCw, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useLeaderboard, type SortMetric } from "@/hooks/use-leaderboard";
 
 function fmt$(n: number) {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -45,32 +29,78 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="inline-flex items-center justify-center w-6 h-6 text-muted-foreground text-xs font-medium">{rank}</span>;
 }
 
+function RankDeltaBadge({ delta }: { delta: number }) {
+  if (delta === 0) return null;
+  const up = delta > 0;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[10px] font-bold px-1 py-0.5 rounded animate-delta-badge-in",
+        up ? "text-green-400 bg-green-400/10" : "text-red-400 bg-red-400/10"
+      )}
+    >
+      {up ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />}
+      {Math.abs(delta)}
+    </span>
+  );
+}
+
+function LiveDot({ lastUpdated }: { lastUpdated: Date | null }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+      </span>
+      Live
+      {lastUpdated && (
+        <span className="text-muted-foreground/60">
+          · {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SortableHeader({
+  label, metric, currentMetric, dir, onSort,
+}: {
+  label: string;
+  metric: SortMetric;
+  currentMetric: SortMetric;
+  dir: "asc" | "desc";
+  onSort: (m: SortMetric) => void;
+}) {
+  const active = metric === currentMetric;
+  return (
+    <th
+      onClick={() => onSort(metric)}
+      className={cn(
+        "text-left px-3 py-2.5 font-semibold whitespace-nowrap cursor-pointer select-none transition-colors",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"
+      )}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active
+          ? dir === "desc"
+            ? <ArrowDown className="h-3 w-3 opacity-70" />
+            : <ArrowUp className="h-3 w-3 opacity-70" />
+          : <Minus className="h-3 w-3 opacity-20" />}
+      </span>
+    </th>
+  );
+}
+
 export default function LeaderboardPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
 
-  const [data, setData] = useState<SettersData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const [syncDone, setSyncDone] = useState(false);
+  const { data, sortedRows, rankDeltas, flashedReps, loading, error, lastUpdated, sortMetric, sortDir, setSort, refresh } = useLeaderboard();
+
+  const [syncing, setSyncing]       = useState(false);
+  const [syncDone, setSyncDone]     = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/staff/kpi/setters");
-      if (res.ok) setData(await res.json());
-      else setError("Failed to load leaderboard. Ensure the Setter KPI sheet is shared with the service account.");
-    } catch {
-      setError("Network error. Check your connection.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   async function handleSync() {
     setSyncing(true);
@@ -80,7 +110,7 @@ export default function LeaderboardPage() {
       const res = await fetch("/api/admin/sync-leaderboard", { method: "POST" });
       if (res.ok) {
         setSyncDone(true);
-        await load();
+        refresh();
         setTimeout(() => setSyncDone(false), 3000);
       } else {
         setSyncFailed(true);
@@ -94,9 +124,15 @@ export default function LeaderboardPage() {
     }
   }
 
-  const ranked = data?.leaderboard.slice().sort((a, b) => b.cashCollected - a.cashCollected) ?? [];
-  const top3   = ranked.slice(0, 3);
-  const rest   = ranked.slice(3);
+  const top3 = sortedRows.slice(0, 3);
+  const rest  = sortedRows.slice(3);
+
+  const sortLabel: Record<SortMetric, string> = {
+    cashCollected: "cash collected",
+    dealsClosed:   "deals closed",
+    callsMade:     "calls made",
+    closeRate:     "close rate",
+  };
 
   return (
     <div className="space-y-6">
@@ -107,14 +143,22 @@ export default function LeaderboardPage() {
             <Trophy className="h-5 w-5 text-orange-500" />
             Rep Leaderboard
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Ranked by cash collected — all time</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Ranked by {sortLabel[sortMetric]} — click any column header to change
+          </p>
           {data && (
-            <p className="text-[11px] mt-1">
-              {data.source === "sheet" && <span className="text-green-400">Live from Google Sheet</span>}
-              {data.source === "cache" && <span className="text-orange-400">Cached from last sync — click Sync Sheet to refresh</span>}
-              {data.source === "kv"    && <span className="text-blue-400">Built from logged deals</span>}
-              {data.source === "empty" && <span className="text-muted-foreground">No data yet — click Sync Sheet</span>}
-            </p>
+            <div className="mt-1">
+              {data.source === "sheet" && <LiveDot lastUpdated={lastUpdated} />}
+              {data.source === "cache" && (
+                <span className="text-[11px] text-orange-400">Cached from last sync — click Sync Sheet to refresh</span>
+              )}
+              {data.source === "kv" && (
+                <span className="text-[11px] text-blue-400">Built from logged deals</span>
+              )}
+              {data.source === "empty" && (
+                <span className="text-[11px] text-muted-foreground">No data yet — click Sync Sheet</span>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -136,13 +180,6 @@ export default function LeaderboardPage() {
               {syncDone ? "Synced" : syncFailed ? "Failed" : "Sync Sheet"}
             </button>
           )}
-          <button
-            onClick={load}
-            disabled={loading}
-            className="h-8 w-8 flex items-center justify-center rounded-lg bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
         </div>
       </div>
 
@@ -157,13 +194,13 @@ export default function LeaderboardPage() {
       {!loading && error && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <p className="text-sm text-muted-foreground text-center max-w-xs">{error}</p>
-          <button onClick={load} className="h-8 px-4 rounded-lg bg-muted text-xs hover:bg-muted/80 transition-colors">
+          <button onClick={refresh} className="h-8 px-4 rounded-lg bg-muted text-xs hover:bg-muted/80 transition-colors">
             Retry
           </button>
         </div>
       )}
 
-      {data && ranked.length === 0 && (
+      {data && sortedRows.length === 0 && (
         <Card className="bg-card border-border">
           <CardContent className="py-12 text-center text-xs text-muted-foreground">
             No rep data yet — ensure the Setter KPI Tracker sheet is shared with the service account, then click Sync Sheet.
@@ -171,8 +208,25 @@ export default function LeaderboardPage() {
         </Card>
       )}
 
-      {data && ranked.length > 0 && (
+      {data && sortedRows.length > 0 && (
         <>
+          {/* Company-wide aggregate */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Total Cash",     value: fmt$(data.totalCash) },
+              { label: "Total Deals",    value: String(data.totalDeals) },
+              { label: "Total Calls",    value: String(data.totalCalls) },
+              { label: "Avg Close Rate", value: `${data.avgCloseRate}%` },
+            ].map(({ label, value }) => (
+              <Card key={label} className="bg-card border-border">
+                <CardContent className="px-4 py-3">
+                  <p className="text-[11px] text-muted-foreground">{label}</p>
+                  <p className="text-lg font-bold mt-0.5">{value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
           {/* Top-3 podium */}
           {top3.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -187,9 +241,18 @@ export default function LeaderboardPage() {
                         <Trophy className={`h-4 w-4 ${color}`} />
                       </div>
                       <p className="font-bold text-base truncate">{rep.name}</p>
-                      <p className={`font-extrabold ${size} mt-1`}>{fmt$(rep.cashCollected)}</p>
-                      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                      <p className={`font-extrabold ${size} mt-1`}>
+                        {sortMetric === "cashCollected" ? fmt$(rep.cashCollected)
+                          : sortMetric === "dealsClosed" ? `${rep.dealsClosed} deals`
+                          : sortMetric === "callsMade"   ? `${rep.callsMade} calls`
+                          : `${rep.closeRate}%`}
+                      </p>
+                      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
+                        <span><span className="text-foreground font-semibold">{fmt$(rep.cashCollected)}</span> collected</span>
                         <span><span className="text-foreground font-semibold">{rep.dealsClosed}</span> closed</span>
+                        {rep.callsMade > 0 && (
+                          <span><span className="text-foreground font-semibold">{rep.callsMade}</span> calls</span>
+                        )}
                         <span><CloseRateBadge rate={rep.closeRate} /> close rate</span>
                       </div>
                     </CardContent>
@@ -200,37 +263,58 @@ export default function LeaderboardPage() {
           )}
 
           {/* Full rankings table */}
-          <div className="rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="rounded-xl border border-border overflow-x-auto">
+            <table className="w-full text-xs min-w-[640px]">
               <thead className="bg-muted/50">
                 <tr>
-                  {["#", "Rep", "Cash Collected", "Closed", "Demos Set", "Showed", "Show Rate", "Close Rate"].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">#</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Rep</th>
+                  <SortableHeader label="Cash Collected" metric="cashCollected" currentMetric={sortMetric} dir={sortDir} onSort={setSort} />
+                  <SortableHeader label="Closed"         metric="dealsClosed"   currentMetric={sortMetric} dir={sortDir} onSort={setSort} />
+                  <SortableHeader label="Calls Made"     metric="callsMade"     currentMetric={sortMetric} dir={sortDir} onSort={setSort} />
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Demos Set</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Showed</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground whitespace-nowrap">Show Rate</th>
+                  <SortableHeader label="Close Rate"     metric="closeRate"     currentMetric={sortMetric} dir={sortDir} onSort={setSort} />
                 </tr>
               </thead>
               <tbody>
-                {ranked.map((rep, i) => (
-                  <tr key={i} className="border-t border-border hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2.5"><RankBadge rank={i + 1} /></td>
-                    <td className="px-3 py-2.5 font-medium whitespace-nowrap">{rep.name}</td>
-                    <td className="px-3 py-2.5 text-green-400 font-semibold">{fmt$(rep.cashCollected)}</td>
-                    <td className="px-3 py-2.5">{rep.dealsClosed}</td>
-                    <td className="px-3 py-2.5">{rep.demosSet}</td>
-                    <td className="px-3 py-2.5">{rep.demosShowed}</td>
-                    <td className="px-3 py-2.5">{rep.showRate}%</td>
-                    <td className="px-3 py-2.5"><CloseRateBadge rate={rep.closeRate} /></td>
+                {sortedRows.map((rep, i) => {
+                  const delta = rankDeltas[rep.name] ?? 0;
+                  const flashing = flashedReps.has(rep.name);
+                  return (
+                    <tr
+                      key={rep.name}
+                      className={cn(
+                        "border-t border-border hover:bg-muted/30 transition-colors",
+                        flashing && delta > 0 && "animate-rank-flash-up",
+                        flashing && delta < 0 && "animate-rank-flash-down",
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <RankBadge rank={i + 1} />
+                          {delta !== 0 && <RankDeltaBadge delta={delta} />}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 font-medium whitespace-nowrap">{rep.name}</td>
+                      <td className="px-3 py-2.5 text-green-400 font-semibold">{fmt$(rep.cashCollected)}</td>
+                      <td className="px-3 py-2.5">{rep.dealsClosed}</td>
+                      <td className="px-3 py-2.5">{rep.callsMade}</td>
+                      <td className="px-3 py-2.5">{rep.demosSet}</td>
+                      <td className="px-3 py-2.5">{rep.demosShowed}</td>
+                      <td className="px-3 py-2.5">{rep.showRate}%</td>
+                      <td className="px-3 py-2.5"><CloseRateBadge rate={rep.closeRate} /></td>
+                    </tr>
+                  );
+                })}
+                {rest.length === 0 && top3.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No reps found.</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
-          </div>
-
-          {/* Summary footer */}
-          <div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
-            <span><span className="text-foreground font-semibold">{fmt$(data.totalCash)}</span> total collected</span>
-            <span><span className="text-foreground font-semibold">{data.totalDeals}</span> total deals</span>
-            <span><span className="text-foreground font-semibold">{data.avgCloseRate}%</span> avg close rate</span>
           </div>
         </>
       )}

@@ -48,6 +48,7 @@ export async function GET() {
   let sheetLeaderboard: {
     name: string;
     cashCollected: number;
+    callsMade: number;
     demosSet: number;
     demosShowed: number;
     dealsClosed: number;
@@ -67,6 +68,8 @@ export async function GET() {
                        : col("grossdealvalue($)") >= 0 ? col("grossdealvalue($)")
                        : col("grossdealvalue") >= 0 ? col("grossdealvalue")
                        : col("grosscollected");
+    const callsIdx     = col("callsmade") >= 0 ? col("callsmade")
+                       : col("callsdialed") >= 0 ? col("callsdialed") : -1;
     const demosSetIdx  = col("demosset") >= 0 ? col("demosset") : col("zoomsbooked");
     const demosShowIdx = col("demosshowed") >= 0 ? col("demosshowed")
                        : col("showedups") >= 0 ? col("showedups")
@@ -75,18 +78,20 @@ export async function GET() {
 
     // Aggregate by name — handles both summary rows (one per setter) and daily log rows
     const HEADER_LABELS = new Set(["name", "setter name", "setter", "settername"]);
-    type Totals = { cashCollected: number; demosSet: number; demosShowed: number; dealsClosed: number };
+    type Totals = { cashCollected: number; callsMade: number; demosSet: number; demosShowed: number; dealsClosed: number };
     const repMap = new Map<string, Totals>();
     for (const row of rows.slice(1) as string[][]) {
       const name = row[nameIdx]?.trim() ?? "";
       if (!name || HEADER_LABELS.has(name.toLowerCase())) continue;
-      const cash        = cashIdx >= 0     ? parseFloat((row[cashIdx]     ?? "0").replace(/[$,]/g, "")) || 0 : 0;
-      const demosSet    = demosSetIdx >= 0 ? parseFloat((row[demosSetIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+      const cash        = cashIdx >= 0      ? parseFloat((row[cashIdx]      ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+      const calls       = callsIdx >= 0     ? parseFloat((row[callsIdx]     ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+      const demosSet    = demosSetIdx >= 0  ? parseFloat((row[demosSetIdx]  ?? "0").replace(/[$,]/g, "")) || 0 : 0;
       const demosShowed = demosShowIdx >= 0 ? parseFloat((row[demosShowIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
       const closed      = closedIdx    >= 0 ? parseFloat((row[closedIdx]    ?? "0").replace(/[$,]/g, "")) || 0 : 0;
-      const prev        = repMap.get(name) ?? { cashCollected: 0, demosSet: 0, demosShowed: 0, dealsClosed: 0 };
+      const prev        = repMap.get(name) ?? { cashCollected: 0, callsMade: 0, demosSet: 0, demosShowed: 0, dealsClosed: 0 };
       repMap.set(name, {
         cashCollected: prev.cashCollected + cash,
+        callsMade:     prev.callsMade     + calls,
         demosSet:      prev.demosSet      + demosSet,
         demosShowed:   prev.demosShowed   + demosShowed,
         dealsClosed:   prev.dealsClosed   + closed,
@@ -95,6 +100,7 @@ export async function GET() {
     sheetLeaderboard = Array.from(repMap.entries()).map(([name, s]) => ({
       name,
       cashCollected: s.cashCollected,
+      callsMade:     s.callsMade,
       demosSet:      s.demosSet,
       demosShowed:   s.demosShowed,
       dealsClosed:   s.dealsClosed,
@@ -118,6 +124,7 @@ export async function GET() {
       leaderboard = cached.map(r => ({
         name:          r.name,
         cashCollected: r.cashCollected,
+        callsMade:     r.callsMade ?? 0,
         demosSet:      r.demosSet,
         demosShowed:   r.demosShowed,
         dealsClosed:   r.dealsClosed,
@@ -155,6 +162,7 @@ export async function GET() {
       leaderboard = Array.from(repMap.entries()).map(([name, s]) => ({
         name,
         cashCollected: s.cashCollected,
+        callsMade:     0,
         demosSet:      s.demosSet,
         demosShowed:   0,
         dealsClosed:   s.dealsClosed,
@@ -167,9 +175,10 @@ export async function GET() {
 
   const totalCash    = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
   const totalDeals   = leaderboard.reduce((s, r) => s + r.dealsClosed, 0);
+  const totalCalls   = leaderboard.reduce((s, r) => s + r.callsMade, 0);
   const avgCloseRate = leaderboard.length > 0
     ? parseFloat((leaderboard.reduce((s, r) => s + r.closeRate, 0) / leaderboard.length).toFixed(1))
     : 0;
 
-  return Response.json({ leaderboard, totalCash, totalDeals, avgCloseRate, source });
+  return Response.json({ leaderboard, totalCash, totalDeals, totalCalls, avgCloseRate, source });
 }
