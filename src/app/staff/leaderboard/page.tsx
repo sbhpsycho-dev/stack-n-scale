@@ -20,6 +20,7 @@ interface SettersData {
   totalCash: number;
   totalDeals: number;
   avgCloseRate: number;
+  source: "sheet" | "cache" | "kv" | "empty";
 }
 
 function fmt$(n: number) {
@@ -107,6 +108,14 @@ export default function LeaderboardPage() {
             Rep Leaderboard
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">Ranked by cash collected — all time</p>
+          {data && (
+            <p className="text-[11px] mt-1">
+              {data.source === "sheet" && <span className="text-green-400">Live from Google Sheet</span>}
+              {data.source === "cache" && <span className="text-orange-400">Cached from last sync — click Sync Sheet to refresh</span>}
+              {data.source === "kv"    && <span className="text-blue-400">Built from logged deals</span>}
+              {data.source === "empty" && <span className="text-muted-foreground">No data yet — click Sync Sheet</span>}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
