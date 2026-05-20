@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, Users, BookOpen, MessageSquare, BarChart2, ArrowLeft, Settings, Menu } from "lucide-react";
+import { Calendar, Users, BookOpen, MessageSquare, BarChart2, Trophy, ArrowLeft, Settings, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,7 +13,8 @@ const NAV_ITEMS = [
   { href: "/staff/students",  label: "Students",  icon: Users },
   { href: "/staff/resources", label: "Resources", icon: BookOpen },
   { href: "/staff/messages",  label: "Messages",  icon: MessageSquare },
-  { href: "/staff/insights",  label: "Insights",  icon: BarChart2 },
+  { href: "/staff/insights",     label: "Insights",     icon: BarChart2 },
+  { href: "/staff/leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
 function NavLinks({ pathname, isAdmin, onNavigate }: { pathname: string; isAdmin: boolean; onNavigate?: () => void }) {
