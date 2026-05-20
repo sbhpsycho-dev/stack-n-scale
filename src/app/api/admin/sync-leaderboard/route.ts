@@ -3,6 +3,9 @@ import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { type SalesData, BLANK } from "@/lib/sales-data";
 import { getSheetsToken, sheetsGet } from "@/lib/sheets-sync";
+import { STAFF_KV_KEY, type StaffMeta } from "@/lib/staff-registry";
+import { calculatePayouts } from "@/lib/payout-calc";
+import type { Deal } from "@/lib/deal-types";
 
 const SETTER_KPI_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID ?? "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
 const MASTER_LOG_ID = process.env.GOOGLE_SHEETS_MASTER_LOG_ID ?? "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
@@ -16,6 +19,16 @@ function parseSheetDate(raw: string): { year: string; ym: string } | null {
   if (b) return { year: b[1], ym: `${b[1]}-${b[2]}` };
   return null;
 }
+
+function isoDate(raw: string): string | null {
+  const a = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (a) return `${a[3]}-${a[1].padStart(2, "0")}-${a[2].padStart(2, "0")}`;
+  const b = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (b) return `${b[1]}-${b[2]}-${b[3]}`;
+  return null;
+}
+
+const parseMoney = (s: string) => parseFloat((s ?? "0").replace(/[$,]/g, "")) || 0;
 
 function ymOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -31,6 +44,69 @@ export async function POST() {
   const prevYM  = ymOf(new Date(now.getFullYear(), now.getMonth() - 1, 1));
   const prev2YM = ymOf(new Date(now.getFullYear(), now.getMonth() - 2, 1));
   const prev3YM = ymOf(new Date(now.getFullYear(), now.getMonth() - 3, 1));
+
+  // ── 0. Sync individual rep sheets → sns:deals:index ─────────────────────────
+  let repSheetDeals = 0;
+  try {
+    const staffList = (await kv.get<StaffMeta[]>(STAFF_KV_KEY)) ?? [];
+    const repsWithSheets = staffList.filter(r => r.sheetId);
+    if (repsWithSheets.length > 0) {
+      const token0 = await getSheetsToken();
+      const newDealIds: string[] = [];
+
+      for (const rep of repsWithSheets) {
+        try {
+          const res = await sheetsGet(token0, rep.sheetId!, "A:F");
+          const rows = (res.values ?? []) as string[][];
+          for (const row of rows) {
+            const rawDate = (row[0] ?? "").trim();
+            if (!rawDate || rawDate.toLowerCase() === "date") continue;
+            const date = isoDate(rawDate);
+            if (!date) continue;
+            const gross = parseMoney(row[2] ?? "");
+            if (gross <= 0) continue;
+            const clientName = (row[1] ?? "Unknown").trim();
+            const role = (row[4] ?? "").trim().toLowerCase();
+            const slug = clientName.toLowerCase().replace(/\W+/g, "-").replace(/-+$/, "").slice(0, 30);
+            const dealId = `rep-${rep.id}-${date}-${slug}`;
+            if (await kv.get(`sns:deals:${dealId}`)) continue;
+            const processorFee = parseFloat((gross * 0.029 + 0.30).toFixed(2));
+            const deal: Deal = {
+              id:           dealId,
+              date,
+              clientName,
+              offer:        gross >= 8000 ? "10K" : "5K",
+              grossAmount:  gross,
+              processor:    "stripe",
+              processorFee,
+              netAmount:    parseFloat((gross - processorFee).toFixed(2)),
+              leadSource:   "ad",
+              dmSetter:     null,
+              setter:       role.includes("setter") ? rep.name : null,
+              closer:       role.includes("closer") ? rep.name : null,
+              payouts:      {} as Deal["payouts"],
+              payoutStatus: "pending",
+              notes:        "",
+            };
+            deal.payouts = calculatePayouts(deal);
+            await kv.set(`sns:deals:${dealId}`, deal);
+            newDealIds.push(dealId);
+            repSheetDeals++;
+          }
+        } catch (e) {
+          console.error(`Rep sheet sync failed for ${rep.name}:`, e);
+        }
+      }
+
+      if (newDealIds.length > 0) {
+        const existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? [];
+        const merged = [...new Set([...newDealIds, ...existingIdx])];
+        await kv.set("sns:deals:index", merged);
+      }
+    }
+  } catch (e) {
+    console.error("Phase 0 rep sheet sync error:", e);
+  }
 
   // ── 1. Setter KPI Daily Log → MTD leaderboard + pipeline ─────────────────────
   let setterRows: string[][] | null = null;
@@ -222,6 +298,7 @@ export async function POST() {
     ok:              !sheetsError || leaderboard.length > 0,
     sheetsError,
     leaderboardCount: leaderboard.length,
+    repSheetDeals,
     cashMTD,
     cashYTD,
     dealsMTD,
