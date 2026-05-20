@@ -10,9 +10,8 @@ import { BLANK, type SalesData } from "@/lib/sales-data";
 export const runtime     = "nodejs";
 export const maxDuration = 60;
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
 export async function POST() {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const session = await getServerSession(authOptions);
   if (session?.user.role !== "admin") return new Response("Unauthorized", { status: 401 });
 
