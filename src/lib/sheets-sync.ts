@@ -225,7 +225,7 @@ export async function updatePipelineFromReplogs(): Promise<void> {
     ...cached,
     pipeline: { ...cached.pipeline, callsMade: tCallsMade, callsAnswered: tCallsAnswered, demosSet: tDemosSet, demosShowed: tDemosShowed, pitched: tPitched, closed: tClosed, answerRate, showRate, closeRate, demoToClose: closeRate },
     reps: { ...cached.reps, leaderboard },
-  }, { ex: 21600 });
+  });
 }
 
 // Reads all Daily Log rows from Setter KPI sheet and upserts into each staff member's KV replog.

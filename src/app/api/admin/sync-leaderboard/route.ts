@@ -216,7 +216,7 @@ export async function POST() {
   }
   current.dashboard.cashCollectedYTD = cashYTD;
 
-  await kv.set("sns-dashboard-v1", current, { ex: 21600 });
+  await kv.set("sns-dashboard-v1", current);
 
   return Response.json({
     ok:              !sheetsError || leaderboard.length > 0,

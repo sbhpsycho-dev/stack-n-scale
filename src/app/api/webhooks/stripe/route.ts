@@ -36,8 +36,6 @@ export async function POST(req: Request) {
   const rawName = session.customer_details?.name?.trim() ?? "";
   const phone = session.customer_details?.phone ?? undefined;
 
-  if (!email || !rawName) return new Response("Missing customer info", { status: 400 });
-
   const amountTotal = session.amount_total ?? 0;
 
   // ── Deal record — idempotent on session.id, fires for new AND returning clients
@@ -48,7 +46,7 @@ export async function POST(req: Request) {
     const deal: Deal = {
       id:           dealId,
       date:         new Date(session.created * 1000).toISOString().split("T")[0],
-      clientName:   rawName,
+      clientName:   rawName || "Unknown",
       offer:        (session.metadata?.offer === "10K" ? "10K" : "5K") as Deal["offer"],
       grossAmount,
       processor:    "stripe",
@@ -68,6 +66,9 @@ export async function POST(req: Request) {
     await kv.set("sns:deals:index", [dealId, ...idx]);
     syncDealToSheets(deal).catch(e => console.error("Sheets sync error:", e));
   }
+
+  // Coaching client creation requires both email and name
+  if (!email || !rawName) return new Response("ok", { status: 200 });
 
   const clientKey = `sns:coaching:client:${email}`;
 

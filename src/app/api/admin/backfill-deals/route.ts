@@ -92,7 +92,7 @@ export async function POST() {
   dash.dashboard.netRevenueMTD       = netRevenueMTD;
   dash.dashboard.cashCollectedYTD    = cashCollectedYTD;
   dash.dashboard.totalDealsClosedMTD = totalDealsClosedMTD;
-  await kv.set("sns-dashboard-v1", dash, { ex: 21600 });
+  await kv.set("sns-dashboard-v1", dash);
 
   return Response.json({
     ok:      true,

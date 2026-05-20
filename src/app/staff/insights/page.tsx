@@ -952,6 +952,8 @@ export default function InsightsPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<string | null>(null);
 
   function handleRefresh() {
     setRefreshSignals(prev => ({ ...prev, [tab]: prev[tab] + 1 }));
@@ -983,6 +985,30 @@ export default function InsightsPage() {
     }
   }
 
+  async function handleBackfill() {
+    setBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const res = await fetch("/api/admin/backfill-deals", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setBackfillResult(`${data.created} new, ${data.skipped} skipped`);
+        setRefreshSignals(prev =>
+          (Object.keys(prev) as Tab[]).reduce((acc, k) => ({ ...acc, [k]: prev[k] + 1 }), prev)
+        );
+        setTimeout(() => setBackfillResult(null), 5000);
+      } else {
+        setBackfillResult("Failed");
+        setTimeout(() => setBackfillResult(null), 4000);
+      }
+    } catch {
+      setBackfillResult("Failed");
+      setTimeout(() => setBackfillResult(null), 4000);
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -992,24 +1018,38 @@ export default function InsightsPage() {
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <button
-              onClick={handleSyncNow}
-              disabled={syncing}
-              aria-label="Sync all data from integrations"
-              className={`h-8 px-3 flex items-center gap-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-60 ${
-                syncFailed
-                  ? "bg-red-500 hover:bg-red-600"
-                  : "bg-orange-500 hover:bg-orange-600"
-              }`}
-            >
-              {syncing
-                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing…</>
-                : syncDone
-                ? <><Check className="h-3.5 w-3.5" /> Synced!</>
-                : syncFailed
-                ? <><X className="h-3.5 w-3.5" /> Sync Failed</>
-                : <><RefreshCw className="h-3.5 w-3.5" /> Sync Now</>}
-            </button>
+            <>
+              <button
+                onClick={handleBackfill}
+                disabled={backfilling}
+                aria-label="Import all historical Stripe charges"
+                className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground text-xs disabled:opacity-60"
+              >
+                {backfilling
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Backfilling…</>
+                  : backfillResult
+                  ? <><Check className="h-3.5 w-3.5" /> {backfillResult}</>
+                  : <><RefreshCw className="h-3.5 w-3.5" /> Backfill Deals</>}
+              </button>
+              <button
+                onClick={handleSyncNow}
+                disabled={syncing}
+                aria-label="Sync all data from integrations"
+                className={`h-8 px-3 flex items-center gap-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-60 ${
+                  syncFailed
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-orange-500 hover:bg-orange-600"
+                }`}
+              >
+                {syncing
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing…</>
+                  : syncDone
+                  ? <><Check className="h-3.5 w-3.5" /> Synced!</>
+                  : syncFailed
+                  ? <><X className="h-3.5 w-3.5" /> Sync Failed</>
+                  : <><RefreshCw className="h-3.5 w-3.5" /> Sync Now</>}
+              </button>
+            </>
           )}
           <button
             onClick={handleRefresh}

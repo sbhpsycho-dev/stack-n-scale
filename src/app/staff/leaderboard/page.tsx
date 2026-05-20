@@ -282,6 +282,7 @@ export default function LeaderboardPage() {
                 {sortedRows.map((rep, i) => {
                   const delta = rankDeltas[rep.name] ?? 0;
                   const flashing = flashedReps.has(rep.name);
+                  const isMe = !!session?.user?.name && session.user.name.toLowerCase() === rep.name.toLowerCase();
                   return (
                     <tr
                       key={rep.name}
@@ -289,6 +290,7 @@ export default function LeaderboardPage() {
                         "border-t border-border hover:bg-muted/30 transition-colors",
                         flashing && delta > 0 && "animate-rank-flash-up",
                         flashing && delta < 0 && "animate-rank-flash-down",
+                        isMe && "ring-1 ring-inset ring-orange-500/50 bg-orange-500/5",
                       )}
                     >
                       <td className="px-3 py-2.5">
@@ -297,7 +299,12 @@ export default function LeaderboardPage() {
                           {delta !== 0 && <RankDeltaBadge delta={delta} />}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 font-medium whitespace-nowrap">{rep.name}</td>
+                      <td className="px-3 py-2.5 font-medium whitespace-nowrap">
+                        {rep.name}
+                        {isMe && (
+                          <span className="ml-1.5 text-[10px] font-semibold text-orange-400 bg-orange-400/10 px-1 py-0.5 rounded">You</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-green-400 font-semibold">{fmt$(rep.cashCollected)}</td>
                       <td className="px-3 py-2.5">{rep.dealsClosed}</td>
                       <td className="px-3 py-2.5">{rep.callsMade}</td>

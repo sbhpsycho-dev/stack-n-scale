@@ -353,8 +353,7 @@ export async function GET(req: Request) {
     clientRegistry: BLANK.clientRegistry,
   };
 
-  // 6-hour TTL
-  await kv.set("sns-dashboard-v1", data, { ex: 21600 });
+  await kv.set("sns-dashboard-v1", data);
 
   return Response.json({
     ok: true,

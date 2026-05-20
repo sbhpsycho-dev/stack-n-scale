@@ -24,6 +24,12 @@ interface PersonalKPI {
   growthByMonth: { month: string; commission: number; deals: number }[];
 }
 
+interface MyPipelineData {
+  callsMade: number; callsAnswered: number; demosSet: number;
+  demosShowed: number; pitched: number; closed: number; cashCollected: number;
+  answerRate: number; showRate: number; closeRate: number; demoToClose: number;
+}
+
 const TT = {
   contentStyle: { background: "#18181b", border: "1px solid #27272a", borderRadius: 8, fontSize: 11 },
   labelStyle: { color: "#e4e4e7" },
@@ -44,6 +50,7 @@ function fmtDate(dateStr: string) {
 export default function MyNumbersPage() {
   const { data: session } = useSession();
   const [data, setData] = useState<PersonalKPI | null>(null);
+  const [pipelineData, setPipelineData] = useState<MyPipelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -51,12 +58,16 @@ export default function MyNumbersPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/staff/personal/kpi");
-      if (!res.ok) {
+      const [kpiRes, pipeRes] = await Promise.all([
+        fetch("/api/staff/personal/kpi"),
+        fetch("/api/staff/kpi/my-pipeline"),
+      ]);
+      if (!kpiRes.ok) {
         setError("Failed to load your numbers. Contact Evan if this persists.");
         return;
       }
-      setData(await res.json());
+      setData(await kpiRes.json());
+      if (pipeRes.ok) setPipelineData(await pipeRes.json());
     } catch {
       setError("Network error. Check your connection.");
     } finally {
@@ -119,11 +130,13 @@ export default function MyNumbersPage() {
         </div>
       )}
 
-      {/* No sheet configured */}
+      {/* No sheet configured or no data yet */}
       {!loading && !error && data && !hasData && (
         <Card className="bg-card border-border">
           <CardContent className="py-12 text-center text-xs text-muted-foreground">
-            No deals found on your sheet yet. Deals will appear here after the next sync.
+            {session?.user?.sheetId
+              ? "No deals found on your sheet yet. Deals will appear here after the next sync."
+              : "Your personal Google Sheet isn't linked yet. Ask admin to connect your sheet ID in Staff Settings."}
           </CardContent>
         </Card>
       )}
@@ -144,6 +157,25 @@ export default function MyNumbersPage() {
             <div className="grid grid-cols-2 gap-3">
               <MetricCard label="This Week — Deals"      value={data.weekDeals}      variant="black"   index={4} />
               <MetricCard label="This Week — Commission" value={data.weekCommission}  prefix="$" variant="black" index={5} />
+            </div>
+          )}
+
+          {/* Pipeline metrics */}
+          {pipelineData && (
+            <div className="space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pipeline — MTD</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard label="Calls Made"     value={pipelineData.callsMade}     variant="default" index={6} />
+                <MetricCard label="Calls Answered" value={pipelineData.callsAnswered}  variant="default" index={7} />
+                <MetricCard label="Demos Set"      value={pipelineData.demosSet}       variant="orange"  index={8} />
+                <MetricCard label="Demos Showed"   value={pipelineData.demosShowed}    variant="orange"  index={9} />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard label="Deals Closed"    value={pipelineData.closed}        variant="green"   index={10} />
+                <MetricCard label="Cash Collected"  value={pipelineData.cashCollected}  prefix="$" variant="green" index={11} />
+                <MetricCard label="Answer Rate"     value={pipelineData.answerRate}     suffix="%" decimals={1} variant="default" index={12} />
+                <MetricCard label="Close Rate"      value={pipelineData.closeRate}      suffix="%" decimals={1} variant="default" index={13} />
+              </div>
             </div>
           )}
 
