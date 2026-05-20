@@ -194,12 +194,89 @@ export async function POST() {
     answerRate:    s.calls > 0 ? parseFloat(((s.answered / s.calls) * 100).toFixed(1)) : 0,
   }));
 
-  const answerRate  = pipeCallsMTD > 0 ? parseFloat(((pipeAnswMTD  / pipeCallsMTD)  * 100).toFixed(1)) : 0;
-  const showRate    = pipeDSetMTD  > 0 ? parseFloat(((pipeDShowMTD / pipeDSetMTD)   * 100).toFixed(1)) : 0;
-  const closeRate   = pipeDShowMTD > 0 ? parseFloat(((pipeClosedMTD / pipeDShowMTD) * 100).toFixed(1)) : 0;
-  const repCashTotal = leaderboard.reduce((s, r) => s + r.cashCollected, 0);
-  const topRepCash  = leaderboard.length > 0 ? Math.max(...leaderboard.map(r => r.cashCollected)) : 0;
-  const avgDealSize = pipeClosedMTD > 0 ? parseFloat((repCashTotal / pipeClosedMTD).toFixed(0)) : 0;
+  const answerRate = pipeCallsMTD > 0 ? parseFloat(((pipeAnswMTD / pipeCallsMTD) * 100).toFixed(1)) : 0;
+
+  // ── 1b. GHL Opportunities → pipeline + leaderboard (fills zeros when sheet empty) ──
+  let ghlDSet = 0, ghlDShow = 0, ghlPitch = 0, ghlClosed = 0;
+  let ghlCloseRate = 0, ghlShowRate = 0;
+  let ghlPipelineUsed = false;
+  const ghlRepMap = new Map<string, { cash: number; closed: number }>();
+
+  const GHL_KEY = process.env.GHL_API_KEY ?? "";
+  const GHL_LOC = process.env.GHL_LOCATION_ID ?? "";
+
+  if (GHL_KEY && GHL_LOC) {
+    try {
+      const ghlHeaders = { Authorization: `Bearer ${GHL_KEY}`, Version: "2021-07-28" };
+      const sinceISO   = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      const stageNameMap: Record<string, string> = {};
+      try {
+        const pipRes  = await fetch(`https://services.leadconnectorhq.com/opportunities/pipelines?locationId=${GHL_LOC}`, { headers: ghlHeaders });
+        const pipData = await pipRes.json();
+        for (const p of (pipData?.pipelines ?? [])) {
+          for (const s of (p.stages ?? [])) stageNameMap[s.id] = s.name;
+        }
+      } catch { /* non-fatal */ }
+
+      const oppsRes  = await fetch(`https://services.leadconnectorhq.com/opportunities/search?location_id=${GHL_LOC}&date=${sinceISO}&limit=100`, { headers: ghlHeaders });
+      const oppsData = await oppsRes.json();
+      const opps: { status?: string; assignedTo?: string; monetaryValue?: number; pipelineStageId?: string }[] = oppsData?.opportunities ?? [];
+
+      if (opps.length > 0) {
+        const sn = (o: typeof opps[0]) =>
+          ((o.pipelineStageId && stageNameMap[o.pipelineStageId]) ?? o.status ?? "").toLowerCase();
+        const sc = (keywords: string[]) => opps.filter(o => keywords.some(k => sn(o).includes(k))).length;
+
+        ghlDSet   = sc(["demo set", "booked", "appointment"]);
+        ghlDShow  = sc(["demo showed", "showed", "show"]);
+        ghlPitch  = sc(["pitched", "pitch", "presented"]);
+        const wonOpps = opps.filter(o => o.status === "won");
+        ghlClosed     = wonOpps.length;
+        ghlCloseRate  = opps.length > 0 ? parseFloat(((ghlClosed / opps.length) * 100).toFixed(1)) : 0;
+        ghlShowRate   = ghlDSet > 0     ? parseFloat(((ghlDShow  / ghlDSet)     * 100).toFixed(1)) : 0;
+
+        for (const o of wonOpps) {
+          const rep  = (o.assignedTo ?? "Unassigned").trim();
+          const prev = ghlRepMap.get(rep) ?? { cash: 0, closed: 0 };
+          ghlRepMap.set(rep, { cash: prev.cash + (o.monetaryValue ?? 0), closed: prev.closed + 1 });
+        }
+        ghlPipelineUsed = true;
+      }
+    } catch (e) {
+      console.error("Phase 1b GHL pipeline sync error:", e);
+    }
+  }
+
+  // Merge sheet + GHL: sheet wins where non-zero, GHL fills zeros
+  const mergedDSet   = pipeDSetMTD   || ghlDSet;
+  const mergedDShow  = pipeDShowMTD  || ghlDShow;
+  const mergedPitch  = pipeDShowMTD  || ghlPitch;
+  const mergedClosed = pipeClosedMTD || ghlClosed;
+  const showRate     = mergedDSet  > 0 ? parseFloat(((mergedDShow  / mergedDSet)  * 100).toFixed(1)) : ghlShowRate;
+  const closeRate    = mergedDShow > 0 ? parseFloat(((mergedClosed / mergedDShow) * 100).toFixed(1)) : ghlCloseRate;
+
+  // Build final leaderboard: patch GHL cash/deals into sheet rows, add GHL-only reps
+  const ghlLeaderboard: SalesData["reps"]["leaderboard"] = Array.from(ghlRepMap.entries()).map(([name, s]) => ({
+    name, cashCollected: s.cash, callsMade: 0, callsAnswered: 0,
+    demosSet: 0, demosShowed: 0, pitched: 0, dealsClosed: s.closed, answerRate: 0,
+  }));
+
+  const finalLeaderboard: SalesData["reps"]["leaderboard"] = leaderboard.length > 0
+    ? [
+        ...leaderboard.map(entry => {
+          const g = ghlRepMap.get(entry.name);
+          return g
+            ? { ...entry, cashCollected: entry.cashCollected || g.cash, dealsClosed: entry.dealsClosed || g.closed }
+            : entry;
+        }),
+        ...ghlLeaderboard.filter(gr => !leaderboard.find(r => r.name === gr.name)),
+      ]
+    : ghlLeaderboard;
+
+  const repCashTotal = finalLeaderboard.reduce((s, r) => s + r.cashCollected, 0);
+  const topRepCash   = finalLeaderboard.length > 0 ? Math.max(...finalLeaderboard.map(r => r.cashCollected)) : 0;
+  const avgDealSize  = mergedClosed > 0 ? parseFloat((repCashTotal / mergedClosed).toFixed(0)) : 0;
 
   // ── 2. Master Log Deal Log → revenue metrics ──────────────────────────────────
   let dealRows: string[][] | null = null;
@@ -255,11 +332,11 @@ export async function POST() {
   if (!current.reps)      current.reps      = { ...BLANK.reps };
   if (!current.pipeline)  current.pipeline  = { ...BLANK.pipeline };
 
-  // Leaderboard + pipeline (from setter sheet)
-  current.reps.leaderboard      = leaderboard;
+  // Leaderboard + pipeline (sheet data merged with GHL fallback)
+  current.reps.leaderboard      = finalLeaderboard;
   current.reps.topRepCash       = topRepCash;
   current.reps.avgDealSize      = avgDealSize;
-  current.reps.dealClose        = pipeClosedMTD;
+  current.reps.dealClose        = mergedClosed;
   current.reps.callsMadeWeek    = pipeCallsMTD;
   current.reps.cashCollectedWeek = repCashTotal;
   current.reps.showRatePct      = showRate;
@@ -268,10 +345,10 @@ export async function POST() {
   current.reps.closeRateWeek    = closeRate;
   current.pipeline.callsMade    = pipeCallsMTD;
   current.pipeline.callsAnswered = pipeAnswMTD;
-  current.pipeline.demosSet     = pipeDSetMTD;
-  current.pipeline.demosShowed  = pipeDShowMTD;
-  current.pipeline.pitched      = pipeDShowMTD;
-  current.pipeline.closed       = pipeClosedMTD;
+  current.pipeline.demosSet     = mergedDSet;
+  current.pipeline.demosShowed  = mergedDShow;
+  current.pipeline.pitched      = mergedPitch;
+  current.pipeline.closed       = mergedClosed;
   current.pipeline.answerRate   = answerRate;
   current.pipeline.showRate     = showRate;
   current.pipeline.closeRate    = closeRate;
@@ -295,13 +372,14 @@ export async function POST() {
   await kv.set("sns-dashboard-v1", current);
 
   return Response.json({
-    ok:              !sheetsError || leaderboard.length > 0,
+    ok:               !sheetsError || finalLeaderboard.length > 0,
     sheetsError,
-    leaderboardCount: leaderboard.length,
+    leaderboardCount: finalLeaderboard.length,
     repSheetDeals,
+    ghlPipelineUsed,
     cashMTD,
     cashYTD,
     dealsMTD,
-    dealRowsRead:    dealRows?.length ?? 0,
+    dealRowsRead:     dealRows?.length ?? 0,
   });
 }
