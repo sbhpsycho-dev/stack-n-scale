@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, RefreshCw, LayoutDashboard, DollarSign, Megaphone, Users, TrendingUp, Activity, Share2, Workflow, Check, X, Phone } from "lucide-react";
@@ -558,6 +558,23 @@ function PipelineTab({ refreshSignal }: { refreshSignal: number }) {
     }
   }, []);
   useEffect(() => { load(); }, [load, refreshSignal]);
+
+  // Auto-refresh when pipeline data changes in KV (set by any replog write or Sheets webhook)
+  const lastmodRef = useRef<number>(0);
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/pipeline/poll");
+        if (!res.ok) return;
+        const { lastmod } = await res.json() as { lastmod: number };
+        if (lastmod > lastmodRef.current) {
+          lastmodRef.current = lastmod;
+          load();
+        }
+      } catch { /* ignore — polling is best-effort */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   // Load personal replog entries
   useEffect(() => {

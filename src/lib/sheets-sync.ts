@@ -3,6 +3,7 @@ import { kv } from "@vercel/kv";
 import type { Deal } from "./deal-types";
 import type { StaffMeta } from "./staff-registry";
 import type { DailyEntry } from "@/app/api/replog/route";
+import { BLANK, type Rep, type SalesData } from "./sales-data";
 
 const MASTER_LOG_ID = process.env.GOOGLE_SHEETS_MASTER_LOG_ID ?? "1IytiWU-JosLSQp2CXPJp18i_sLzzJpa9VhBBqMLvzjc";
 const SETTER_KPI_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID ?? "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
@@ -147,6 +148,161 @@ export async function syncReplogToSheets(staffName: string, entry: DailyEntry): 
   } else {
     await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:I", [dataRow]);
   }
+}
+
+// ─── Pipeline helpers (shared between replog route and sheets webhook) ────────
+
+const PIPELINE_LASTMOD_KEY = "sns-pipeline-lastmod";
+
+export async function bumpPipelineVersion(): Promise<void> {
+  await kv.set(PIPELINE_LASTMOD_KEY, Date.now());
+}
+
+export async function getPipelineLastmod(): Promise<number> {
+  return (await kv.get<number>(PIPELINE_LASTMOD_KEY)) ?? 0;
+}
+
+export async function updatePipelineFromReplogs(): Promise<void> {
+  const staff = (await kv.get<StaffMeta[]>("sns-staff-registry")) ?? [];
+  if (staff.length === 0) return;
+
+  const thisYM = new Date().toISOString().slice(0, 7);
+
+  let tCallsMade = 0, tCallsAnswered = 0, tDemosSet = 0, tDemosShowed = 0, tPitched = 0, tClosed = 0;
+  const leaderboard: Rep[] = [];
+
+  await Promise.all(staff.map(async (s) => {
+    const entries = (await kv.get<DailyEntry[]>(`sns-replog-${s.id}`)) ?? [];
+    const mtd = entries.filter(e => e.date.startsWith(thisYM));
+
+    let callsMade = 0, callsAnswered = 0, demosSet = 0, demosShowed = 0, pitched = 0, closed = 0, cashCollected = 0;
+    for (const e of mtd) {
+      callsMade     += e.callsMade;
+      callsAnswered += e.callsAnswered;
+      demosSet      += e.demosSet;
+      demosShowed   += e.demosShowed;
+      pitched       += e.pitched;
+      closed        += e.closed;
+      cashCollected += e.cashCollected;
+    }
+
+    tCallsMade     += callsMade;
+    tCallsAnswered += callsAnswered;
+    tDemosSet      += demosSet;
+    tDemosShowed   += demosShowed;
+    tPitched       += pitched;
+    tClosed        += closed;
+
+    const answerRate = callsMade   > 0 ? parseFloat(((callsAnswered / callsMade)   * 100).toFixed(1)) : 0;
+    const showRate   = demosSet    > 0 ? parseFloat(((demosShowed   / demosSet)    * 100).toFixed(1)) : 0;
+    const closeRate  = demosShowed > 0 ? parseFloat(((closed        / demosShowed) * 100).toFixed(1)) : 0;
+
+    const existing = (await kv.get<SalesData>(`sns-client-${s.id}`)) ?? BLANK;
+    await kv.set(`sns-client-${s.id}`, {
+      ...existing,
+      dashboard: { ...existing.dashboard, cashCollectedMTD: cashCollected, totalDealsClosedMTD: closed },
+      pipeline:  { ...existing.pipeline, callsMade, callsAnswered, demosSet, demosShowed, pitched, closed, answerRate, showRate, closeRate, demoToClose: closeRate },
+    });
+
+    if (callsMade > 0 || demosSet > 0 || cashCollected > 0) {
+      leaderboard.push({ name: s.name, callsMade, callsAnswered, demosSet, demosShowed, pitched, dealsClosed: closed, cashCollected, answerRate });
+    }
+  }));
+
+  const cached = await kv.get<SalesData>("sns-dashboard-v1");
+  if (!cached) return;
+
+  const answerRate = tCallsMade   > 0 ? parseFloat(((tCallsAnswered / tCallsMade)   * 100).toFixed(1)) : 0;
+  const showRate   = tDemosSet    > 0 ? parseFloat(((tDemosShowed   / tDemosSet)    * 100).toFixed(1)) : 0;
+  const closeRate  = tDemosShowed > 0 ? parseFloat(((tClosed        / tDemosShowed) * 100).toFixed(1)) : 0;
+
+  leaderboard.sort((a, b) => b.cashCollected - a.cashCollected);
+
+  await kv.set("sns-dashboard-v1", {
+    ...cached,
+    pipeline: { ...cached.pipeline, callsMade: tCallsMade, callsAnswered: tCallsAnswered, demosSet: tDemosSet, demosShowed: tDemosShowed, pitched: tPitched, closed: tClosed, answerRate, showRate, closeRate, demoToClose: closeRate },
+    reps: { ...cached.reps, leaderboard },
+  }, { ex: 21600 });
+}
+
+// Reads all Daily Log rows from Setter KPI sheet and upserts into each staff member's KV replog.
+// Sheets is treated as truth — any row with a matching date+name overwrites the KV entry.
+export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; rowsProcessed: number }> {
+  const token  = await getSheetsToken();
+  const result = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
+  const rows   = (result.values ?? []) as string[][];
+
+  const staff = (await kv.get<StaffMeta[]>("sns-staff-registry")) ?? [];
+  const staffByFirst = new Map<string, StaffMeta>();
+  for (const s of staff) {
+    staffByFirst.set(s.name.trim().toLowerCase().split(" ")[0], s);
+  }
+
+  // Group rows by staff member
+  const byStaff = new Map<string, DailyEntry[]>();
+  let rowsProcessed = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    const [rawDate, name, callsMade, callsAnswered, demosSet, demosShowed, pitched, closed, cashCollected] = rows[i];
+    if (!rawDate || !name) continue;
+
+    // Normalise date — Sheets may return M/D/YYYY or YYYY-MM-DD
+    let date: string;
+    const asDate = new Date(rawDate);
+    date = isNaN(asDate.getTime()) ? rawDate : asDate.toISOString().slice(0, 10);
+
+    const firstKey = String(name).trim().toLowerCase().split(" ")[0];
+    const member   = staffByFirst.get(firstKey);
+    if (!member) continue;
+
+    const entry: DailyEntry = {
+      date,
+      callsMade:     Number(callsMade)     || 0,
+      callsAnswered: Number(callsAnswered)  || 0,
+      demosSet:      Number(demosSet)       || 0,
+      demosShowed:   Number(demosShowed)    || 0,
+      pitched:       Number(pitched)        || 0,
+      closed:        Number(closed)         || 0,
+      cashCollected: Number(cashCollected)  || 0,
+    };
+
+    if (!byStaff.has(member.id)) byStaff.set(member.id, []);
+    const existing = byStaff.get(member.id)!;
+    const idx = existing.findIndex(e => e.date === date);
+    if (idx >= 0) existing[idx] = entry; else existing.push(entry);
+    rowsProcessed++;
+  }
+
+  // Merge with existing KV entries (sheets rows win for matching dates)
+  let staffUpdated = 0;
+  for (const [id, sheetEntries] of byStaff) {
+    const kvKey  = `sns-replog-${id}`;
+    const kvRows = (await kv.get<DailyEntry[]>(kvKey)) ?? [];
+    const merged = [...kvRows];
+    for (const e of sheetEntries) {
+      const idx = merged.findIndex(r => r.date === e.date);
+      if (idx >= 0) merged[idx] = e; else merged.push(e);
+    }
+    merged.sort((a, b) => b.date.localeCompare(a.date));
+    await kv.set(kvKey, merged);
+    staffUpdated++;
+  }
+
+  return { staffUpdated, rowsProcessed };
+}
+
+// Clears a specific date row for a staff member in the Setter KPI Daily Log.
+export async function syncDeleteFromSheets(staffName: string, date: string): Promise<void> {
+  const token    = await getSheetsToken();
+  const existing = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
+  const rows     = (existing.values ?? []) as string[][];
+  const nameKey  = staffName.trim().toLowerCase().split(" ")[0];
+
+  const matchIdx = rows.findIndex((r, i) => i > 0 && r[0] === date && r[1]?.trim().toLowerCase().startsWith(nameKey));
+  if (matchIdx < 0) return;
+
+  const rowNum = matchIdx + 1;
+  await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${rowNum}:I${rowNum}`, [["", "", "", "", "", "", "", "", ""]]);
 }
 
 // ─── Core sync — writes one deal to all sheets ───────────────────────────────
