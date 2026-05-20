@@ -1,6 +1,7 @@
 import { kv } from "@vercel/kv";
 import type { WeeklyPayout, Deal } from "@/lib/deal-types";
 import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
+import { triggerOnboarding } from "@/lib/onboarding";
 
 const EVAN_USER_ID = process.env.EVAN_DISCORD_USER_ID!;
 const PUBLIC_KEY   = process.env.DISCORD_PUBLIC_KEY!;
@@ -239,6 +240,46 @@ export async function POST(req: Request) {
     const userId  = interaction.member?.user?.id ?? interaction.user?.id;
     const command = interaction.data?.name as string;
 
+    // ── /new-client ───────────────────────────────────────────────────────
+    if (command === "new-client") {
+      const CAELUM_ID = process.env.DISCORD_CAELUM_USER_ID;
+      if (userId !== EVAN_USER_ID && userId !== CAELUM_ID) {
+        return ephemeral("❌ Only Evan or Caelum can use this command.");
+      }
+
+      const opts = (interaction.data?.options ?? []) as Array<{ name: string; value: string | number }>;
+      const get  = (k: string) => opts.find(o => o.name === k)?.value;
+
+      const name    = String(get("name")    ?? "").trim();
+      const email   = String(get("email")   ?? "").toLowerCase().trim();
+      const dollars = Number(get("amount")  ?? 0);
+      const program = String(get("program") ?? "standard") as "standard" | "vip";
+
+      if (!name || !email || !dollars) {
+        return ephemeral("❌ Missing required fields — name, email, and amount are all required.");
+      }
+
+      const token = interaction.token as string;
+
+      triggerOnboarding({
+        name,
+        email,
+        amountCents: dollars * 100,
+        programType: program,
+        paymentId:   `discord-${Date.now()}`,
+        source:      "discord",
+      }).then(result =>
+        editInteractionReply(token,
+          result.ok
+            ? `✅ **${name}** is in the system.\nGHL contact created · Drive folder ready · welcome sequence triggered.`
+            : `⚠️ Partial success — check logs.\n${result.error ?? ""}`
+        )
+      ).catch(e => editInteractionReply(token, `❌ Error: ${String(e)}`));
+
+      return Response.json({ type: 5, data: { flags: 64 } });
+    }
+
+    // /approve and /decline are Evan-only
     if (userId !== EVAN_USER_ID) {
       return ephemeral("❌ Only Evan can use this command.");
     }

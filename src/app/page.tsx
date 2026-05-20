@@ -28,6 +28,7 @@ import { type DashboardConfig, DEFAULT_CONFIG, BUSINESS_PRESETS, type BusinessTy
 import { type Resource, type ResourceType } from "@/lib/resources";
 import { Switch } from "@/components/ui/switch";
 import { type DailyEntry } from "@/app/api/replog/route";
+import { type CoachingClient, type CoachingStatus, STATUS_LABELS } from "@/lib/coaching-types";
 
 const tabAnim: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -43,6 +44,149 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
       </CardHeader>
       <CardContent className="px-4 pb-4">{children}</CardContent>
     </Card>
+  );
+}
+
+const ONBOARDING_STAGES: CoachingStatus[] = [
+  "payment_received", "id_pending", "id_pending_review",
+  "id_verified", "onboarding_form_sent", "onboarding_complete",
+  "coach_assigned", "kickoff_booked",
+];
+
+const STATUS_COLOR: Record<CoachingStatus, string> = {
+  payment_received:    "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  id_pending:          "bg-orange-500/15 text-orange-400 border-orange-500/30",
+  id_pending_review:   "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  id_verified:         "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  onboarding_form_sent:"bg-blue-500/15 text-blue-400 border-blue-500/30",
+  onboarding_complete: "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  coach_assigned:      "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  kickoff_booked:      "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  active:              "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  alumni:              "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+};
+
+function OnboardingTab() {
+  const [students, setStudents] = useState<CoachingClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
+
+  useEffect(() => {
+    fetch("/api/staff/students")
+      .then(r => r.json())
+      .then((data: Array<CoachingClient & { progress: unknown }>) => {
+        setStudents(data.filter(c => c.status !== "active" && c.status !== "alumni"));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const counts = ONBOARDING_STAGES.reduce<Record<string, number>>((acc, s) => ({
+    ...acc,
+    [s]: students.filter(c => c.status === s).length,
+  }), {});
+
+  const filtered = filterStatus === "all"
+    ? students
+    : students.filter(c => c.status === filterStatus);
+
+  const daysSince = (iso: string) =>
+    Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+
+  return (
+    <motion.div key="onboarding" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Onboarding Pipeline</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {students.length} client{students.length !== 1 ? "s" : ""} in progress
+          </p>
+        </div>
+        <Link href="/onboarding/clients">
+          <Button size="sm" variant="outline" className="text-xs gap-1.5">
+            <Layout className="h-3 w-3" />Full Kanban
+          </Button>
+        </Link>
+      </div>
+
+      {/* Stage filter pills */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setFilterStatus("all")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            filterStatus === "all"
+              ? "bg-orange-500/20 text-orange-400 border-orange-500/40"
+              : "bg-muted border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          All ({students.length})
+        </button>
+        {ONBOARDING_STAGES.filter(s => (counts[s] ?? 0) > 0 || filterStatus === s).map(s => (
+          <button
+            key={s}
+            onClick={() => setFilterStatus(prev => prev === s ? "all" : s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              filterStatus === s
+                ? "bg-orange-500/20 text-orange-400 border-orange-500/40"
+                : "bg-muted border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {STATUS_LABELS[s]} ({counts[s] ?? 0})
+          </button>
+        ))}
+      </div>
+
+      {/* Client list */}
+      <Card className="bg-card border-border">
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-orange-500" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-sm text-muted-foreground">
+              {filterStatus === "all"
+                ? "No clients in onboarding right now."
+                : `No clients at ${STATUS_LABELS[filterStatus as CoachingStatus]} stage.`}
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {[...filtered]
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map(client => (
+                  <Link
+                    key={client.email}
+                    href={`/onboarding/clients/${encodeURIComponent(client.email)}`}
+                    className="flex items-center justify-between px-4 py-3.5 hover:bg-muted/40 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-orange-400">
+                          {client.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{client.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{client.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                      <Badge className={`text-[10px] ${STATUS_COLOR[client.status]}`}>
+                        {STATUS_LABELS[client.status]}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        Day {daysSince(client.createdAt)}
+                      </span>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -440,6 +584,7 @@ export default function Dashboard() {
             {!isAdmin && <TabsTrigger value="integrations" className="text-xs px-4">Integrations</TabsTrigger>}
             <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
             {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
+            {isAdmin  && <TabsTrigger value="onboarding"   className="text-xs px-4">Onboarding</TabsTrigger>}
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -1133,7 +1278,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent className="px-4 pb-4">
                       <div className="grid grid-cols-2 gap-2">
-                        {(["coaching", "b2b"] as BusinessType[]).map(type => (
+                        {(["coaching"] as BusinessType[]).map(type => (
                           <button key={type} onClick={() => saveConfig(BUSINESS_PRESETS[type])}
                             className={`rounded-lg border px-3 py-3 text-center text-xs font-medium transition-all ${config.businessType === type ? "bg-orange-500/10 border-orange-500/50 text-orange-400" : "border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground"}`}>
                             {type === "coaching" ? "🎯 Coaching" : "🤝 Business to Business"}
@@ -1692,6 +1837,13 @@ export default function Dashboard() {
                   </ChartCard>
 
                 </motion.div>
+              </TabsContent>
+            )}
+
+            {/* ══════════════ ONBOARDING ══════════════ */}
+            {tab === "onboarding" && isAdmin && (
+              <TabsContent value="onboarding">
+                <OnboardingTab />
               </TabsContent>
             )}
 

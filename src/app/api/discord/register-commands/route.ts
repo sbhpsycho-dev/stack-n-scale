@@ -12,6 +12,26 @@ const COMMANDS = [
     description: "Decline this week's payout batch (holds payouts)",
     type:        1,
   },
+  {
+    name:        "new-client",
+    description: "Register a new client after payment is received",
+    type:        1,
+    options: [
+      { name: "name",    type: 3, description: "Client full name",          required: true },
+      { name: "email",   type: 3, description: "Client email address",      required: true },
+      { name: "amount",  type: 4, description: "Payment amount in dollars", required: true },
+      {
+        name:        "program",
+        type:        3,
+        description: "Program tier",
+        required:    true,
+        choices: [
+          { name: "Standard ($5,000)", value: "standard" },
+          { name: "VIP ($10,000)",     value: "vip"      },
+        ],
+      },
+    ],
+  },
 ];
 
 export async function POST() {
