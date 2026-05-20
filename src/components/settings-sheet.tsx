@@ -100,6 +100,28 @@ function AccountTab({ clientId, initialName }: { clientId: string; initialName: 
 }
 
 // ─── Password Tab ────────────────────────────────────────────────────────────
+function PwField({ label, value, onChange, show, onToggle, onReset }: {
+  label: string; value: string; onChange: (v: string) => void;
+  show: boolean; onToggle: () => void; onReset: () => void;
+}) {
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="relative mt-1">
+        <Input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={(e) => { onChange(e.target.value); onReset(); }}
+          className="bg-muted border-border h-9 text-sm pr-9"
+        />
+        <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+          {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PasswordTab() {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -134,32 +156,15 @@ function PasswordTab() {
     }
   }
 
-  function PwField({ label, value, onChange, show, onToggle }: { label: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void }) {
-    return (
-      <div>
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <div className="relative mt-1">
-          <Input
-            type={show ? "text" : "password"}
-            value={value}
-            onChange={(e) => { onChange(e.target.value); setState("idle"); setErrMsg(""); }}
-            className="bg-muted border-border h-9 text-sm pr-9"
-          />
-          <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-            {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const resetState = () => { setState("idle"); setErrMsg(""); };
 
   return (
     <div className="space-y-5">
       <div>
         <p className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-3">Change Password</p>
         <div className="space-y-3">
-          <PwField label="Current Password" value={current} onChange={setCurrent} show={showCurrent} onToggle={() => setShowCurrent((s) => !s)} />
-          <PwField label="New Password" value={next} onChange={setNext} show={showNext} onToggle={() => setShowNext((s) => !s)} />
+          <PwField label="Current Password" value={current} onChange={setCurrent} show={showCurrent} onToggle={() => setShowCurrent((s) => !s)} onReset={resetState} />
+          <PwField label="New Password" value={next} onChange={setNext} show={showNext} onToggle={() => setShowNext((s) => !s)} onReset={resetState} />
           <div>
             <Label className="text-xs text-muted-foreground">Confirm New Password</Label>
             <Input

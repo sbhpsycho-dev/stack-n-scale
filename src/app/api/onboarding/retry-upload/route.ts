@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     const clientName = client?.name ?? formData?.name ?? idSubmit?.name ?? email;
 
     // Ensure Drive folder exists
-    let folder = client?.driveFolder ?? await getOrCreateDriveFolder(clientKey, clientName);
+    const folder = client?.driveFolder ?? await getOrCreateDriveFolder(clientKey, clientName);
     if (!folder) {
       return Response.json({ ok: false, error: "GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID is not configured" }, { status: 500 });
     }

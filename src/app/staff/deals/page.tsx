@@ -289,7 +289,7 @@ function exportCSV(deals: Deal[]) {
   const headers = ["Date", "Client", "Offer", "Gross", "Fee", "Net", "Processor", "Source", "DM Setter", "Setter", "Closer", "Caelum", "Media Buyer", "Setter Pay", "Closer Pay", "Evan Take Home", "Status"];
   const rows = deals.map(d => [
     d.date, d.clientName, d.offer, d.grossAmount, d.processorFee, d.netAmount,
-    d.processor, d.leadSource, (d as any).dmSetter ?? "", d.setter ?? "", d.closer ?? "",
+    d.processor, d.leadSource, d.dmSetter ?? "", d.setter ?? "", d.closer ?? "",
     d.payouts.caelum.toFixed(2), d.payouts.mediaBuyer.toFixed(2),
     d.payouts.setter.toFixed(2), d.payouts.closer.toFixed(2),
     d.payouts.evanTakeHome.toFixed(2), d.payoutStatus,
@@ -460,7 +460,7 @@ export default function DealsPage() {
                   <td className="px-3 py-2">{fmt$(d.netAmount)}</td>
                   <td className="px-3 py-2 capitalize">{d.processor}</td>
                   <td className="px-3 py-2 capitalize">{d.leadSource}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{(d as any).dmSetter ?? "—"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{d.dmSetter ?? "—"}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {d.setter ?? "—"}{d.closer ? ` / ${d.closer}` : ""}
                   </td>

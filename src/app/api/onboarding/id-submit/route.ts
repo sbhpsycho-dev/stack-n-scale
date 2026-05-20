@@ -87,7 +87,7 @@ export async function POST(req: Request) {
 
     // Update KV — mark idVerification as submitted
     const clientKey = `sns:coaching:client:${email}`;
-    let existing  = await kv.get<CoachingClient>(clientKey);
+    const existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
       await kv.set(clientKey, { ...existing, idVerification: "submitted", status: "id_pending_review" });
     }

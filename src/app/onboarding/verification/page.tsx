@@ -66,6 +66,9 @@ export default function VerificationQueue() {
     );
   }
 
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-sm">
@@ -187,7 +190,7 @@ export default function VerificationQueue() {
           /* ─── Queue Table ─── */
           <div className="space-y-2">
             {clients.map((c) => {
-              const hoursAgo = Math.floor((Date.now() - new Date(c.createdAt).getTime()) / 3_600_000);
+              const hoursAgo = Math.floor((now - new Date(c.createdAt).getTime()) / 3_600_000);
               return (
                 <Card key={c.email} className="border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 transition-colors">
                   <CardContent className="px-4 py-4 flex items-center justify-between">

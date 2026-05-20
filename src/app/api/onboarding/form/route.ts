@@ -99,7 +99,7 @@ export async function POST(req: Request) {
 
     // 2. Update client status
     const clientKey = `sns:coaching:client:${email.toLowerCase()}`;
-    let existing = await kv.get<CoachingClient>(clientKey);
+    const existing = await kv.get<CoachingClient>(clientKey);
     if (existing) {
       await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
     }

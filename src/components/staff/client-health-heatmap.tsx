@@ -70,6 +70,28 @@ function roiColor(roi: number | null): string {
   return "text-red-400";
 }
 
+// ─── Sub-components (defined at module level to avoid re-creation on render) ──
+
+type SortState = { col: SortKey; dir: "asc" | "desc" };
+
+function SortIcon({ col, sort }: { col: SortKey; sort: SortState }) {
+  if (sort.col !== col) return <span className="opacity-20 ml-0.5">↕</span>;
+  return sort.dir === "asc"
+    ? <ChevronUp className="inline h-3 w-3 ml-0.5" />
+    : <ChevronDown className="inline h-3 w-3 ml-0.5" />;
+}
+
+function Th({ col, label, sort, onSort }: { col: SortKey; label: string; sort: SortState; onSort: (col: SortKey) => void }) {
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className="text-left px-3 py-2 font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap"
+    >
+      {label}<SortIcon col={col} sort={sort} />
+    </th>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ClientHealthHeatmap({ refreshSignal }: { refreshSignal: number }) {
@@ -163,22 +185,6 @@ export function ClientHealthHeatmap({ refreshSignal }: { refreshSignal: number }
     return sort.dir === "asc" ? cmp : -cmp;
   });
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sort.col !== col) return <span className="opacity-20 ml-0.5">↕</span>;
-    return sort.dir === "asc"
-      ? <ChevronUp className="inline h-3 w-3 ml-0.5" />
-      : <ChevronDown className="inline h-3 w-3 ml-0.5" />;
-  };
-
-  const Th = ({ col, label }: { col: SortKey; label: string }) => (
-    <th
-      onClick={() => toggleSort(col)}
-      className="text-left px-3 py-2 font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap"
-    >
-      {label}<SortIcon col={col} />
-    </th>
-  );
-
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -192,13 +198,13 @@ export function ClientHealthHeatmap({ refreshSignal }: { refreshSignal: number }
         <table className="w-full text-xs min-w-[700px]">
           <thead className="bg-muted/50">
             <tr>
-              <Th col="name"          label="Client"         />
-              <Th col="cashMTD"       label="Cash MTD"       />
-              <Th col="lastCheckIn"   label="Check-In"       />
-              <Th col="healthScore"   label="Health"         />
-              <Th col="revShareOwed"  label="Rev Share Owed" />
-              <Th col="revShareTotal" label="Rev Share"      />
-              <Th col="roiStat"       label="ROI Stat"       />
+              <Th col="name"          label="Client"         sort={sort} onSort={toggleSort} />
+              <Th col="cashMTD"       label="Cash MTD"       sort={sort} onSort={toggleSort} />
+              <Th col="lastCheckIn"   label="Check-In"       sort={sort} onSort={toggleSort} />
+              <Th col="healthScore"   label="Health"         sort={sort} onSort={toggleSort} />
+              <Th col="revShareOwed"  label="Rev Share Owed" sort={sort} onSort={toggleSort} />
+              <Th col="revShareTotal" label="Rev Share"      sort={sort} onSort={toggleSort} />
+              <Th col="roiStat"       label="ROI Stat"       sort={sort} onSort={toggleSort} />
             </tr>
           </thead>
           <tbody>

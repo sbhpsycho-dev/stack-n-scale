@@ -66,6 +66,10 @@ const STATUS_COLOR: Record<CoachingStatus, string> = {
   alumni:              "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
 };
 
+function daysSince(iso: string) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+}
+
 function OnboardingTab() {
   const [students, setStudents] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,9 +93,6 @@ function OnboardingTab() {
   const filtered = filterStatus === "all"
     ? students
     : students.filter(c => c.status === filterStatus);
-
-  const daysSince = (iso: string) =>
-    Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 
   return (
     <motion.div key="onboarding" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
