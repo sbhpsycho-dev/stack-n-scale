@@ -162,6 +162,21 @@ export async function syncReplogToRepSheet(staffName: string, entry: DailyEntry)
 
 // ─── Make.com replog webhook ──────────────────────────────────────────────────
 
+// Fires a Make.com webhook when a deal is saved so the payout agent can run immediately.
+// Gracefully skips (no-op) if MAKE_DEAL_WEBHOOK_URL is not configured.
+export async function triggerMakeDealWebhook(deal: Deal): Promise<void> {
+  const url = process.env.MAKE_DEAL_WEBHOOK_URL;
+  if (!url) return;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deal, timestamp: new Date().toISOString() }),
+  });
+  if (!res.ok) {
+    throw new Error(`Make.com deal webhook failed: HTTP ${res.status}`);
+  }
+}
+
 // Fires a Make.com webhook with the rep's daily entry so the automation chain
 // can update the Master KPI Sheet, post to Discord, and trigger a dashboard refresh.
 // Gracefully skips if MAKE_REPLOG_WEBHOOK_URL is not set.
@@ -180,24 +195,35 @@ export async function triggerMakeReplogWebhook(staffName: string, entry: DailyEn
 
 export async function syncReplogToSheets(staffName: string, entry: DailyEntry): Promise<void> {
   const token    = await getSheetsToken();
-  const existing = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
+  // Only read date+name columns — enough to find the existing row to upsert
+  const existing = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:B");
   const rows     = (existing.values ?? []) as string[][];
-
   const nameKey  = staffName.trim().toLowerCase().split(" ")[0];
-  const dataRow  = buildReplogRow(staffName, entry);
 
-  if (rows.length === 0) {
-    await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:I", [REPLOG_HEADERS, dataRow]);
-    return;
-  }
+  // 12-column row matching the master Setter KPI sheet structure:
+  // A=Date, B=Name, C=Calls Dialed, D=Calls Connected,
+  // E=Conversations (blank), F=Fact Finds (blank),
+  // G=Zooms Booked, H=Zooms Showed,
+  // I=No-Showed (blank/formula), J=Show Rate (blank/formula),
+  // K=Deals Closed, L=Gross Deal Value
+  const first   = staffName.trim().split(" ")[0];
+  const name    = first.charAt(0).toUpperCase() + first.slice(1);
+  const dataRow = [
+    entry.date, name,
+    entry.callsMade, entry.callsAnswered,
+    "", "",                    // E: Conversations, F: Fact Finds (not tracked)
+    entry.demosSet, entry.demosShowed,
+    "", "",                    // I: No-Showed, J: Show Rate (formula cols — leave blank)
+    entry.closed, entry.cashCollected,
+  ];
 
-  // Find matching row for this date + staff name (1-indexed in Sheets)
-  const matchIdx = rows.findIndex((r, i) => i > 0 && r[0] === entry.date && r[1]?.trim().toLowerCase().startsWith(nameKey));
+  const matchIdx = rows.findIndex(
+    (r, i) => i > 0 && r[0] === entry.date && r[1]?.trim().toLowerCase().startsWith(nameKey)
+  );
   if (matchIdx >= 0) {
-    const rowNum = matchIdx + 1;
-    await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${rowNum}:I${rowNum}`, [dataRow]);
+    await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${matchIdx + 1}:L${matchIdx + 1}`, [dataRow]);
   } else {
-    await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:I", [dataRow]);
+    await sheetsAppend(token, SETTER_KPI_ID, "Daily Log!A:L", [dataRow]);
   }
 }
 
@@ -461,7 +487,9 @@ export async function syncDeleteFromSheets(staffName: string, date: string): Pro
   if (matchIdx < 0) return;
 
   const rowNum = matchIdx + 1;
-  await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${rowNum}:I${rowNum}`, [["", "", "", "", "", "", "", "", ""]]);
+  // Clear the full 12-column row (A:L) to match the write width used by syncReplogToSheets
+  await sheetsUpdate(token, SETTER_KPI_ID, `Daily Log!A${rowNum}:L${rowNum}`,
+    [["", "", "", "", "", "", "", "", "", "", "", ""]]);
 }
 
 // ─── Core sync — writes one deal to all sheets ───────────────────────────────

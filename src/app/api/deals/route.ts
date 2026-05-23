@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import type { Session } from "next-auth";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts, getWeekId } from "@/lib/payout-calc";
-import { syncDealToSheets } from "@/lib/sheets-sync";
+import { syncDealToSheets, triggerMakeDealWebhook } from "@/lib/sheets-sync";
 import { BLANK, type SalesData } from "@/lib/sales-data";
 
 function authGuard(session: Session | null) {
@@ -105,7 +105,9 @@ export async function POST(req: Request) {
   }
 
   // Sync to Google Sheets immediately — fire and forget
-  syncDealToSheets(partial).catch(e => console.error("Sheets sync error:", e));
+  syncDealToSheets(partial).catch(e => console.error("[deals] sheets sync failed:", e));
+  // Trigger Make.com payout agent — fires automatically with every new deal
+  triggerMakeDealWebhook(partial).catch(e => console.error("[deals] make webhook failed:", e));
 
   // Patch admin dashboard MTD totals + rep leaderboard from deals so admin page stays live.
   // Uses after() so the patch survives past the response being sent.

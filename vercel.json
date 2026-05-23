@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/agents/kpi-sync",
-      "schedule": "0 20 * * *"
+      "schedule": "0 */2 * * *"
     },
     {
       "path": "/api/agents/payout-audit",
