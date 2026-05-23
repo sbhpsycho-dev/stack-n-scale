@@ -275,6 +275,82 @@ export async function updatePipelineFromReplogs(): Promise<void> {
   });
 }
 
+// ─── Personal sheet reader ────────────────────────────────────────────────────
+
+/** Reads all daily-log rows from a rep's personal Google Sheet and returns DailyEntry[].
+ *  Tries "Daily Log!A:Z" first, falls back to default-tab "A:Z".
+ *  Scans the first 6 rows to auto-detect the header row by looking for known column names.
+ *  Handles Naomi-style "DEMOS CLOSED" and master-style "DEALS CLOSED" headers. */
+async function readPersonalSheetEntries(token: string, sheetId: string): Promise<DailyEntry[]> {
+  // Try named tab first, then fall back to default (first) tab
+  let result: { values?: string[][] };
+  try {
+    result = await sheetsGet(token, sheetId, "Daily Log!A:Z");
+  } catch {
+    try {
+      result = await sheetsGet(token, sheetId, "A:Z");
+    } catch {
+      return [];
+    }
+  }
+
+  const rows = (result.values ?? []) as string[][];
+  if (rows.length < 2) return [];
+
+  // Find header row: first of the first 6 rows that contains a known KPI column
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(6, rows.length); i++) {
+    const norm = rows[i].map(h => h.trim().toLowerCase().replace(/\s+/g, ""));
+    if (norm.some(h => ["callsmade", "callsdialed", "demosset", "zoomsbooked"].includes(h))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx < 0) return [];
+
+  const headers = rows[headerIdx].map(h => h.trim().toLowerCase().replace(/\s+/g, ""));
+  const colFirst = (...names: string[]) => {
+    for (const n of names) {
+      const idx = headers.indexOf(n);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const dateIdx    = colFirst("date");
+  const callsIdx   = colFirst("callsmade", "callsdialed");
+  const answIdx    = colFirst("callsanswered", "callsconnected");
+  const dSetIdx    = colFirst("demosset", "zoomsbooked");
+  const dShowIdx   = colFirst("demosshowed", "zoomsshowed", "showedups");
+  const closedIdx  = colFirst("dealsclosed", "demosclosed", "closed");
+  const cashIdx    = colFirst("cashcollected", "grosscollected", "grossdealvalue");
+
+  if (dateIdx < 0) return []; // date column is required
+
+  const entries: DailyEntry[] = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row     = rows[i];
+    const rawDate = row[dateIdx] ?? "";
+    if (!rawDate || rawDate.trim() === "") continue;
+
+    const asDate = new Date(rawDate);
+    const date   = isNaN(asDate.getTime()) ? rawDate.trim() : asDate.toISOString().slice(0, 10);
+
+    const callsMade     = callsIdx  >= 0 ? Number(row[callsIdx])  || 0 : 0;
+    const callsAnswered = answIdx   >= 0 ? Number(row[answIdx])   || 0 : 0;
+    const demosSet      = dSetIdx   >= 0 ? Number(row[dSetIdx])   || 0 : 0;
+    const demosShowed   = dShowIdx  >= 0 ? Number(row[dShowIdx])  || 0 : 0;
+    const closed        = closedIdx >= 0 ? Number(row[closedIdx]) || 0 : 0;
+    const cashCollected = cashIdx   >= 0 ? parseFloat((row[cashIdx] ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+
+    // Skip blank/formula rows with no actual data
+    if (!callsMade && !demosSet && !closed && !cashCollected) continue;
+
+    entries.push({ date, callsMade, callsAnswered, demosSet, demosShowed, pitched: 0, closed, cashCollected });
+  }
+  return entries;
+}
+
 // Reads all Daily Log rows from Setter KPI sheet and upserts into each staff member's KV replog.
 // Sheets is treated as truth — any row with a matching date+name overwrites the KV entry.
 export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; rowsProcessed: number }> {
@@ -342,6 +418,33 @@ export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; ro
     merged.sort((a, b) => b.date.localeCompare(a.date));
     await kv.set(kvKey, merged);
     staffUpdated++;
+  }
+
+  // ─── Personal sheet supplements ──────────────────────────────────────────────
+  // For staff who have a personal sheetId but whose data wasn't found in the master
+  // tracker, read their personal sheet and merge into their KV replog.
+  for (const s of staff) {
+    if (!s.sheetId)          continue; // no personal sheet configured
+    if (byStaff.has(s.id))  continue; // already ingested from master
+
+    try {
+      const personalEntries = await readPersonalSheetEntries(token, s.sheetId);
+      if (personalEntries.length === 0) continue;
+
+      const kvKey  = `sns-replog-${s.id}`;
+      const kvRows = (await kv.get<DailyEntry[]>(kvKey)) ?? [];
+      const merged = [...kvRows];
+      for (const e of personalEntries) {
+        const idx = merged.findIndex(r => r.date === e.date);
+        if (idx >= 0) merged[idx] = e; else merged.push(e);
+      }
+      merged.sort((a, b) => b.date.localeCompare(a.date));
+      await kv.set(kvKey, merged);
+      rowsProcessed += personalEntries.length;
+      staffUpdated++;
+    } catch (err) {
+      console.error(`[ingestSetterKPISheet] personal sheet error for ${s.name}:`, err);
+    }
   }
 
   return { staffUpdated, rowsProcessed };
