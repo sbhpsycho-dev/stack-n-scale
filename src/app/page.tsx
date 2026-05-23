@@ -252,6 +252,7 @@ export default function Dashboard() {
   const [replog, setReplog] = useState<DailyEntry[]>([]);
   const [replogEntry, setReplogEntry] = useState<DailyEntry>({ date: todayStr, callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, closed: 0, cashCollected: 0 });
   const [replogSaving, setReplogSaving] = useState(false);
+  const [replogSyncError, setReplogSyncError] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/replog").then(r => r.json()).then((entries) => {
       if (Array.isArray(entries)) {
@@ -263,7 +264,16 @@ export default function Dashboard() {
   }, [todayStr]);
   const saveReplogEntry = async () => {
     setReplogSaving(true);
-    await fetch("/api/replog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replogEntry) }).catch(() => {});
+    setReplogSyncError(null);
+    try {
+      const res = await fetch("/api/replog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(replogEntry) });
+      const data = await res.json() as { ok: boolean; sheetsSync?: "ok" | "error"; syncError?: string };
+      if (data.sheetsSync === "error") {
+        setReplogSyncError(`Saved locally — Sheets sync failed: ${data.syncError ?? "unknown error"}`);
+      }
+    } catch {
+      setReplogSyncError("Save failed. Try again.");
+    }
     setReplog(prev => prev.some(e => e.date === replogEntry.date) ? prev.map(e => e.date === replogEntry.date ? replogEntry : e) : [replogEntry, ...prev].sort((a, b) => b.date.localeCompare(a.date)));
     setReplogSaving(false);
   };
@@ -365,7 +375,7 @@ export default function Dashboard() {
   const [editingClientName, setEditingClientName] = useState("");
 
   // Manage Staff state (admin only)
-  const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string }[]>([]);
+  const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string; sheetId?: string }[]>([]);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
   const [staffSaving, setStaffSaving] = useState(false);
@@ -402,6 +412,27 @@ export default function Dashboard() {
       body: JSON.stringify({ id }),
     });
     setStaffList((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+  const [seedingSheets, setSeedingSheets] = useState(false);
+  const [seedMsg, setSeedMsg] = useState("");
+  const seedSheets = useCallback(async () => {
+    setSeedingSheets(true); setSeedMsg("");
+    try {
+      const res  = await fetch("/api/admin/staff/seed-sheets", { method: "POST" });
+      const json = await res.json();
+      if (json.ok) {
+        setSeedMsg(`✓ ${json.updated.length} sheet${json.updated.length !== 1 ? "s" : ""} linked`);
+        // Refresh so sheetId badges update immediately
+        fetch("/api/admin/staff").then(r => r.json()).then(setStaffList).catch(() => {});
+      } else {
+        setSeedMsg("✗ Failed");
+      }
+    } catch {
+      setSeedMsg("✗ Network error");
+    } finally {
+      setSeedingSheets(false);
+      setTimeout(() => setSeedMsg(""), 6000);
+    }
   }, []);
   const [editingRepIdx, setEditingRepIdx] = useState<number | null>(null);
   const [editingRepName, setEditingRepName] = useState("");
@@ -1431,6 +1462,9 @@ export default function Dashboard() {
                         {replogSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                         {replogSaving ? "Saving…" : "Save Entry"}
                       </Button>
+                      {replogSyncError && (
+                        <p className="text-xs text-amber-400 mt-2">{replogSyncError}</p>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -1657,26 +1691,54 @@ export default function Dashboard() {
                   {/* Manage Staff */}
                   <Card className="bg-card border-border">
                     <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Users className="h-4 w-4 text-orange-400" />
-                        Staff Access
-                      </CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Users className="h-4 w-4 text-orange-400" />
+                          Staff Access
+                        </CardTitle>
+                        {staffList.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            {seedMsg && (
+                              <span className={`text-xs ${seedMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{seedMsg}</span>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={seedingSheets}
+                              onClick={seedSheets}
+                              className="h-7 text-xs gap-1.5 border-border"
+                            >
+                              {seedingSheets ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                              Link Sheets
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="px-4 pb-4 space-y-4">
                       {staffList.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
+                        <div className="space-y-1.5">
                           {staffList.map((s) => (
-                            <div key={s.id} className="flex items-center gap-1">
-                              <Badge className="px-3 py-1.5 text-xs bg-muted border border-border">{s.name}</Badge>
+                            <div key={s.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium truncate">{s.name}</span>
+                                {s.sheetId
+                                  ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0">Sheet ✓</span>
+                                  : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 font-medium shrink-0">No sheet</span>
+                                }
+                              </div>
                               <Button
                                 size="icon" variant="ghost"
-                                className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
+                                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-400 transition-colors"
                                 onClick={() => removeStaff(s.id)}
                               >
                                 <X className="h-3 w-3" />
                               </Button>
                             </div>
                           ))}
+                          <p className="text-[11px] text-muted-foreground pt-1">
+                            After adding Kian, Elias, or Naomi — click <strong>Link Sheets</strong> to connect their Google Sheets automatically.
+                          </p>
                         </div>
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
@@ -1685,7 +1747,7 @@ export default function Dashboard() {
                           <Input
                             value={newStaffName}
                             onChange={(e) => setNewStaffName(e.target.value)}
-                            placeholder="e.g. Jordan Smith"
+                            placeholder="e.g. Kian Williams"
                             className="h-8 text-sm bg-muted border-border"
                           />
                         </div>

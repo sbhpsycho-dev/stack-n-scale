@@ -39,6 +39,10 @@
     {
       "path": "/api/agents/send-checkins",
       "schedule": "0 17 * * 1"
+    },
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "0 3 * * *"
     }
   ]
 }

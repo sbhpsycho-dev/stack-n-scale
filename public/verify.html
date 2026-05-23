@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ID Verification — StackNScale Enterprise</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f0f; color: #e5e5e5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding: 32px 16px 64px; }
+    .container { max-width: 680px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 40px; }
+    .header h1 { font-size: 1.8rem; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    .header p { color: #888; font-size: 0.9rem; margin-top: 6px; }
+    .accent-bar { width: 48px; height: 3px; background: #FF6B00; border-radius: 2px; margin: 12px auto 0; }
+    .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 28px; margin-bottom: 20px; }
+    .card-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #FF6B00; margin-bottom: 20px; }
+    .field { margin-bottom: 20px; }
+    .field:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 0.85rem; font-weight: 500; color: #ccc; margin-bottom: 8px; }
+    label .req { color: #FF6B00; margin-left: 2px; }
+    input[type="text"], input[type="email"], input[type="date"] { width: 100%; background: #111; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 0.95rem; padding: 12px 14px; outline: none; transition: border-color 0.2s; }
+    input[type="text"]:focus, input[type="email"]:focus, input[type="date"]:focus { border-color: #FF6B00; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+    .upload-zone { position: relative; border: 2px dashed #333; border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; background: #111; }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: #FF6B00; background: #1c1207; }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .upload-icon { font-size: 2rem; margin-bottom: 8px; line-height: 1; }
+    .upload-zone p { font-size: 0.85rem; color: #888; }
+    .upload-zone p span { color: #FF6B00; font-weight: 500; }
+    .preview-wrap { margin-top: 14px; display: none; }
+    .preview-wrap img { max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid #333; object-fit: contain; display: block; margin: 0 auto; }
+    .preview-label { font-size: 0.75rem; color: #555; text-align: center; margin-top: 6px; }
+
+    /* Signature pad */
+    .sig-canvas-wrap { border: 2px dashed #333; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color 0.2s; }
+    .sig-canvas-wrap.active { border-color: #FF6B00; }
+    #sigCanvas { display: block; width: 100%; height: 160px; cursor: crosshair; touch-action: none; }
+    .sig-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .sig-hint { font-size: 0.75rem; color: #555; }
+    .btn-clear-sig { background: none; border: 1px solid #333; border-radius: 6px; color: #888; font-size: 0.75rem; padding: 5px 14px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+    .btn-clear-sig:hover { border-color: #FF6B00; color: #FF6B00; }
+
+    .consent-card { background: #140e05; border: 1px solid #3d2800; border-radius: 12px; padding: 22px 24px; margin-bottom: 20px; }
+    .consent-row { display: flex; align-items: flex-start; gap: 14px; }
+    .consent-row input[type="checkbox"] { width: 20px; height: 20px; min-width: 20px; accent-color: #FF6B00; cursor: pointer; margin-top: 2px; }
+    .consent-text { font-size: 0.9rem; line-height: 1.6; color: #ccc; }
+    .consent-text strong { color: #fff; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { flex: 1; min-width: 160px; padding: 14px 20px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: opacity 0.2s, transform 0.1s; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+    .btn-primary { background: #FF6B00; color: #fff; }
+    .btn-primary:not(:disabled):hover { background: #e05e00; }
+    .validation-msg { font-size: 0.8rem; color: #e05e00; margin-top: 10px; display: none; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 520px) { .two-col { grid-template-columns: 1fr; } .actions { flex-direction: column; } }
+
+    /* Success screen */
+    #successScreen { display: none; text-align: center; padding: 60px 20px; }
+    .success-icon { font-size: 3rem; margin-bottom: 20px; }
+    #successScreen h2 { font-size: 1.4rem; color: #fff; margin-bottom: 12px; }
+    #successScreen p { font-size: 0.95rem; color: #888; line-height: 1.7; max-width: 420px; margin: 0 auto; }
+    .success-divider { width: 40px; height: 2px; background: #FF6B00; margin: 20px auto; }
+
+    .brand { font-size: 0.75rem; color: #444; text-align: center; margin-top: 32px; }
+    .brand span { color: #FF6B00; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>ID Verification</h1>
+      <p>StackNScale Enterprise — Client Onboarding</p>
+      <div class="accent-bar"></div>
+    </div>
+
+    <div id="formWrap">
+      <div class="card">
+        <div class="card-title">Personal Information</div>
+        <div class="two-col">
+          <div class="field">
+            <label for="fullName">Full Legal Name <span class="req">*</span></label>
+            <input type="text" id="fullName" placeholder="First Middle Last" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="dob">Date of Birth <span class="req">*</span></label>
+            <input type="date" id="dob" />
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label for="email">Email Address <span class="req">*</span></label>
+          <input type="email" id="email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Government-Issued Photo ID</div>
+        <div class="field">
+          <label>Upload Photo ID <span class="req">*</span></label>
+          <div class="upload-zone" id="idZone">
+            <input type="file" id="idFile" accept="image/*" />
+            <div class="upload-icon">🪪</div>
+            <p><span>Click to upload</span> or drag &amp; drop</p>
+            <p>Driver's license, passport, or state ID</p>
+          </div>
+          <div class="preview-wrap" id="idPreview">
+            <img id="idImg" src="" alt="ID preview" />
+            <div class="preview-label" id="idFileName"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Selfie Photo</div>
+        <div class="field">
+          <label>Upload Selfie <span class="req">*</span></label>
+          <div class="upload-zone" id="selfieZone">
+            <input type="file" id="selfieFile" accept="image/*" capture="user" />
+            <div class="upload-icon">🤳</div>
+            <p><span>Click to upload</span> or drag &amp; drop</p>
+            <p>Clear photo of your face — no sunglasses or hats</p>
+          </div>
+          <div class="preview-wrap" id="selfiePreview">
+            <img id="selfieImg" src="" alt="Selfie preview" />
+            <div class="preview-label" id="selfieFileName"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Signature</div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Draw Your Signature <span class="req">*</span></label>
+          <div class="sig-canvas-wrap" id="sigWrap">
+            <canvas id="sigCanvas"></canvas>
+          </div>
+          <div class="sig-footer">
+            <span class="sig-hint">Use your mouse or finger to sign above.</span>
+            <button type="button" class="btn-clear-sig" id="btnClearSig">Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="consent-card">
+        <div class="consent-row">
+          <input type="checkbox" id="consent" />
+          <div class="consent-text">
+            <strong>I confirm that this is me.</strong> By checking this box, I certify that the information and documents submitted are accurate, belong to me, and I consent to this transaction. This serves as my electronic signature and agreement.
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="btnSubmit" disabled>Submit Verification →</button>
+      </div>
+
+      <div class="validation-msg" id="validationMsg"></div>
+    </div>
+
+    <div id="successScreen">
+      <div class="success-icon">✅</div>
+      <h2>Verification Submitted</h2>
+      <div class="success-divider"></div>
+      <p>Your verification has been submitted. We'll review it and be in touch shortly.</p>
+    </div>
+
+    <div class="brand">StackNScale Enterprise &nbsp;·&nbsp; <span>Private Client Onboarding</span></div>
+  </div>
+
+  <script>
+    // ── Date cap ──────────────────────────────────────────────────────────────
+    document.getElementById('dob').max = new Date().toISOString().split('T')[0];
+
+    // ── File upload state ─────────────────────────────────────────────────────
+    const state = { idFile: null, selfieFile: null };
+
+    function setupUpload(inputId, zoneId, previewWrapId, imgId, fileNameId, stateKey) {
+      const input   = document.getElementById(inputId);
+      const zone    = document.getElementById(zoneId);
+      const wrap    = document.getElementById(previewWrapId);
+      const img     = document.getElementById(imgId);
+      const nameLbl = document.getElementById(fileNameId);
+
+      function handleFile(file) {
+        if (!file) return;
+        state[stateKey] = file;
+        nameLbl.textContent = file.name;
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; };
+          reader.readAsDataURL(file);
+        } else {
+          img.style.display = 'none';
+        }
+        wrap.style.display = 'block';
+      }
+
+      input.addEventListener('change', e => handleFile(e.target.files[0]));
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        handleFile(e.dataTransfer.files[0]);
+      });
+    }
+
+    setupUpload('idFile',    'idZone',     'idPreview',    'idImg',    'idFileName',    'idFile');
+    setupUpload('selfieFile','selfieZone', 'selfiePreview','selfieImg','selfieFileName','selfieFile');
+
+    // ── Signature canvas ──────────────────────────────────────────────────────
+    const canvas  = document.getElementById('sigCanvas');
+    const ctx     = canvas.getContext('2d');
+    const sigWrap = document.getElementById('sigWrap');
+    let drawing   = false;
+    let hasSig    = false;
+    let dpr       = window.devicePixelRatio || 1;
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const w    = rect.width;
+      const h    = 160;
+      canvas.width  = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width  = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.scale(dpr, dpr);
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth   = 2.5;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+    }
+
+    resizeCanvas();
+
+    function getPos(e) {
+      const r = canvas.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: src.clientX - r.left, y: src.clientY - r.top };
+    }
+
+    function startDraw(e) {
+      e.preventDefault();
+      drawing = true;
+      const { x, y } = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+
+    function draw(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      const { x, y } = getPos(e);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      if (!hasSig) {
+        hasSig = true;
+        sigWrap.classList.add('active');
+      }
+    }
+
+    function endDraw(e) {
+      e.preventDefault();
+      drawing = false;
+      ctx.beginPath();
+    }
+
+    canvas.addEventListener('mousedown',  startDraw);
+    canvas.addEventListener('mousemove',  draw);
+    canvas.addEventListener('mouseup',    endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove',  draw,      { passive: false });
+    canvas.addEventListener('touchend',   endDraw,   { passive: false });
+
+    document.getElementById('btnClearSig').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+      hasSig = false;
+      sigWrap.classList.remove('active');
+    });
+
+    // ── Enable submit when consent checked ────────────────────────────────────
+    document.getElementById('consent').addEventListener('change', function () {
+      document.getElementById('btnSubmit').disabled = !this.checked;
+      if (this.checked) document.getElementById('validationMsg').style.display = 'none';
+    });
+
+    // ── Validation ────────────────────────────────────────────────────────────
+    function validate() {
+      const missing = [];
+      if (!document.getElementById('fullName').value.trim()) missing.push('Full Name');
+      if (!document.getElementById('dob').value)             missing.push('Date of Birth');
+      if (!document.getElementById('email').value.trim())    missing.push('Email Address');
+      if (!state.idFile)                                      missing.push('Photo ID');
+      if (!state.selfieFile)                                  missing.push('Selfie');
+      if (!hasSig)                                            missing.push('Signature');
+      if (missing.length) {
+        const msg = document.getElementById('validationMsg');
+        msg.textContent = 'Please complete: ' + missing.join(', ');
+        msg.style.display = 'block';
+        return false;
+      }
+      return true;
+    }
+
+    // ── Image compression (converts any format → JPEG, keeps files small) ──────
+    function compressImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          const MAX = 1400;
+          let w = img.naturalWidth, h = img.naturalHeight;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          c.toBlob(blob => {
+            resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+          }, 'image/jpeg', 0.88);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); }; // fallback: send original
+        img.src = url;
+      });
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────────────
+    document.getElementById('btnSubmit').addEventListener('click', async () => {
+      if (!validate()) return;
+
+      const btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.textContent = 'Compressing photos…';
+
+      let idFile = state.idFile;
+      let selfieFile = state.selfieFile;
+      try {
+        [idFile, selfieFile] = await Promise.all([
+          compressImage(state.idFile),
+          compressImage(state.selfieFile),
+        ]);
+      } catch { /* use originals if compression fails */ }
+
+      btn.textContent = 'Submitting…';
+
+      const sigDataUrl = canvas.toDataURL('image/png');
+
+      const fd = new FormData();
+      fd.append('name',      document.getElementById('fullName').value.trim());
+      fd.append('email',     document.getElementById('email').value.trim().toLowerCase());
+      fd.append('idFront',   idFile,     idFile.name);
+      fd.append('selfie',    selfieFile, selfieFile.name);
+      fd.append('signature', sigDataUrl);
+      fd.append('consented', 'true');
+
+      try {
+        const res  = await fetch('https://stack-n-scale.vercel.app/api/onboarding/id-submit', {
+          method: 'POST',
+          body: fd,
+        });
+
+        let json = null;
+        try { json = await res.json(); } catch { /* non-JSON response */ }
+
+        if (json?.ok) {
+          document.getElementById('formWrap').style.display    = 'none';
+          document.getElementById('successScreen').style.display = 'block';
+        } else {
+          const msg = document.getElementById('validationMsg');
+          msg.textContent = json?.error || `Submission failed (${res.status}). Please try again.`;
+          msg.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Submit Verification →';
+        }
+      } catch (err) {
+        const msg = document.getElementById('validationMsg');
+        msg.textContent = 'Network error — please check your connection and try again.';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Submit Verification →';
+      }
+    });
+  </script>
+</body>
+</html>

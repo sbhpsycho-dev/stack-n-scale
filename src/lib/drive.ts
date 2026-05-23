@@ -183,11 +183,13 @@ export async function setupClientFolder(clientName: string): Promise<ClientDocs>
   const root = await createFolder(`client - ${clientName}`, process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID!);
 
   // Create subfolders in parallel
-  const [idFolder, onboardingFolder, notesFolder] = await Promise.all([
+  const [idFolder, onboardingFolder, agreementsFolder, notesFolder] = await Promise.all([
     createFolder("ID Verification Forms", root.id),
     createFolder("Onboarding Forms", root.id),
     createFolder("Other Client Agreements", root.id),
+    createFolder("Notes", root.id),
   ]);
+  void agreementsFolder; // created in Drive; ID not stored on the client record
 
   // Copy templates into root folder
   const templates = await listTemplates();

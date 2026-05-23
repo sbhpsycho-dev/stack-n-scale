@@ -13,6 +13,7 @@ const CAELUM_ID    = process.env.DISCORD_CAELUM_USER_ID ?? "";
 const EVAN_ID      = process.env.EVAN_DISCORD_USER_ID ?? "";
 const ADMIN2_ID    = process.env.DISCORD_ADMIN2_USER_ID ?? "";
 const GENERAL_CH   = process.env.DISCORD_GENERAL_CHANNEL_ID ?? "";
+const BOILER_ROOM_CH = process.env.DISCORD_BOILER_ROOM_CHANNEL_ID ?? "";
 const CLIENT_ID    = process.env.DISCORD_CLIENT_ID ?? "";
 const APP_URL      = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
 
@@ -262,12 +263,19 @@ export async function POST(req: Request) {
           discordOAuthUrl,
         });
 
-        // If ID was already submitted before the form, send Discord link now
+        // If ID was already submitted before the form, both sides are now done
         const idRecord = await kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`);
-        if (idRecord && discordOAuthUrl) {
-          const freshClient = await kv.get<CoachingClient>(clientKey);
-          triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
-            .catch(e => console.error("Discord link email error (form-side):", e));
+        if (idRecord) {
+          if (discordOAuthUrl) {
+            const freshClient = await kv.get<CoachingClient>(clientKey);
+            triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
+              .catch(e => console.error("Discord link email error (form-side):", e));
+          }
+          if (BOILER_ROOM_CH) {
+            discordRequest(`/channels/${BOILER_ROOM_CH}/messages`, "POST", {
+              content: `**${sanitizeDiscord(name)}'s** forms are in and ready for next steps. ✅`,
+            }).catch(e => console.error("Boiler Room notification error:", e));
+          }
         }
       } catch (discordErr) {
         console.error("Discord error:", discordErr);

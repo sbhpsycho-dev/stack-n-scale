@@ -18,8 +18,9 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
-const DISCORD_API = "https://discord.com/api/v10";
-const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN ?? "";
+const DISCORD_API    = "https://discord.com/api/v10";
+const BOT_TOKEN      = process.env.DISCORD_BOT_TOKEN ?? "";
+const BOILER_ROOM_CH = process.env.DISCORD_BOILER_ROOM_CHANNEL_ID ?? "";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -177,28 +178,40 @@ export async function POST(req: Request) {
         kv.get(`sns:onboarding:form:${email}`),
         kv.get<{ channelId?: string }>(`sns:onboarding:discord:${email}`),
       ]);
-      if (formRecord && discordRecord?.channelId && CLIENT_ID) {
-        const stateToken = crypto.randomUUID();
-        await kv.set(`sns:oauth:state:${stateToken}`, email, { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
-        const params = new URLSearchParams({
-          client_id: CLIENT_ID,
-          redirect_uri: `${APP_URL}/api/discord/connect`,
-          response_type: "code",
-          scope: "identify guilds.join",
-          state: stateToken,
-        });
-        discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
-        await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl });
-        triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
-          .catch(e => console.error("Discord link email error:", e));
-        fetch(`${DISCORD_API}/channels/${discordRecord.channelId}/messages`, {
-          method: "POST",
-          headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: `✅ **${name}** — onboarding form + ID both received. Standing by for review.`,
-          }),
-          signal: AbortSignal.timeout(8000),
-        }).catch(e => console.error("Both-complete channel msg error:", e));
+      if (formRecord) {
+        // Notify Boiler Room that this client's paperwork is complete
+        if (BOILER_ROOM_CH) {
+          fetch(`${DISCORD_API}/channels/${BOILER_ROOM_CH}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ content: `**${name}'s** forms are in and ready for next steps. ✅` }),
+            signal: AbortSignal.timeout(8000),
+          }).catch(e => console.error("Boiler Room notification error:", e));
+        }
+
+        if (discordRecord?.channelId && CLIENT_ID) {
+          const stateToken = crypto.randomUUID();
+          await kv.set(`sns:oauth:state:${stateToken}`, email, { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
+          const params = new URLSearchParams({
+            client_id: CLIENT_ID,
+            redirect_uri: `${APP_URL}/api/discord/connect`,
+            response_type: "code",
+            scope: "identify guilds.join",
+            state: stateToken,
+          });
+          discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
+          await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl });
+          triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
+            .catch(e => console.error("Discord link email error:", e));
+          fetch(`${DISCORD_API}/channels/${discordRecord.channelId}/messages`, {
+            method: "POST",
+            headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: `✅ **${name}** — onboarding form + ID both received. Standing by for review.`,
+            }),
+            signal: AbortSignal.timeout(8000),
+          }).catch(e => console.error("Both-complete channel msg error:", e));
+        }
       }
     } catch (e) {
       console.error("Both-complete check error:", e);

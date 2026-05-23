@@ -1,0 +1,118 @@
+{
+  "name": "SNS — Rep Daily Log → Discord + Dashboard Refresh",
+  "description": "Triggered when a rep submits daily numbers from the dashboard (/api/replog). Posts an activity summary to Discord #boiler-room, then calls back into the app to rebuild the leaderboard and master dashboard in real time.",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "YOUR_MAKE_WEBHOOK_ID",
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": {
+              "data": { "editable": "true" },
+              "label": "SNS Rep Daily Log Webhook"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "YOUR_DISCORD_BOILER_ROOM_WEBHOOK_URL",
+        "method": "post",
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"content\": \"📊 **{{1.staffName}}** logged numbers for {{1.entry.date}}\\n> Calls: {{1.entry.callsMade}} dialed / {{1.entry.callsAnswered}} answered\\n> Demos: {{1.entry.demosSet}} set / {{1.entry.demosShowed}} showed\\n> Closed: {{1.entry.closed}} | 💰 ${{1.entry.cashCollected}}\"}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false,
+        "useNewZLibDeflate": true
+      },
+      "mapper": {
+        "url": "https://stack-n-scale.vercel.app/api/webhooks/sheets-update",
+        "method": "post",
+        "headers": [
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "x-sheets-secret", "value": "YOUR_SHEETS_WEBHOOK_SECRET" }
+        ],
+        "qs": [],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{{toJSON(1)}}",
+        "parseResponse": false,
+        "rejectUnauthorized": true,
+        "followRedirect": true,
+        "gzip": true
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us2.make.com"
+  },
+  "_setup_notes": {
+    "how_to_import": [
+      "1. Go to make.com → Scenarios → Create new scenario",
+      "2. Click the 3-dot menu (top right) → Import Blueprint",
+      "3. Paste this entire JSON file",
+      "4. Module 1 (Webhook): click the hook dropdown → Add → copy the generated URL",
+      "5. Module 2 (Discord): replace YOUR_DISCORD_BOILER_ROOM_WEBHOOK_URL with the real Discord webhook URL for #boiler-room",
+      "6. Module 3 (HTTP): replace YOUR_SHEETS_WEBHOOK_SECRET with the SHEETS_WEBHOOK_SECRET value from your Vercel env vars",
+      "7. Turn the scenario ON (toggle at bottom left)",
+      "8. Add the webhook URL from step 4 to Vercel: Settings → Env Vars → MAKE_REPLOG_WEBHOOK_URL",
+      "9. Redeploy: vercel --prod"
+    ],
+    "what_each_module_does": {
+      "module_1": "Receives POST from /api/replog. Payload: { staffName, entry: { date, callsMade, callsAnswered, demosSet, demosShowed, pitched, closed, cashCollected }, timestamp }",
+      "module_2": "Posts an activity summary to Discord #boiler-room so the team sees rep activity in real time. Replace the URL with your actual Discord channel webhook URL.",
+      "module_3": "Calls back into the app to trigger updatePipelineFromReplogs() which rebuilds the master dashboard and leaderboard. The x-sheets-secret header must match your SHEETS_WEBHOOK_SECRET env var exactly."
+    },
+    "note_on_google_sheets": "The app already writes directly to the Setter KPI Daily Log sheet via syncReplogToSheets() — no need to add a Google Sheets step here. That would create duplicate rows."
+  }
+}

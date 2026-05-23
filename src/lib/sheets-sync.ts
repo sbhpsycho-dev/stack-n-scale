@@ -131,6 +131,53 @@ export function buildReplogRow(staffName: string, entry: DailyEntry): (string | 
   return [entry.date, name, entry.callsMade, entry.callsAnswered, entry.demosSet, entry.demosShowed, entry.pitched, entry.closed, entry.cashCollected];
 }
 
+// ─── Per-rep sheet sync ───────────────────────────────────────────────────────
+
+// Writes/updates the rep's daily entry in their own personal Google Sheet.
+// Expects a tab named "Daily Activity" (columns A:I matching REPLOG_HEADERS).
+// Silently skips if the rep has no sheetId configured in the staff registry.
+export async function syncReplogToRepSheet(staffName: string, entry: DailyEntry): Promise<void> {
+  const repSheets = await getRepSheets();
+  const nameKey   = staffName.trim().toLowerCase().split(" ")[0];
+  const sheetId   = repSheets[nameKey];
+  if (!sheetId) return; // no personal sheet configured for this rep — skip
+
+  const token    = await getSheetsToken();
+  const existing = await sheetsGet(token, sheetId, "Daily Activity!A:I");
+  const rows     = (existing.values ?? []) as string[][];
+  const dataRow  = buildReplogRow(staffName, entry);
+
+  if (rows.length === 0) {
+    await sheetsAppend(token, sheetId, "Daily Activity!A:I", [REPLOG_HEADERS, dataRow]);
+    return;
+  }
+
+  const matchIdx = rows.findIndex((r, i) => i > 0 && r[0] === entry.date);
+  if (matchIdx >= 0) {
+    await sheetsUpdate(token, sheetId, `Daily Activity!A${matchIdx + 1}:I${matchIdx + 1}`, [dataRow]);
+  } else {
+    await sheetsAppend(token, sheetId, "Daily Activity!A:I", [dataRow]);
+  }
+}
+
+// ─── Make.com replog webhook ──────────────────────────────────────────────────
+
+// Fires a Make.com webhook with the rep's daily entry so the automation chain
+// can update the Master KPI Sheet, post to Discord, and trigger a dashboard refresh.
+// Gracefully skips if MAKE_REPLOG_WEBHOOK_URL is not set.
+export async function triggerMakeReplogWebhook(staffName: string, entry: DailyEntry): Promise<void> {
+  const url = process.env.MAKE_REPLOG_WEBHOOK_URL;
+  if (!url) return;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ staffName, entry, timestamp: new Date().toISOString() }),
+  });
+  if (!res.ok) {
+    throw new Error(`Make.com replog webhook failed: HTTP ${res.status}`);
+  }
+}
+
 export async function syncReplogToSheets(staffName: string, entry: DailyEntry): Promise<void> {
   const token    = await getSheetsToken();
   const existing = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:I");
