@@ -14,6 +14,9 @@ const REP_IDS: Record<string, string> = Object.fromEntries(
     ["caelum", process.env.DISCORD_REP_ID_CAELUM],
     ["kian",   process.env.DISCORD_REP_ID_KIAN],
     ["elias",  process.env.DISCORD_REP_ID_ELIAS],
+    ["naomi",  process.env.DISCORD_REP_ID_NAOMI],
+    ["callum", process.env.DISCORD_REP_ID_CALLUM],
+    ["taha",   process.env.DISCORD_REP_ID_TAHA],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
 );
 

@@ -5,9 +5,11 @@ import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 
 // Known setter sheet IDs — keyed by first name (lowercase)
 const SETTER_SHEET_IDS: Record<string, string> = {
-  kian:  "16U8r2DftWYKO6rfN9NKns42JqShj-HVqckd-Zhg5vfk",
-  elias: "1FNk4rFjuFq4uU_NLWfhLs-PmNyFMiIn9vw_G5_zgNmc",
-  naomi: "11WVAec9S8flwbHc-yDLbVv3T2R1_9tENJRIJyWR5eaU",
+  kian:   "16U8r2DftWYKO6rfN9NKns42JqShj-HVqckd-Zhg5vfk",
+  elias:  "1FNk4rFjuFq4uU_NLWfhLs-PmNyFMiIn9vw_G5_zgNmc",
+  naomi:  "11WVAec9S8flwbHc-yDLbVv3T2R1_9tENJRIJyWR5eaU",
+  callum: "1Oo8vHNbhU2qbNdGCtvVOI-6wlmLLm_R7V216BtwCEI0",
+  taha:   "1Mvdz5FI1e9Teb_xImruqXMg-5-nG90D_fJDG-qfj2t8",
 };
 
 export async function POST() {

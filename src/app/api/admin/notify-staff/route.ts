@@ -3,8 +3,11 @@ import { authOptions } from "@/lib/auth";
 import { sendDiscordDM } from "@/lib/discord";
 
 const SETTERS = [
-  { name: "Kian",  discordId: process.env.DISCORD_REP_ID_KIAN   ?? "" },
-  { name: "Elias", discordId: process.env.DISCORD_REP_ID_ELIAS  ?? "" },
+  { name: "Kian",   discordId: process.env.DISCORD_REP_ID_KIAN    ?? "" },
+  { name: "Elias",  discordId: process.env.DISCORD_REP_ID_ELIAS   ?? "" },
+  { name: "Naomi",  discordId: process.env.DISCORD_REP_ID_NAOMI   ?? "" },
+  { name: "Callum", discordId: process.env.DISCORD_REP_ID_CALLUM  ?? "" },
+  { name: "Taha",   discordId: process.env.DISCORD_REP_ID_TAHA    ?? "" },
 ].filter(s => s.discordId.length > 0);
 
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
