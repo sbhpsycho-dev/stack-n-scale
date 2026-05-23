@@ -3,9 +3,9 @@
  * and registers the GHL webhook subscription.
  *
  * Call once after deploy:
- *   GET https://stack-n-scale.vercel.app/api/admin/discord-notify-setup?secret=YOUR_CRON_SECRET
+ *   GET https://stack-n-scale.vercel.app/api/cron/discord-setup?secret=YOUR_SNS_PASSWORD
  *
- * Returns JSON with the created webhook URLs — add them to Vercel env vars.
+ * Stores all webhook URLs in KV — notifications work immediately.
  */
 
 import { randomUUID } from "crypto";
@@ -64,16 +64,20 @@ async function ghlApi(path: string, method = "GET", body?: object) {
 }
 
 export async function GET(req: Request): Promise<Response> {
-  // Auth check
+  // Auth: SNS_PASSWORD or CRON_SECRET
   const { searchParams } = new URL(req.url);
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && searchParams.get("secret") !== cronSecret) {
+  const provided = searchParams.get("secret") ?? "";
+  const snsPass   = process.env.SNS_PASSWORD  ?? "";
+  const cronSec   = process.env.CRON_SECRET   ?? "";
+
+  const validSecret = (snsPass && provided === snsPass) || (cronSec && provided === cronSec);
+  if (!validSecret) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const botToken  = process.env.DISCORD_BOT_TOKEN;
-  const guildId   = process.env.DISCORD_GUILD_ID;
-  const ghlApiKey = process.env.GHL_API_KEY;
+  const botToken   = process.env.DISCORD_BOT_TOKEN;
+  const guildId    = process.env.DISCORD_GUILD_ID;
+  const ghlApiKey  = process.env.GHL_API_KEY;
   const locationId = process.env.GHL_LOCATION_ID;
 
   if (!botToken || !guildId) {
@@ -91,7 +95,7 @@ export async function GET(req: Request): Promise<Response> {
   log.push(`Found ${existing.length} existing channels`);
 
   for (const { name, envKey } of NOTIFY_CHANNELS) {
-    let channel = byName[name];
+    let channel = byName[name] as { id: string; name: string } | undefined;
 
     if (!channel) {
       log.push(`Creating #${name}...`);
@@ -101,7 +105,6 @@ export async function GET(req: Request): Promise<Response> {
       log.push(`#${name} already exists (${channel.id})`);
     }
 
-    // Check for existing SNS webhook
     const webhooks = await discordApi(`/channels/${channel.id}/webhooks`) as Array<{ id: string; name: string; token: string }>;
     const existingHook = Array.isArray(webhooks) && webhooks.find((w: { name: string }) => w.name === WEBHOOK_NAME);
 
@@ -115,8 +118,9 @@ export async function GET(req: Request): Promise<Response> {
       log.push(`Created webhook for #${name}`);
     }
 
-    // Store webhook URL in KV as fallback (so code works even before Vercel env vars are updated)
+    // Store in KV — notifications work immediately without env var changes
     await kv.set(`sns:config:${envKey}`, results[envKey]);
+    log.push(`Saved ${envKey} to KV`);
   }
 
   // ── Step 2: Register GHL webhook ─────────────────────────────────────────
@@ -126,17 +130,13 @@ export async function GET(req: Request): Promise<Response> {
   if (ghlApiKey && locationId) {
     log.push("Checking existing GHL webhooks...");
 
-    const appUrl = "https://stack-n-scale.vercel.app";
+    let whSecret = process.env.GHL_WEBHOOK_SECRET
+      || await kv.get<string>("sns:config:GHL_WEBHOOK_SECRET")
+      || randomUUID();
 
-    // Get or generate webhook secret
-    let whSecret = process.env.GHL_WEBHOOK_SECRET;
-    if (!whSecret) {
-      whSecret = await kv.get<string>("sns:config:GHL_WEBHOOK_SECRET") ?? randomUUID();
-      await kv.set("sns:config:GHL_WEBHOOK_SECRET", whSecret);
-      log.push(`Generated GHL_WEBHOOK_SECRET (stored in KV)`);
-    }
+    await kv.set("sns:config:GHL_WEBHOOK_SECRET", whSecret);
 
-    const webhookUrl = `${appUrl}/api/webhooks/ghl?secret=${encodeURIComponent(whSecret)}`;
+    const webhookUrl = `https://stack-n-scale.vercel.app/api/webhooks/ghl?secret=${encodeURIComponent(whSecret)}`;
 
     const listRes = await ghlApi(`/webhooks/?locationId=${locationId}`);
     if (listRes.ok) {
@@ -160,7 +160,7 @@ export async function GET(req: Request): Promise<Response> {
         if (createRes.ok) {
           const hook = createRes.data?.webhook ?? createRes.data;
           log.push(`GHL webhook registered (id: ${hook.id})`);
-          ghlResult = { id: hook.id, status: "registered", secret: whSecret };
+          ghlResult = { id: hook.id, status: "registered" };
         } else {
           log.push(`GHL webhook registration failed: ${JSON.stringify(createRes.data)}`);
           ghlResult = { status: "failed", error: JSON.stringify(createRes.data) };
@@ -168,21 +168,11 @@ export async function GET(req: Request): Promise<Response> {
       }
     } else {
       log.push(`Could not list GHL webhooks: ${JSON.stringify(listRes.data)}`);
+      ghlResult = { status: "error", detail: JSON.stringify(listRes.data) };
     }
   } else {
     log.push("GHL_API_KEY or GHL_LOCATION_ID not set — skipping GHL registration");
   }
 
-  return Response.json({
-    success: true,
-    log,
-    discordWebhooks: results,
-    ghl: ghlResult,
-    next: [
-      "Add these to Vercel env vars (Production):",
-      ...Object.entries(results).map(([k, v]) => `${k}=${v}`),
-      ...(ghlResult.secret ? [`GHL_WEBHOOK_SECRET=${ghlResult.secret}`] : []),
-      "Then redeploy: vercel --prod",
-    ],
-  });
+  return Response.json({ success: true, log, discordWebhooks: results, ghl: ghlResult });
 }
