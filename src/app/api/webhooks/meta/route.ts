@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { kv } from "@vercel/kv";
 import { deduplicateNotif } from "@/lib/notif-dedup";
 import { sendWebhookEmbed, buildMetaLeadEmbed } from "@/lib/discord";
 
@@ -65,7 +66,8 @@ async function verifyMetaSignature(body: string, sigHeader: string): Promise<boo
 
 async function processMetaLeads(payload: MetaLeadgenPayload): Promise<void> {
   const accessToken = process.env.META_PAGE_ACCESS_TOKEN ?? "";
-  const webhookUrl  = process.env.DISCORD_WEBHOOK_NEW_LEADS ?? "";
+  const webhookUrl  = process.env.DISCORD_WEBHOOK_NEW_LEADS
+    || await kv.get<string>("sns:config:DISCORD_WEBHOOK_NEW_LEADS") || "";
 
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {

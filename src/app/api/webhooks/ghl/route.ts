@@ -76,6 +76,11 @@ function normalizeType(t: string): string {
   return t.toLowerCase().replace(/[\s._-]/g, "");
 }
 
+// ── Resolve webhook URL: env var first, KV fallback (set by /api/admin/discord-notify-setup)
+async function webhookUrl(envKey: string): Promise<string> {
+  return process.env[envKey] || await kv.get<string>(`sns:config:${envKey}`) || "";
+}
+
 // ── Event handlers ────────────────────────────────────────────────────────────
 
 async function handleContactCreate(payload: GHLPayload): Promise<Response> {
@@ -88,7 +93,7 @@ async function handleContactCreate(payload: GHLPayload): Promise<Response> {
   const name = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || "Unknown";
 
   void sendWebhookEmbed(
-    process.env.DISCORD_WEBHOOK_NEW_LEADS ?? "",
+    await webhookUrl("DISCORD_WEBHOOK_NEW_LEADS"),
     buildNewLeadEmbed({
       name,
       phone:       c.phone,
@@ -113,7 +118,7 @@ async function handleAppointment(payload: GHLPayload): Promise<Response> {
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.name || "Unknown";
 
   void sendWebhookEmbed(
-    process.env.DISCORD_WEBHOOK_APPOINTMENTS ?? "",
+    await webhookUrl("DISCORD_WEBHOOK_APPOINTMENTS"),
     buildAppointmentEmbed({
       name,
       dateTime:     appt.startTime,
@@ -141,7 +146,7 @@ async function handleLeadReply(payload: GHLPayload): Promise<Response> {
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.name || "Unknown";
 
   void sendWebhookEmbed(
-    process.env.DISCORD_WEBHOOK_SALES ?? "",
+    await webhookUrl("DISCORD_WEBHOOK_SALES"),
     buildLeadReplyEmbed({
       name,
       message: msg.body,
@@ -208,7 +213,7 @@ async function handleOpportunity(payload: GHLPayload): Promise<Response> {
   await kv.set("sns:deals:index", [dealId, ...dealIds]);
 
   void sendWebhookEmbed(
-    process.env.DISCORD_WEBHOOK_SALES ?? "",
+    await webhookUrl("DISCORD_WEBHOOK_SALES"),
     buildDealClosedEmbed({
       name:       clientName,
       amount:     grossAmount,
@@ -247,7 +252,8 @@ const EVENT_HANDLERS: Record<string, (payload: GHLPayload) => Promise<Response>>
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
-  const secret = process.env.GHL_WEBHOOK_SECRET;
+  // Secret: check env var first, fall back to KV (set by /api/admin/discord-notify-setup)
+  const secret = process.env.GHL_WEBHOOK_SECRET || await kv.get<string>("sns:config:GHL_WEBHOOK_SECRET");
   if (!secret) return new Response("Webhook not configured", { status: 500 });
 
   // Accept secret via header (manual webhook setup) OR query param (API-registered webhook)

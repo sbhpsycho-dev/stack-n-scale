@@ -12,6 +12,7 @@
  */
 
 import { readFileSync } from "fs";
+import { randomUUID } from "crypto";
 
 const envRaw = readFileSync(new URL("../.env.local", import.meta.url), "utf-8");
 const env = Object.fromEntries(
@@ -23,12 +24,18 @@ const env = Object.fromEntries(
 
 const API_KEY     = env.GHL_API_KEY;
 const LOCATION_ID = env.GHL_LOCATION_ID;
-const WH_SECRET   = env.GHL_WEBHOOK_SECRET;
 const BASE_URL    = env.NEXTAUTH_URL?.replace(/\/$/, "") || "https://stack-n-scale.vercel.app";
 
-if (!API_KEY || !LOCATION_ID || !WH_SECRET) {
-  console.error("❌ GHL_API_KEY, GHL_LOCATION_ID, and GHL_WEBHOOK_SECRET must be set in .env.local");
+if (!API_KEY || !LOCATION_ID) {
+  console.error("❌ GHL_API_KEY and GHL_LOCATION_ID must be set in .env.local");
   process.exit(1);
+}
+
+// Auto-generate secret if not set — print it so you can optionally add to Vercel
+const WH_SECRET = env.GHL_WEBHOOK_SECRET || randomUUID();
+if (!env.GHL_WEBHOOK_SECRET) {
+  console.log(`⚡ Auto-generated GHL_WEBHOOK_SECRET=${WH_SECRET}`);
+  console.log(`   Add this to Vercel env vars if you want to keep it permanent.\n`);
 }
 
 const WEBHOOK_URL  = `${BASE_URL}/api/webhooks/ghl?secret=${encodeURIComponent(WH_SECRET)}`;
