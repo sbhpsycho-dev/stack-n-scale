@@ -7,6 +7,11 @@ import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 import type { SalesData } from "@/lib/sales-data";
 import { getSheetsToken, sheetsGet } from "@/lib/sheets-sync";
 
+// Fallback matches the hardcoded ID in sheets-sync.ts so the API works
+// even when GOOGLE_SHEETS_SETTER_KPI_ID isn't set as a Vercel env var.
+const SETTER_KPI_SHEET_ID = process.env.GOOGLE_SHEETS_SETTER_KPI_ID
+  ?? "1mASm-QAFu7gMIH23fG1Qb_TdBec_ZCgc2Ymsriwqf2E";
+
 function getAuth() {
   const client_email = process.env.GOOGLE_SA_EMAIL;
   const private_key  = process.env.GOOGLE_SA_PRIVATE_KEY?.replace(/\\n/g, "\n");
@@ -18,8 +23,7 @@ function getAuth() {
 }
 
 async function readSetterSheet() {
-  const sheetId = process.env.GOOGLE_SHEETS_SETTER_KPI_ID;
-  if (!sheetId) return null;
+  const sheetId = SETTER_KPI_SHEET_ID;
   const auth = getAuth();
   if (!auth) return null;
   const sheets = google.sheets({ version: "v4", auth });
@@ -111,84 +115,83 @@ export async function GET() {
       closeRate: s.demosShowed > 0 ? parseFloat(((s.dealsClosed / s.demosShowed) * 100).toFixed(1)) : 0,
     }));
 
-    // ─── Personal sheet supplement ──────────────────────────────────────────────
-    // Reps with a personal sheetId who don't appear in the master tracker are
-    // appended here so they show up on the live leaderboard without needing
-    // to be added to the master Setter KPI Tracker sheet.
-    try {
-      const staffRegistry   = (await kv.get<StaffMeta[]>(STAFF_KV_KEY)) ?? [];
-      // Build a set of first-name keys already in repMap (case-insensitive)
-      const masterFirstNames = new Set(
-        Array.from(repMap.keys()).map(n => n.trim().toLowerCase().split(" ")[0])
-      );
-      const personalReps = staffRegistry.filter(
-        s => s.sheetId && !masterFirstNames.has(s.name.trim().toLowerCase().split(" ")[0])
-      );
+  }
 
-      if (personalReps.length > 0) {
-        const pToken = await getSheetsToken();
+  // ─── Personal sheet supplement ───────────────────────────────────────────────
+  // Always runs — even when the master sheet is empty or unreachable.
+  // Reps with a personal sheetId who aren't already in sheetLeaderboard get
+  // appended so they show up regardless of master-sheet status.
+  try {
+    const staffRegistry  = (await kv.get<StaffMeta[]>(STAFF_KV_KEY)) ?? [];
+    // Exclude reps already captured from the master sheet
+    const alreadyPresent = new Set(
+      sheetLeaderboard.map(r => r.name.trim().toLowerCase().split(" ")[0])
+    );
+    const personalReps = staffRegistry.filter(
+      s => s.sheetId && !alreadyPresent.has(s.name.trim().toLowerCase().split(" ")[0])
+    );
 
-        for (const s of personalReps) {
+    if (personalReps.length > 0) {
+      const pToken = await getSheetsToken();
+
+      for (const s of personalReps) {
+        try {
+          let pResult: { values?: string[][] };
           try {
-            // Try named tab first, then default tab
-            let pResult: { values?: string[][] };
-            try {
-              pResult = await sheetsGet(pToken, s.sheetId!, "Daily Log!A:Z");
-            } catch {
-              pResult = await sheetsGet(pToken, s.sheetId!, "A:Z");
-            }
-            const pRows = (pResult.values ?? []) as string[][];
-            if (pRows.length < 2) continue;
-
-            // Detect header row
-            let hIdx = -1;
-            for (let i = 0; i < Math.min(6, pRows.length); i++) {
-              const hn = pRows[i].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
-              if (hn.some((h: string) => ["callsmade", "callsdialed", "demosset", "zoomsbooked"].includes(h))) {
-                hIdx = i; break;
-              }
-            }
-            if (hIdx < 0) continue;
-
-            const ph = pRows[hIdx].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
-            const pcFirst = (...ns: string[]) => { for (const n of ns) { const i = ph.indexOf(n); if (i >= 0) return i; } return -1; };
-
-            const pCashIdx   = pcFirst("cashcollected", "grosscollected", "grossdealvalue");
-            const pCallsIdx  = pcFirst("callsmade", "callsdialed");
-            const pDSetIdx   = pcFirst("demosset", "zoomsbooked");
-            const pDShowIdx  = pcFirst("demosshowed", "zoomsshowed", "showedups");
-            const pClosedIdx = pcFirst("dealsclosed", "demosclosed", "closed");
-
-            let pCash = 0, pCalls = 0, pDSet = 0, pDShow = 0, pClosed = 0;
-            for (const row of pRows.slice(hIdx + 1) as string[][]) {
-              if (!row.some((c: string) => c?.trim())) continue; // skip entirely empty rows
-              pCash   += pCashIdx   >= 0 ? parseFloat((row[pCashIdx]   ?? "0").replace(/[$,]/g, "")) || 0 : 0;
-              pCalls  += pCallsIdx  >= 0 ? Number(row[pCallsIdx])  || 0 : 0;
-              pDSet   += pDSetIdx   >= 0 ? Number(row[pDSetIdx])   || 0 : 0;
-              pDShow  += pDShowIdx  >= 0 ? Number(row[pDShowIdx])  || 0 : 0;
-              pClosed += pClosedIdx >= 0 ? Number(row[pClosedIdx]) || 0 : 0;
-            }
-
-            if (pCalls > 0 || pDSet > 0 || pCash > 0) {
-              sheetLeaderboard.push({
-                name:          s.name,
-                cashCollected: pCash,
-                callsMade:     pCalls,
-                demosSet:      pDSet,
-                demosShowed:   pDShow,
-                dealsClosed:   pClosed,
-                showRate:  pDSet  > 0 ? parseFloat(((pDShow  / pDSet)  * 100).toFixed(1)) : 0,
-                closeRate: pDShow > 0 ? parseFloat(((pClosed / pDShow) * 100).toFixed(1)) : 0,
-              });
-            }
-          } catch (pErr) {
-            console.error(`[setters] personal sheet error for ${s.name}:`, pErr);
+            pResult = await sheetsGet(pToken, s.sheetId!, "Daily Log!A:Z");
+          } catch {
+            pResult = await sheetsGet(pToken, s.sheetId!, "A:Z");
           }
+          const pRows = (pResult.values ?? []) as string[][];
+          if (pRows.length < 2) continue;
+
+          let hIdx = -1;
+          for (let i = 0; i < Math.min(6, pRows.length); i++) {
+            const hn = pRows[i].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
+            if (hn.some((h: string) => ["callsmade", "callsdialed", "demosset", "zoomsbooked"].includes(h))) {
+              hIdx = i; break;
+            }
+          }
+          if (hIdx < 0) continue;
+
+          const ph = pRows[hIdx].map((h: string) => h.trim().toLowerCase().replace(/\s+/g, ""));
+          const pcFirst = (...ns: string[]) => { for (const n of ns) { const i = ph.indexOf(n); if (i >= 0) return i; } return -1; };
+
+          const pCashIdx   = pcFirst("cashcollected", "grosscollected", "grossdealvalue");
+          const pCallsIdx  = pcFirst("callsmade", "callsdialed");
+          const pDSetIdx   = pcFirst("demosset", "zoomsbooked");
+          const pDShowIdx  = pcFirst("demosshowed", "zoomsshowed", "showedups");
+          const pClosedIdx = pcFirst("dealsclosed", "demosclosed", "closed");
+
+          let pCash = 0, pCalls = 0, pDSet = 0, pDShow = 0, pClosed = 0;
+          for (const row of pRows.slice(hIdx + 1) as string[][]) {
+            if (!row.some((c: string) => c?.trim())) continue;
+            pCash   += pCashIdx   >= 0 ? parseFloat((row[pCashIdx]   ?? "0").replace(/[$,]/g, "")) || 0 : 0;
+            pCalls  += pCallsIdx  >= 0 ? Number(row[pCallsIdx])  || 0 : 0;
+            pDSet   += pDSetIdx   >= 0 ? Number(row[pDSetIdx])   || 0 : 0;
+            pDShow  += pDShowIdx  >= 0 ? Number(row[pDShowIdx])  || 0 : 0;
+            pClosed += pClosedIdx >= 0 ? Number(row[pClosedIdx]) || 0 : 0;
+          }
+
+          if (pCalls > 0 || pDSet > 0 || pCash > 0) {
+            sheetLeaderboard.push({
+              name:          s.name,
+              cashCollected: pCash,
+              callsMade:     pCalls,
+              demosSet:      pDSet,
+              demosShowed:   pDShow,
+              dealsClosed:   pClosed,
+              showRate:  pDSet  > 0 ? parseFloat(((pDShow  / pDSet)  * 100).toFixed(1)) : 0,
+              closeRate: pDShow > 0 ? parseFloat(((pClosed / pDShow) * 100).toFixed(1)) : 0,
+            });
+          }
+        } catch (pErr) {
+          console.error(`[setters] personal sheet error for ${s.name}:`, pErr);
         }
       }
-    } catch (suppErr) {
-      console.error("[setters] personal sheet supplement error:", suppErr);
     }
+  } catch (suppErr) {
+    console.error("[setters] personal sheet supplement error:", suppErr);
   }
 
   type LeaderboardRow = typeof sheetLeaderboard[number];
