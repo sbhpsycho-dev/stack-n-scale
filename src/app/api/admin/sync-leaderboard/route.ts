@@ -375,12 +375,18 @@ export async function POST() {
 
   await kv.set("sns-dashboard-v1", current);
 
-  // Ingest personal sheets → replog KV → rebuild pipeline + leaderboard cache
-  // Fire-and-forget: Pipeline tab's 5-sec poll picks up bumpPipelineVersion when done
-  ingestSetterKPISheet()
-    .then(() => updatePipelineFromReplogs())
-    .then(() => bumpPipelineVersion())
-    .catch(e => console.error("[sync-leaderboard] pipeline KV rebuild failed:", e));
+  // Ingest all personal sheets → replog KV → rebuild pipeline + leaderboard cache
+  // Awaited so failures surface in the response and the admin sees accurate staffUpdated count
+  let ingestResult = { staffUpdated: 0, rowsProcessed: 0 };
+  let ingestError: string | null = null;
+  try {
+    ingestResult = await ingestSetterKPISheet();
+    await updatePipelineFromReplogs();
+    await bumpPipelineVersion();
+  } catch (e) {
+    ingestError = e instanceof Error ? e.message : String(e);
+    console.error("[sync-leaderboard] pipeline KV rebuild failed:", e);
+  }
 
   return Response.json({
     ok:               !sheetsError || finalLeaderboard.length > 0,
@@ -392,5 +398,8 @@ export async function POST() {
     cashYTD,
     dealsMTD,
     dealRowsRead:     dealRows?.length ?? 0,
+    staffUpdated:     ingestResult.staffUpdated,
+    rowsProcessed:    ingestResult.rowsProcessed,
+    ingestError,
   });
 }

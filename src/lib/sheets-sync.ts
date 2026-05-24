@@ -385,8 +385,15 @@ export async function ingestSetterKPISheet(): Promise<{ staffUpdated: number; ro
   // A=Date, B=Name, C=Calls Dialed, D=Calls Connected, E=Conversations, F=Fact Finds,
   // G=Zooms Booked (demosSet), H=Zooms Showed (demosShowed), I=No-Showed (formula),
   // J=Show Rate (formula), K=Deals Closed, L=Gross Deal Value (cashCollected)
-  const result = await sheetsGet(token, SETTER_KPI_ID, "Daily Log!A:L");
-  const rows   = (result.values ?? []) as string[][];
+  // Try multiple tabs — if "Daily Log" doesn't exist the old code would throw and kill
+  // the personal-sheet supplement loop below. Now we fall through gracefully with rows=[].
+  let rows: string[][] = [];
+  for (const tab of ["Daily Log", "Sheet1", "Weekly Summary", "Leaderboard"]) {
+    try {
+      const res = await sheetsGet(token, SETTER_KPI_ID, `${tab}!A:L`);
+      if (res.values && res.values.length >= 2) { rows = res.values as string[][]; break; }
+    } catch { continue; }
+  }
 
   const staff = (await kv.get<StaffMeta[]>("sns-staff-registry")) ?? [];
   const staffByFirst = new Map<string, StaffMeta>();
