@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { type SalesData, BLANK } from "@/lib/sales-data";
-import { getSheetsToken, sheetsGet } from "@/lib/sheets-sync";
+import { getSheetsToken, sheetsGet, ingestSetterKPISheet, updatePipelineFromReplogs, bumpPipelineVersion } from "@/lib/sheets-sync";
 import { STAFF_KV_KEY, type StaffMeta } from "@/lib/staff-registry";
 import { calculatePayouts } from "@/lib/payout-calc";
 import type { Deal } from "@/lib/deal-types";
@@ -113,7 +113,7 @@ export async function POST() {
   let sheetsError: string | null = null;
   try {
     const token = await getSheetsToken();
-    for (const tab of ["Daily Log", "Sheet1"]) {
+    for (const tab of ["Leaderboard", "Weekly Summary", "Daily Log", "Sheet1"]) {
       try {
         const res = await sheetsGet(token, SETTER_KPI_ID, `${tab}!A1:Z`);
         if (res.values && res.values.length >= 2) { setterRows = res.values as string[][]; break; }
@@ -343,16 +343,20 @@ export async function POST() {
   current.reps.closeRatePct     = closeRate;
   current.reps.rateOf           = answerRate;
   current.reps.closeRateWeek    = closeRate;
-  current.pipeline.callsMade    = pipeCallsMTD;
-  current.pipeline.callsAnswered = pipeAnswMTD;
-  current.pipeline.demosSet     = mergedDSet;
-  current.pipeline.demosShowed  = mergedDShow;
-  current.pipeline.pitched      = mergedPitch;
-  current.pipeline.closed       = mergedClosed;
-  current.pipeline.answerRate   = answerRate;
-  current.pipeline.showRate     = showRate;
-  current.pipeline.closeRate    = closeRate;
-  current.pipeline.demoToClose  = closeRate;
+  // Only overwrite pipeline when we actually found data — don't clobber existing KV with zeros
+  const hasPipelineData = pipeCallsMTD > 0 || mergedDSet > 0 || mergedClosed > 0 || ghlPipelineUsed;
+  if (hasPipelineData) {
+    current.pipeline.callsMade     = pipeCallsMTD;
+    current.pipeline.callsAnswered = pipeAnswMTD;
+    current.pipeline.demosSet      = mergedDSet;
+    current.pipeline.demosShowed   = mergedDShow;
+    current.pipeline.pitched       = mergedPitch;
+    current.pipeline.closed        = mergedClosed;
+    current.pipeline.answerRate    = answerRate;
+    current.pipeline.showRate      = showRate;
+    current.pipeline.closeRate     = closeRate;
+    current.pipeline.demoToClose   = closeRate;
+  }
 
   // Revenue metrics (from deal log — only patch if sheet was readable)
   if (dealRows) {
@@ -370,6 +374,13 @@ export async function POST() {
   current.dashboard.cashCollectedYTD = cashYTD;
 
   await kv.set("sns-dashboard-v1", current);
+
+  // Ingest personal sheets → replog KV → rebuild pipeline + leaderboard cache
+  // Fire-and-forget: Pipeline tab's 5-sec poll picks up bumpPipelineVersion when done
+  ingestSetterKPISheet()
+    .then(() => updatePipelineFromReplogs())
+    .then(() => bumpPipelineVersion())
+    .catch(e => console.error("[sync-leaderboard] pipeline KV rebuild failed:", e));
 
   return Response.json({
     ok:               !sheetsError || finalLeaderboard.length > 0,

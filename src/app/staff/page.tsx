@@ -1,11 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Trophy, Check, X, RefreshCw, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { Loader2, Trophy, Check, X, RefreshCw, ArrowUp, ArrowDown, Minus, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLeaderboard, type SortMetric } from "@/hooks/use-leaderboard";
+
+interface PipelineData {
+  callsMade: number; callsAnswered: number; demosSet: number;
+  demosShowed: number; pitched: number; closed: number;
+  answerRate: number; showRate: number; closeRate: number; demoToClose: number;
+  stageBreakdown: { stage: string; count: number }[];
+}
+
+function usePipeline() {
+  const [data, setData]     = useState<PipelineData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const lastmodRef = useRef<number>(0);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/staff/kpi/pipeline");
+      if (res.ok) setData(await res.json());
+    } catch { /* ignore */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // 5-second poll — re-fetch when pipeline version bumps (replog write or admin sync)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/pipeline/poll");
+        if (!res.ok) return;
+        const { lastmod } = await res.json() as { lastmod: number };
+        if (lastmod > lastmodRef.current) {
+          lastmodRef.current = lastmod;
+          load();
+        }
+      } catch { /* polling is best-effort */ }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  return { data, loading };
+}
 
 function fmt$(n: number) {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -97,6 +139,7 @@ export default function StaffHomePage() {
   const isAdmin = session?.user?.role === "admin";
 
   const { data, sortedRows, rankDeltas, flashedReps, loading, error, lastUpdated, sortMetric, sortDir, setSort, refresh } = useLeaderboard();
+  const { data: pipelineData, loading: pipelineLoading } = usePipeline();
 
   const [syncing, setSyncing]       = useState(false);
   const [syncDone, setSyncDone]     = useState(false);
@@ -165,7 +208,61 @@ export default function StaffHomePage() {
         </div>
       </div>
 
-      {/* Loading */}
+      {/* Live Team Pipeline */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Activity className="h-4 w-4 text-orange-500" />
+          <h2 className="text-sm font-semibold">Team Pipeline</h2>
+          <span className="relative flex h-2 w-2 ml-0.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">Live</span>
+        </div>
+
+        {pipelineLoading && !pipelineData ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : pipelineData ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Calls Made",   value: String(pipelineData.callsMade) },
+                { label: "Demos Set",    value: String(pipelineData.demosSet) },
+                { label: "Demos Showed", value: String(pipelineData.demosShowed) },
+                { label: "Deals Closed", value: String(pipelineData.closed) },
+              ].map(({ label, value }) => (
+                <Card key={label} className="bg-card border-border">
+                  <CardContent className="px-4 py-3">
+                    <p className="text-[11px] text-muted-foreground">{label}</p>
+                    <p className="text-lg font-bold mt-0.5">{value}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+              {[
+                { label: "Answer Rate",  value: `${pipelineData.answerRate}%` },
+                { label: "Show Rate",    value: `${pipelineData.showRate}%` },
+                { label: "Close Rate",   value: `${pipelineData.closeRate}%` },
+                { label: "Demo → Close", value: `${pipelineData.demoToClose}%` },
+              ].map(({ label, value }) => (
+                <Card key={label} className="bg-card border-border">
+                  <CardContent className="px-4 py-3">
+                    <p className="text-[11px] text-muted-foreground">{label}</p>
+                    <p className="text-lg font-bold mt-0.5 text-orange-400">{value}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {/* Leaderboard Loading */}
       {loading && !data && (
         <div className="flex justify-center py-24">
           <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
