@@ -210,6 +210,204 @@ export async function sendChannelMessage(
   });
 }
 
+/**
+ * Send a critical error DM to admin users.
+ * Uses DISCORD_ADMIN_USER_ID env var (comma-separated for multiple admins).
+ */
+export async function sendErrorDM(context: string, error: unknown): Promise<void> {
+  const adminIds = (process.env.DISCORD_ADMIN_USER_ID ?? "").split(",").filter(Boolean);
+  if (!adminIds.length) return;
+
+  const message = error instanceof Error ? error.message : String(error);
+  const content = `🚨 **System Error — ${context}**\n\`\`\`${message.slice(0, 1800)}\`\`\``;
+
+  await Promise.allSettled(
+    adminIds.map(id => sendDiscordDM(id, content))
+  );
+}
+
+// ── Additional colors ─────────────────────────────────────────────────────────
+
+const COLOR_ALERT    = 0xFF3B30; // red    — speed-to-lead warnings + duplicates
+const COLOR_NO_SHOW  = 0xFF9500; // orange — no-shows + cancellations
+const COLOR_SUMMARY  = 0x5856D6; // indigo — daily / weekly pipeline rollup
+
+// ── Speed-to-lead alert ───────────────────────────────────────────────────────
+
+export function buildSTLAlertEmbed(p: {
+  name: string;
+  phone?: string;
+  minutesElapsed: number;
+  contactId: string;
+}): DiscordEmbed {
+  const escalated = p.minutesElapsed >= 30;
+  return {
+    title: escalated
+      ? `🚨 UNWORKED LEAD — ${sanitize(p.name)} — 30 MIN NO CONTACT`
+      : `⚠️ Unworked lead — ${sanitize(p.name)} — 15 min, no contact`,
+    color: COLOR_ALERT,
+    description: escalated
+      ? "This lead has not been contacted in **30 minutes**. Escalation — act now."
+      : "This lead has not been contacted in **15 minutes**. Reach out immediately.",
+    fields: [
+      { name: "📱 Phone",       value: p.phone      || "—",  inline: true },
+      { name: "⏱️ Elapsed",    value: `${p.minutesElapsed} min`, inline: true },
+      { name: "🆔 Contact ID",  value: sanitize(p.contactId, 100), inline: true },
+    ],
+    footer:    { text: "SNS Speed-to-Lead" },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ── Duplicate lead flag ───────────────────────────────────────────────────────
+
+export function buildDupeLeadEmbed(p: {
+  name: string;
+  phone?: string;
+  email?: string;
+  existingContactId: string;
+  newContactId: string;
+}): DiscordEmbed {
+  return {
+    title: `🔁 Duplicate Lead — ${sanitize(p.name)}`,
+    color: COLOR_ALERT,
+    description: "A contact with the same phone/email already exists in GHL. This ping has been suppressed from #new-leads.",
+    fields: [
+      { name: "📱 Phone",            value: p.phone              || "—", inline: true },
+      { name: "📧 Email",            value: p.email              || "—", inline: true },
+      { name: "🆔 Existing Contact", value: sanitize(p.existingContactId, 100), inline: false },
+      { name: "🆕 New Contact ID",   value: sanitize(p.newContactId, 100),      inline: false },
+    ],
+    footer:    { text: "SNS Duplicate Detection" },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ── No-show ───────────────────────────────────────────────────────────────────
+
+export function buildNoShowEmbed(p: {
+  name: string;
+  dateTime?: string;
+  assignedRep?: string;
+}): DiscordEmbed {
+  const formatted = p.dateTime
+    ? new Date(p.dateTime).toLocaleString("en-US", {
+        weekday: "short", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      })
+    : "—";
+
+  return {
+    title: `👻 No-Show — ${sanitize(p.name)}`,
+    color: COLOR_NO_SHOW,
+    description: "This contact did not show for their appointment. Consider rebooking immediately.",
+    fields: [
+      { name: "🗓️ Scheduled",  value: formatted,                            inline: false },
+      { name: "👤 Rep",         value: sanitize(p.assignedRep || "—"),        inline: true  },
+    ],
+    footer:    { text: "SNS Notifications" },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ── Canceled appointment ──────────────────────────────────────────────────────
+
+export function buildCanceledEmbed(p: {
+  name: string;
+  dateTime?: string;
+  assignedRep?: string;
+}): DiscordEmbed {
+  const formatted = p.dateTime
+    ? new Date(p.dateTime).toLocaleString("en-US", {
+        weekday: "short", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short",
+      })
+    : "—";
+
+  return {
+    title: `❌ Appointment Canceled — ${sanitize(p.name)}`,
+    color: COLOR_NO_SHOW,
+    description: "This appointment was canceled. Attempt to rebook.",
+    fields: [
+      { name: "🗓️ Was Scheduled", value: formatted,                           inline: false },
+      { name: "👤 Rep",            value: sanitize(p.assignedRep || "—"),       inline: true  },
+    ],
+    footer:    { text: "SNS Notifications" },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ── Daily / weekly pipeline summary ──────────────────────────────────────────
+
+export function buildLeadPipelineSummaryEmbed(p: {
+  isWeekly: boolean;
+  dateLabel: string;
+  leads: number;
+  booked: number;
+  shows: number;
+  noShows: number;
+  showRate: string;
+  bookRate: string;
+  spend?: number;
+  cpl?: string;
+  cpba?: string;
+  topCampaign?: string;
+  topCampaignLeads?: number;
+  // weekly extras
+  prevLeads?: number;
+  prevBooked?: number;
+}): DiscordEmbed {
+  const title = p.isWeekly
+    ? `📊 Weekly Pipeline Report — ${sanitize(p.dateLabel)}`
+    : `📋 Daily Pipeline Summary — ${sanitize(p.dateLabel)}`;
+
+  const fields: DiscordEmbedField[] = [
+    { name: "📥 Leads In",       value: String(p.leads),    inline: true },
+    { name: "📅 Booked",         value: String(p.booked),   inline: true },
+    { name: "✅ Showed",         value: String(p.shows),    inline: true },
+    { name: "👻 No-Shows",       value: String(p.noShows),  inline: true },
+    { name: "📈 Show Rate",      value: p.showRate,         inline: true },
+    { name: "🎯 Book Rate",      value: p.bookRate,         inline: true },
+  ];
+
+  if (p.spend !== undefined) {
+    fields.push(
+      { name: "💸 Ad Spend",   value: `$${p.spend.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, inline: true },
+      { name: "💰 CPL",        value: p.cpl  ?? "—", inline: true },
+      { name: "📆 CPBA",       value: p.cpba ?? "—", inline: true },
+    );
+  }
+
+  if (p.topCampaign) {
+    fields.push({
+      name: "🏆 Top Campaign",
+      value: `${sanitize(p.topCampaign)} (${p.topCampaignLeads ?? 0} leads)`,
+      inline: false,
+    });
+  }
+
+  if (p.isWeekly && p.prevLeads !== undefined && p.prevBooked !== undefined) {
+    const leadDelta  = p.leads  - p.prevLeads;
+    const bookedDelta = p.booked - p.prevBooked;
+    fields.push({
+      name: "📉 Week-over-Week",
+      value: [
+        `Leads: ${leadDelta >= 0 ? "+" : ""}${leadDelta} vs prior week`,
+        `Booked: ${bookedDelta >= 0 ? "+" : ""}${bookedDelta} vs prior week`,
+      ].join("\n"),
+      inline: false,
+    });
+  }
+
+  return {
+    title,
+    color: COLOR_SUMMARY,
+    fields,
+    footer:    { text: p.isWeekly ? "SNS Weekly Rollup" : "SNS Daily Rollup" },
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export async function sendDiscordDM(userId: string, content: string): Promise<void> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token || !userId) return;

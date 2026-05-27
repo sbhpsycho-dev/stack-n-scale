@@ -1,5 +1,6 @@
 import { kv } from "@vercel/kv";
 import { randomUUID } from "crypto";
+import { verifySecret } from "@/lib/webhook-auth";
 import type { Deal, DealPayout } from "@/lib/deal-types";
 import { calculatePayouts } from "@/lib/payout-calc";
 import { deduplicateNotif } from "@/lib/notif-dedup";
@@ -9,11 +10,24 @@ import {
   buildAppointmentEmbed,
   buildLeadReplyEmbed,
   buildDealClosedEmbed,
+  buildDupeLeadEmbed,
+  buildNoShowEmbed,
+  buildCanceledEmbed,
 } from "@/lib/discord";
+import {
+  trackNewLead,
+  markLeadContacted,
+  checkDuplicate,
+  registerContact,
+  incrementMetrics,
+  todayET,
+} from "@/lib/lead-pipeline";
 
 export const runtime = "nodejs";
 
 // ── GHL payload types ─────────────────────────────────────────────────────────
+
+type GHLCustomField = { id?: string; key?: string; value?: string };
 
 type GHLContact = {
   id?: string;
@@ -27,6 +41,7 @@ type GHLContact = {
   assignedTo?: string;
   pipeline?: { name?: string; stage?: string };
   campaign?: string;
+  customFields?: GHLCustomField[];
 };
 
 type GHLAppointment = {
@@ -36,7 +51,8 @@ type GHLAppointment = {
   calendarId?: string;
   calendarName?: string;
   assignedUserId?: string;
-  contact?: { firstName?: string; lastName?: string; name?: string; phone?: string };
+  status?: string;
+  contact?: { id?: string; firstName?: string; lastName?: string; name?: string; phone?: string };
 };
 
 type GHLMessage = {
@@ -81,17 +97,72 @@ async function webhookUrl(envKey: string): Promise<string> {
   return process.env[envKey] || await kv.get<string>(`sns:config:${envKey}`) || "";
 }
 
+// ── Campaign attribution from Meta UTM custom fields ──────────────────────────
+
+/**
+ * Build a composite campaign label from GHL custom fields.
+ * Tries several known key names for utm_campaign / ad set / ad name.
+ * Falls back to the contact.campaign field if custom fields are absent.
+ *
+ * Returns "Campaign / Ad Set / Ad" if all three are present,
+ * or whatever subset is available, or "—" if nothing is set.
+ */
+function extractCampaign(c: GHLContact): string {
+  const fields = c.customFields ?? [];
+
+  const get = (...keys: string[]): string => {
+    const keySet = new Set(keys.map(k => k.toLowerCase()));
+    return (
+      fields.find(f => {
+        const k = (f.key ?? f.id ?? "").toLowerCase();
+        return keySet.has(k);
+      })?.value ?? ""
+    ).trim();
+  };
+
+  const campaign = get("utm_campaign", "fb_campaign_name", "campaign_name");
+  const adset    = get("utm_adset", "utm_ad_set", "adset_name", "ad_set_name");
+  const ad       = get("utm_ad", "utm_content", "ad_name");
+
+  const parts = [campaign, adset, ad].filter(Boolean);
+  return parts.length ? parts.join(" / ") : (c.campaign?.trim() || "—");
+}
+
 // ── Event handlers ────────────────────────────────────────────────────────────
 
 async function handleContactCreate(payload: GHLPayload): Promise<Response> {
   const c = payload.contact ?? {};
   const contactId = c.id ?? "";
+  const dateStr = todayET();
 
+  // ── 1. ID-based dedup (prevents double-fire on GHL retry)
   const isNew = await deduplicateNotif("contact.create", contactId);
   if (!isNew) return new Response("ok", { status: 200 });
 
   const name = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || "Unknown";
+  const campaignLabel = extractCampaign(c);
 
+  // ── 2. Phone/email duplicate detection
+  const dupeId = await checkDuplicate(c.phone, c.email);
+  if (dupeId && dupeId !== contactId) {
+    // Suppress from #new-leads — post a flagged warning to #alerts instead
+    void sendWebhookEmbed(
+      await webhookUrl("DISCORD_WEBHOOK_ALERTS"),
+      buildDupeLeadEmbed({
+        name,
+        phone:             c.phone,
+        email:             c.email,
+        existingContactId: dupeId,
+        newContactId:      contactId,
+      })
+    );
+    return new Response("ok", { status: 200 });
+  }
+
+  // ── 3. Register this contact's phone/email for future dupe checks
+  await registerContact(contactId, c.phone, c.email);
+
+  // ── 4. Post to #new-leads
   void sendWebhookEmbed(
     await webhookUrl("DISCORD_WEBHOOK_NEW_LEADS"),
     buildNewLeadEmbed({
@@ -100,9 +171,12 @@ async function handleContactCreate(payload: GHLPayload): Promise<Response> {
       source:      c.source,
       assignedRep: c.assignedTo,
       stage:       c.pipeline?.stage,
-      campaign:    c.campaign,
+      campaign:    campaignLabel,
     })
   );
+
+  // ── 5. Start speed-to-lead timer + increment daily lead counter
+  await trackNewLead(contactId, name, c.phone, campaignLabel, dateStr);
 
   return new Response("ok", { status: 200 });
 }
@@ -127,6 +201,70 @@ async function handleAppointment(payload: GHLPayload): Promise<Response> {
     })
   );
 
+  // Clear speed-to-lead timer — booking counts as "worked"
+  const contactId = contact.id ?? "";
+  if (contactId) await markLeadContacted(contactId);
+
+  // Increment booked counter
+  await incrementMetrics("booked", undefined, todayET());
+
+  return new Response("ok", { status: 200 });
+}
+
+async function handleAppointmentStatusChange(payload: GHLPayload): Promise<Response> {
+  const appt   = payload.appointment ?? {};
+  const status = (appt.status ?? "").toLowerCase().replace(/[\s_-]/g, "");
+
+  const cancelStatuses  = ["canceled", "cancelled"];
+  const noshowStatuses  = ["noshow", "noshowed"];
+  const isCancel  = cancelStatuses.includes(status);
+  const isNoShow  = noshowStatuses.includes(status);
+
+  if (!isCancel && !isNoShow) return new Response("ok", { status: 200 });
+
+  // Dedup by apptId + status to prevent double-ping on retries
+  const isNew = await deduplicateNotif(`appt.${status}`, appt.id ?? "");
+  if (!isNew) return new Response("ok", { status: 200 });
+
+  const contact = appt.contact ?? {};
+  const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.name || "Unknown";
+
+  if (isNoShow) {
+    await incrementMetrics("noshow", undefined, todayET());
+    void sendWebhookEmbed(
+      await webhookUrl("DISCORD_WEBHOOK_APPOINTMENTS"),
+      buildNoShowEmbed({
+        name,
+        dateTime:    appt.startTime,
+        assignedRep: appt.assignedUserId,
+      })
+    );
+  } else {
+    void sendWebhookEmbed(
+      await webhookUrl("DISCORD_WEBHOOK_APPOINTMENTS"),
+      buildCanceledEmbed({
+        name,
+        dateTime:    appt.startTime,
+        assignedRep: appt.assignedUserId,
+      })
+    );
+  }
+
+  return new Response("ok", { status: 200 });
+}
+
+/**
+ * Handles outbound messages and logged calls.
+ * Clears the speed-to-lead pending timer so the rep doesn't get pinged
+ * after they've already reached out.
+ */
+async function handleOutboundContact(payload: GHLPayload): Promise<Response> {
+  const contactId =
+    payload.message?.contactId ??
+    payload.conversation?.contactId ??
+    "";
+
+  if (contactId) await markLeadContacted(contactId);
   return new Response("ok", { status: 200 });
 }
 
@@ -231,16 +369,37 @@ async function handleOpportunity(payload: GHLPayload): Promise<Response> {
 // GHL sends inconsistent casing + has a known "statuscahnge" typo.
 
 const EVENT_HANDLERS: Record<string, (payload: GHLPayload) => Promise<Response>> = {
+  // New lead / contact
   "contactcreate":            handleContactCreate,
   "contactcreated":           handleContactCreate,
+
+  // Appointment booked
   "appointmentcreate":        handleAppointment,
   "appointmentcreated":       handleAppointment,
   "calendareventcreate":      handleAppointment,
   "calendareventcreated":     handleAppointment,
   "bookingcreate":            handleAppointment,
   "bookingcreated":           handleAppointment,
+
+  // Appointment status changes (no-show / cancel)
+  "appointmentstatuschange":  handleAppointmentStatusChange,
+  "appointmentstatuscahnge":  handleAppointmentStatusChange, // GHL known typo
+  "appointmentnoshow":        handleAppointmentStatusChange,
+  "appointmentnoshowed":      handleAppointmentStatusChange,
+  "appointmentcanceled":      handleAppointmentStatusChange,
+  "appointmentcancelled":     handleAppointmentStatusChange,
+
+  // Outbound contact (clears speed-to-lead timer)
+  "outboundmessage":          handleOutboundContact,
+  "outboundcall":             handleOutboundContact,
+  "calllogged":               handleOutboundContact,
+  "callcompleted":            handleOutboundContact,
+
+  // Inbound reply from lead
   "conversationunreadupdate": handleLeadReply,
   "inboundmessage":           handleLeadReply,
+
+  // Deal / opportunity closed
   "opportunitystatuschange":  handleOpportunity, // correct spelling
   "opportunitystatuscahnge":  handleOpportunity, // GHL known typo
   "opportunitycreate":        handleOpportunity,
@@ -259,7 +418,7 @@ export async function POST(req: Request) {
   // Accept secret via header (manual webhook setup) OR query param (API-registered webhook)
   const { searchParams } = new URL(req.url);
   const provided = req.headers.get("x-ghl-secret") ?? searchParams.get("secret") ?? "";
-  if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+  if (!verifySecret(provided, secret)) return new Response("Unauthorized", { status: 401 });
 
   let payload: GHLPayload;
   try {
