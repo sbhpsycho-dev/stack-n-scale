@@ -1,0 +1,39 @@
+{
+  "scenario": "New Staff Member Onboarded",
+  "envVar": "MAKE_STAFF_ONBOARDING_WEBHOOK_URL",
+  "trigger": "Webhook from POST /api/admin/staff when a new staff member is created",
+  "description": "Automates the full staff setup flow: creates their Google Sheet, sends Discord welcome DM, posts in team channel. Replaces manual setup steps.",
+  "payload": {
+    "staffId": "string — slugified staff ID (e.g. 'kian')",
+    "name": "string — full name (e.g. 'Kian Ahmad')",
+    "email": "string | null — staff email",
+    "discordId": "string | null — Discord user ID (e.g. '203848577349648384')",
+    "role": "string — dm_setter | setter | closer | coach | admin | owner",
+    "loginUrl": "string — URL to the login page",
+    "timestamp": "ISO timestamp"
+  },
+  "makeSteps": [
+    "1. Webhook receives staff payload",
+    "2. Google Sheets: Copy template sheet (GOOGLE_SHEETS_TEMPLATE_ID) → rename to '{name} KPI Tracker'",
+    "3. Google Sheets: Get the new sheet's ID",
+    "4. HTTP PATCH: POST https://stack-n-scale.vercel.app/api/admin/staff with { id: staffId, sheetId: newSheetId, token: CRON_SECRET } to save Sheet ID back to staff record",
+    "5. Filter: if discordId is set",
+    "   YES → Discord: Send DM to discordId:",
+    "     '👋 Welcome to Stack-N-Scale! Here are your login details:\\n🔗 Login: {loginUrl}\\n📊 Your KPI sheet has been created.\\n📌 Check #team-general for next steps.'",
+    "   NO → Skip Discord DM (no Discord ID on file)",
+    "6. Discord: Post in #team-general channel:",
+    "   '🎉 Welcome {name} to the team as {role}! @everyone give them a warm welcome.'",
+    "7. Optional: Google Drive — create a folder under Staff/ named '{name}'",
+    "8. HTTP POST /api/kv/confirm with key: sns:staff:onboarded:{staffId}"
+  ],
+  "requiredEnvVars": [
+    "MAKE_STAFF_ONBOARDING_WEBHOOK_URL",
+    "GOOGLE_SHEETS_TEMPLATE_ID — ID of the KPI tracker template sheet to copy",
+    "DISCORD_TEAM_GENERAL_CHANNEL_ID — Channel to post welcome messages"
+  ],
+  "notes": [
+    "Step 4 (saving sheetId back) requires the staff PATCH endpoint to accept Bearer token auth (CRON_SECRET) so Make.com can call it without a browser session",
+    "If discordId is blank, the DM step is skipped — add Discord ID via admin panel later to send manually",
+    "This scenario replaces 4 manual steps: create sheet, share sheet, DM login, post in team channel"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "scenario": "New Lead Captured → GHL Pipeline + Follow-up Sequence",
+  "envVar": "MAKE_NEW_LEAD_WEBHOOK_URL",
+  "trigger": "POST from /api/webhooks/meta or GHL webhook (external trigger)",
+  "description": "Fires when a new lead is captured from Meta ads, organic DMs, or manual entry. Make.com creates or updates the GHL contact, adds the lead to the correct pipeline stage, enrolls them in the appropriate follow-up sequence, and notifies the assigned setter via Discord.",
+  "payload": {
+    "id": "string — internal lead ID (UUID)",
+    "name": "string — lead's full name",
+    "email": "string | null — lead's email if captured",
+    "phone": "string | null — lead's phone number",
+    "source": "string — 'meta' | 'organic' | 'referral' | 'stripe' | 'fanbasis'",
+    "state": "string — 'new' | 'opted_in' | 'contacted'",
+    "assignedSetter": "string | null — setter name if already assigned",
+    "createdAt": "string — ISO 8601 timestamp"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — parse lead info",
+    "Step 2: Search GHL for existing contact by email/phone — create if not found",
+    "Step 3: Move GHL contact to 'New Lead' pipeline stage",
+    "Step 4: Enroll in follow-up SMS/email sequence based on source",
+    "Step 5: Send Discord notification to setter-alerts channel with lead details",
+    "Step 6: (Optional) Assign lead to setter round-robin if no setter specified"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "scenario": "Check-in Alert → Coach Notification + CRM Flag",
+  "envVar": "MAKE_CHECKIN_ALERT_WEBHOOK_URL",
+  "trigger": "POST from /api/checkin when healthScore <= 7 (orange or red)",
+  "description": "Fires whenever a student submits a weekly check-in with a health score of 7 or below. Make.com notifies the assigned coach via Discord DM, posts to the off-track-students channel with context, updates the GHL contact with a flag, and logs the alert to the coaching CRM sheet.",
+  "payload": {
+    "studentName": "string — student's full name",
+    "coachDiscordId": "string | null — Discord user ID of assigned coach (if available)",
+    "score": "number — health score 1–10",
+    "week": "string — program week identifier (e.g. 'Week 3')",
+    "flags": "string[] — array of context strings (struggled, needs from coach, etc.)",
+    "severity": "string — 'red' (score ≤ 5) | 'orange' (score 6–7)",
+    "timestamp": "string — ISO 8601 timestamp of check-in submission"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — check severity field",
+    "Step 2 (red): Send urgent Discord DM to coach — student needs immediate attention",
+    "Step 2 (orange): Send lower-priority Discord DM to coach — flag for this week's check-in",
+    "Step 3: Post to off-track-students Discord channel with student name + score + flags",
+    "Step 4: Search GHL contact by student name/email — add 'at-risk' tag",
+    "Step 5: Append row to Coaching CRM Google Sheet (student, score, week, severity, timestamp)",
+    "Step 6 (red): Set a follow-up task in GHL for coach to call within 24 hours"
+  ]
+}

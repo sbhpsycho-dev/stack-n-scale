@@ -1,0 +1,26 @@
+{
+  "scenario": "Daily KV Backup",
+  "trigger": "Schedule: every day at 3am",
+  "description": "Downloads a full KV snapshot and saves it to Google Drive for disaster recovery",
+  "envVar": "N/A — schedule triggered",
+  "makeSteps": [
+    "1. Schedule trigger: every day at 3:00 AM",
+    "2. HTTP GET: https://stack-n-scale.vercel.app/api/admin/export-kv with Authorization: Bearer {CRON_SECRET}",
+    "3. Google Drive: Create file in SNS Backups/ folder — filename: sns-backup-{date}.json",
+    "4. Filter: if Drive upload failed → HTTP POST to /api/kv/confirm with error details",
+    "5. Optional: delete Drive files older than 30 days to save storage"
+  ],
+  "payload": {
+    "note": "This scenario is schedule-triggered and pulls data from the app. No webhook payload needed.",
+    "authHeader": "Authorization: Bearer {CRON_SECRET}",
+    "responseShape": {
+      "exportedAt": "ISO timestamp",
+      "version": "string",
+      "deals": "Deal[] — all deals",
+      "coachingClients": "CoachingClient[] — all clients",
+      "leads": "Lead[] — all leads",
+      "expenses": "Expense[] — all expenses",
+      "sns-staff-registry": "StaffMeta[] — all staff"
+    }
+  }
+}

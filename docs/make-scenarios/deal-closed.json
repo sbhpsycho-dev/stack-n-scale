@@ -1,0 +1,38 @@
+{
+  "scenario": "Deal Closed → Sheets + Payout Notification",
+  "envVar": "MAKE_DEAL_WEBHOOK_URL",
+  "trigger": "POST from /api/deals (manual entry), /api/webhooks/stripe, or /api/webhooks/fanbasis",
+  "description": "Fires whenever a new deal is saved to KV. Make.com appends the deal to the Master Log Google Sheet, updates rep individual sheets, logs to Setter KPI sheet, and sends a payout-ready notification to the team Discord.",
+  "payload": {
+    "id": "string — unique deal ID (e.g. 'stripe-cs_xxx' or UUID)",
+    "date": "string — YYYY-MM-DD",
+    "clientName": "string — full name of the client",
+    "offer": "string — '5K' | '10K'",
+    "grossAmount": "number — total collected in USD",
+    "netAmount": "number — gross minus processor fee",
+    "leadSource": "string — 'organic' | 'ad'",
+    "processor": "string — 'stripe' | 'fanbasis'",
+    "dmSetter": "string | null — DM setter's name if applicable",
+    "setter": "string | null — setter's name if applicable",
+    "closer": "string | null — closer's name if applicable",
+    "payouts": {
+      "dmSetter": "number — DM setter cut",
+      "setter": "number — setter cut",
+      "closer": "number — closer cut",
+      "caelum": "number — Caelum's 15% net",
+      "totalPayouts": "number — sum of all rep cuts",
+      "companyReinvestment": "number — 10% reinvestment pool",
+      "evanTakeHome": "number — Evan's remainder"
+    },
+    "payoutStatus": "string — 'pending' | 'approved' | 'paid'",
+    "notes": "string | null — optional deal notes"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — parse deal payload",
+    "Step 2: Append row to Master Log Google Sheet (Deal Log tab, columns A:S)",
+    "Step 3: Append/update setter row in Setter KPI Daily Log sheet",
+    "Step 4: Append row to each involved rep's personal Google Sheet",
+    "Step 5: Send Discord notification to DISCORD_WEBHOOK_DEAL_CLOSED channel",
+    "Step 6: (Optional) Trigger payout calculation reminder if week total exceeds threshold"
+  ]
+}

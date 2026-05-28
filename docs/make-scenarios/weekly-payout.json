@@ -1,0 +1,34 @@
+{
+  "scenario": "Weekly Payout Dispatch → Sheets Log + Rep Notifications",
+  "envVar": "MAKE_PAYOUT_WEBHOOK_URL",
+  "trigger": "GET /api/agents/payout-cron (Vercel cron, weekly)",
+  "description": "Fires at the end of each week after payout calculations are ready for Evan's review. Make.com logs the full payout breakdown to the Payouts Google Sheet, sends each rep their individual cut via Discord DM, and posts a weekly summary to the staff finance channel.",
+  "payload": {
+    "weekId": "string — week identifier (e.g. '2026-W22')",
+    "weekStart": "string — YYYY-MM-DD start of the pay week",
+    "payouts": [
+      {
+        "staffDiscordId": "string | null — Discord user ID for direct DM",
+        "staffName": "string — rep's display name",
+        "amount": "number — total payout amount in USD",
+        "deals": [
+          {
+            "client": "string — client name",
+            "gross": "number — deal gross amount",
+            "cut": "number — rep's cut for this deal",
+            "ad": "boolean — true if lead source was 'ad'"
+          }
+        ]
+      }
+    ],
+    "totalGMV": "number — total gross revenue collected this week",
+    "timestamp": "string — ISO 8601 timestamp when cron ran"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — parse payout breakdown",
+    "Step 2: Append row to Payouts Google Sheet (one row per rep per week)",
+    "Step 3: Loop through payouts array — send each rep a Discord DM with their breakdown",
+    "Step 4: Post weekly summary to staff finance Discord channel",
+    "Step 5: (Optional) Send Evan a confirmation that all rep notifications were dispatched"
+  ]
+}

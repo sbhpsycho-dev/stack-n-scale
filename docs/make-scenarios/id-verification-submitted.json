@@ -1,0 +1,23 @@
+{
+  "scenario": "ID Verification Submitted → Drive Upload + Admin Alert",
+  "envVar": "MAKE_ID_SUBMISSION_WEBHOOK_URL",
+  "trigger": "POST from /api/onboarding/id-submission (handled by Agent A/existing code)",
+  "description": "Fires when a client uploads their ID documents for verification. Make.com moves the uploaded files into the client's Drive ID Verification subfolder, updates GHL contact status to 'id_submitted', and sends an alert to the admin Discord channel for manual review.",
+  "payload": {
+    "email": "string — client's email",
+    "name": "string — client's full name",
+    "idFrontUrl": "string — temporary URL to front-of-ID image",
+    "idBackUrl": "string | null — temporary URL to back-of-ID image (if provided)",
+    "selfieUrl": "string | null — temporary URL to selfie image (if provided)",
+    "driveFolderId": "string | null — Google Drive ID verification folder ID",
+    "ghlContactId": "string | null — GHL contact ID",
+    "submittedAt": "string — ISO 8601 timestamp"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — parse file URLs and client info",
+    "Step 2: Download ID files from temporary URLs",
+    "Step 3: Upload files to client's Drive ID Verification folder",
+    "Step 4: Update GHL contact field id_verification_status = 'submitted'",
+    "Step 5: Post admin alert to Discord with client name + Drive folder link for manual review"
+  ]
+}

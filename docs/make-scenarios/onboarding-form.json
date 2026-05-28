@@ -1,0 +1,22 @@
+{
+  "scenario": "Onboarding Form Submitted → GHL + Drive + Discord",
+  "envVar": "MAKE_ONBOARDING_FORM_WEBHOOK_URL",
+  "trigger": "POST from /api/onboarding/form-response (handled by Agent B)",
+  "description": "Fires when a new client completes the onboarding intake form. Make.com updates the GHL contact with form answers, stores responses in the client's Drive folder, posts a summary to the staff Discord onboarding channel, and optionally sends a confirmation email to the client.",
+  "payload": {
+    "email": "string — client's email (lowercase, trimmed)",
+    "name": "string — client's full name",
+    "phone": "string | null — phone number if provided",
+    "responses": "object — key-value map of form field names to answers",
+    "submittedAt": "string — ISO 8601 timestamp",
+    "driveFolderUrl": "string | null — URL to the client's onboarding Drive folder",
+    "ghlContactId": "string | null — GHL contact ID if already created"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — parse form responses",
+    "Step 2: Update GHL contact custom fields with onboarding answers",
+    "Step 3: Create a Google Doc in the client's onboarding Drive folder with form responses",
+    "Step 4: Post summary embed to staff Discord onboarding-alerts channel",
+    "Step 5: Send confirmation email to client via Gmail or GHL campaign"
+  ]
+}

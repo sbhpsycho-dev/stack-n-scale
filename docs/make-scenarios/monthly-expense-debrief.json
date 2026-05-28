@@ -1,0 +1,18 @@
+{
+  "scenario": "Monthly Expense Debrief → Finance Report + Discord Summary",
+  "envVar": null,
+  "trigger": "Make.com schedule trigger — runs on the 1st of each month at 8:00 AM ET",
+  "description": "Schedule-triggered scenario (no webhook required — Make.com initiates this one). On the first of each month, Make.com reads the prior month's expense data from the SNS Expenses Google Sheet, calculates net margin, compares against revenue from the Master Log, generates a monthly P&L summary, and posts it to the finance Discord channel. Optionally emails Evan a PDF report.",
+  "payload": null,
+  "makeSteps": [
+    "Step 1: Trigger fires on schedule (1st of month, 8 AM ET) — no incoming payload",
+    "Step 2: Read prior month's rows from Expenses Google Sheet (date, category, amount, vendor)",
+    "Step 3: Read prior month's deal rows from Master Log Google Sheet (gross, net, processor fees)",
+    "Step 4: Calculate total revenue, total expenses, net margin, and expense breakdown by category",
+    "Step 5: Build monthly P&L summary (revenue, COGS, ad spend, ops, net margin %)",
+    "Step 6: Post formatted summary embed to finance Discord channel",
+    "Step 7: (Optional) Generate PDF report via Make.com PDF module and email to Evan",
+    "Step 8: Append monthly summary row to a 'Monthly Summaries' tab in Master Log Sheet"
+  ],
+  "notes": "This scenario is schedule-triggered inside Make.com — no env var or webhook URL needed. The app does not call this one; Make.com drives it on its own schedule."
+}

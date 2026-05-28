@@ -1,0 +1,24 @@
+{
+  "scenario": "ID Verification Decision → Client Notification + Discord Invite",
+  "envVar": "MAKE_VERIFICATION_WEBHOOK_URL",
+  "trigger": "POST from /api/onboarding/verification after admin approves or rejects",
+  "description": "Fires after an admin approves or rejects a client's ID verification. On approval: Make.com sends the client their Discord OAuth invite link via email and/or SMS, updates GHL status, and posts a welcome message in the staff Discord. On rejection: sends a rejection email with reason and prompts the client to resubmit.",
+  "payload": {
+    "email": "string — client's email",
+    "name": "string — client's full name",
+    "status": "string — 'approved' | 'rejected'",
+    "reason": "string | null — rejection reason (only present when status = 'rejected')",
+    "discordChannelId": "string | null — Discord channel ID for the client (if Discord onboarding was started)",
+    "driveFolderUrl": "string | null — URL to the client's Drive folder",
+    "timestamp": "string — ISO 8601 timestamp of the decision"
+  },
+  "makeSteps": [
+    "Step 1: Receive webhook — check status field",
+    "Step 2 (approved): Send Discord invite email to client via Gmail",
+    "Step 2 (rejected): Send rejection email with reason and resubmission link",
+    "Step 3 (approved): Post staff Discord notification — client approved, Discord access granted",
+    "Step 4 (approved): Update GHL contact status to 'id_verified'",
+    "Step 4 (rejected): Update GHL contact status to 'id_rejected' with reason note",
+    "Step 5 (approved): Tag GHL contact with 'id-approved' tag for campaign enrollment"
+  ]
+}
