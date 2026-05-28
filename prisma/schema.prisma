@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum StaffRole {
+  dm_setter
+  setter
+  closer
+  coach
+  admin
+  owner
+}
+
+enum LeadSource {
+  ad
+  organic
+}
+
+enum PayoutStatus {
+  pending
+  approved
+  paid
+}
+
+// Matches CoachingStatus in src/lib/coaching-types.ts exactly
+enum ClientStatus {
+  payment_received
+  id_pending
+  id_pending_review
+  id_verified
+  onboarding_form_sent
+  onboarding_complete
+  coach_assigned
+  kickoff_booked
+  active
+  alumni
+}
+
+// Matches idVerification field values in src/lib/coaching-types.ts
+enum VerificationStatus {
+  pending
+  submitted
+  approved
+  rejected
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Staff {
+  id           String    @id // Discord user ID — stable, never changes
+  name         String
+  email        String    @unique
+  role         StaffRole @default(setter)
+  passwordHash String
+  sheetId      String? // personal Google Sheet ID
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  dealsAsSetter   Deal[]           @relation("DealSetter")
+  dealsAsCloser   Deal[]           @relation("DealCloser")
+  dealsAsDmSetter Deal[]           @relation("DealDmSetter")
+  coachingClients CoachingClient[]
+  auditLogs       AuditLog[]
+}
+
+// Matches Deal interface in src/lib/deal-types.ts
+model Deal {
+  id          String     @id @default(uuid())
+  externalId  String     @unique // "stripe-{id}" or "fanbasis-{id}"
+  date        DateTime
+  clientName  String
+  offer       String // "5K" | "10K"
+  grossAmount Float
+  processorFee Float     @default(0)
+  netAmount   Float
+  leadSource  LeadSource
+  processor   String? // "stripe" | "fanbasis"
+  notes       String?
+
+  dmSetterId String?
+  setterId   String?
+  closerId   String?
+  dmSetter   Staff? @relation("DealDmSetter", fields: [dmSetterId], references: [id])
+  setter     Staff? @relation("DealSetter",   fields: [setterId],   references: [id])
+  closer     Staff? @relation("DealCloser",   fields: [closerId],   references: [id])
+
+  // Keep name strings for backwards compat during migration from KV/Sheets
+  dmSetterName String?
+  setterName   String?
+  closerName   String?
+
+  payouts      DealPayout?
+  payoutStatus PayoutStatus @default(pending)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+// Matches DealPayout interface in src/lib/deal-types.ts
+model DealPayout {
+  id     String @id @default(uuid())
+  dealId String @unique
+  deal   Deal   @relation(fields: [dealId], references: [id])
+
+  caelum              Float @default(0)
+  mediaBuyer          Float @default(0)
+  dmSetterCut         Float @default(0) // maps to DealPayout.dmSetter
+  setterCut           Float @default(0) // maps to DealPayout.setter
+  closerCut           Float @default(0) // maps to DealPayout.closer
+  totalPayouts        Float @default(0)
+  companyReinvestment Float @default(0)
+  evanTakeHome        Float @default(0)
+}
+
+// Matches CoachingClient type in src/lib/coaching-types.ts
+model CoachingClient {
+  id               String       @id @default(uuid())
+  email            String       @unique
+  name             String
+  phone            String?
+  status           ClientStatus @default(payment_received)
+  ghlContactId     String?
+  discordId        String?
+  discordChannelId String?
+
+  // Flattened from coaching-types.ts driveFolder object
+  driveFolderUrl          String?
+  driveFolderId           String?
+  driveIdVerFolderId      String?
+  driveOnboardingFolderId String?
+  driveNotesFolderId      String?
+
+  coachId String?
+  coach   Staff?  @relation(fields: [coachId], references: [id])
+
+  idVerification  IdVerification?
+  activeDate      DateTime?
+  rejectionReason String?
+  reportedIncome  Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Matches idVerification field on CoachingClient in src/lib/coaching-types.ts
+model IdVerification {
+  id       String         @id @default(uuid())
+  clientId String         @unique
+  client   CoachingClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  status VerificationStatus @default(pending)
+
+  // Vercel Blob URLs
+  blobFrontUrl  String?
+  blobSelfieUrl String?
+  blobSigUrl    String?
+
+  // Google Drive file IDs
+  driveFrontId     String?
+  driveSelfieId    String?
+  driveSignatureId String?
+
+  submittedAt    DateTime?
+  verifiedAt     DateTime?
+  rejectedReason String?
+}
+
+// Matches Lead interface in src/lib/lead-types.ts
+// Note: contactHistory stored separately to avoid JSON blob; callUrl + notes kept here
+model Lead {
+  id         String   @id @default(uuid())
+  externalId String?  @unique // GHL contact ID or Meta lead ID
+  name       String
+  email      String?
+  phone      String?
+  source     String? // "ghl" | "meta" | "fanbasis" | "manual"
+  state      String   @default("opted_in") // LeadState values
+  notes      String?
+  callUrl    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Matches SNSExpense interface in src/lib/expense-types.ts
+model Expense {
+  id          String  @id @default(uuid())
+  date        String // "YYYY-MM" for fixed recurring; "YYYY-MM-DD" for variable
+  vendor      String
+  description String
+  amount      Float
+  category    String // ExpenseCategory values: advertising | software | payment_processing | team | legal | other
+  recurrence  String // "fixed" | "variable"
+  isSeeded    Boolean @default(false)
+  notes       String?
+
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String // Staff Discord ID
+  actor      Staff    @relation(fields: [actorId], references: [id])
+  action     String // "deal.created" | "payout.approved" | "client.status_changed"
+  entityId   String // deal ID, client email, etc.
+  entityType String // "deal" | "client" | "payout" | "staff" | "expense"
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityId])
+  @@index([action])
+  @@index([createdAt])
+}
