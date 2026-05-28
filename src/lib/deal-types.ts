@@ -11,6 +11,10 @@ export interface Deal {
   dmSetter: string | null;
   setter: string | null;
   closer: string | null;
+  // Discord IDs — populated after staff migration; additive, don't remove name fields above
+  dmSetterId?: string | null;
+  setterId?: string | null;
+  closerId?: string | null;
   payouts: DealPayout;
   payoutStatus: "pending" | "approved" | "paid";
   notes: string;

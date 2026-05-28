@@ -8,6 +8,7 @@ import { PayoutSplitChart } from "@/components/charts/payout-charts";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Loader2, RefreshCw, CheckCircle } from "lucide-react";
 import { toast, toastError } from "@/lib/toast";
+import type { ExpenseSummary } from "@/lib/expense-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export default function MoneyPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
   const [data, setData] = useState<MoneyData | null>(null);
+  const [expenses, setExpenses] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [approving, setApproving] = useState(false);
@@ -75,13 +77,18 @@ export default function MoneyPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     try {
-      const res = await fetch("/api/staff/money");
-      if (res.ok) {
-        setData(await res.json());
+      const [moneyRes, expenseRes] = await Promise.all([
+        fetch("/api/staff/money"),
+        fetch(`/api/expenses/summary?month=${currentMonth}`),
+      ]);
+      if (moneyRes.ok) {
+        setData(await moneyRes.json());
       } else {
         setError("Failed to load financial data.");
       }
+      if (expenseRes.ok) setExpenses(await expenseRes.json());
     } catch {
       setError("Network error. Check your connection and try again.");
     } finally {
@@ -237,6 +244,39 @@ export default function MoneyPage() {
             })}
           </div>
         </CC>
+
+        {/* Section 2b — Operating Costs & True P&L */}
+        {expenses && expenses.grandTotal > 0 && m && (
+          <CC title="Operating Costs & True P&L (MTD)">
+            <div className="space-y-1">
+              {([
+                ["Evan Take Home",       m.evanTakeHome,            false] as [string, number, boolean],
+                ["Fixed Overhead",       expenses.totalFixed,       true ] as [string, number, boolean],
+                ["Variable Overhead",    expenses.totalVariable,    true ] as [string, number, boolean],
+                ["Total Overhead",       expenses.grandTotal,       true ] as [string, number, boolean],
+              ]).map(([label, val, isExpense]) => (
+                <div key={label} className={`flex justify-between items-center py-1.5 text-sm ${isExpense ? "text-red-400" : ""}`}>
+                  <span className={isExpense ? "" : "text-muted-foreground"}>{label}</span>
+                  <span>{isExpense ? `-${fmt$(val)}` : fmt$(val)}</span>
+                </div>
+              ))}
+              {/* True Net separator */}
+              {(() => {
+                const trueNet = m.evanTakeHome - expenses.grandTotal;
+                const isPositive = trueNet >= 0;
+                return (
+                  <div className={`flex justify-between items-center py-1.5 text-sm font-bold border-t border-border mt-1 pt-2 ${isPositive ? "text-green-400" : "text-red-400"}`}>
+                    <span>True Net</span>
+                    <span>{isPositive ? "" : "-"}{fmt$(Math.abs(trueNet))}</span>
+                  </div>
+                );
+              })()}
+              <p className="text-[10px] text-muted-foreground pt-1">
+                True Net = Evan Take Home − Operating Overhead
+              </p>
+            </div>
+          </CC>
+        )}
 
         {/* Section 3 — Pie chart */}
         {data?.pie && data.pie.length > 0 && (
