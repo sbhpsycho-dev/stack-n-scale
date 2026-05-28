@@ -10,6 +10,7 @@ import type { Lead } from "@/lib/lead-types";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts } from "@/lib/payout-calc";
 import { syncDealToSheets } from "@/lib/sheets-sync";
+import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
 
@@ -62,9 +63,28 @@ export async function POST(req: Request) {
     };
     deal.payouts = calculatePayouts(deal);
     await kv.set(`sns:deals:${dealId}`, deal);
-    const idx = (await kv.get<string[]>("sns:deals:index")) ?? [];
-    await kv.set("sns:deals:index", [dealId, ...idx]);
-    syncDealToSheets(deal).catch(e => console.error("Sheets sync error:", e));
+    await kv.lpush("sns:deals:index", dealId);
+    // Dual-path: Make.com (primary) + direct Sheets (fallback while migrating)
+    const dealPayload = {
+      id:           deal.id,
+      date:         deal.date,
+      clientName:   deal.clientName,
+      offer:        deal.offer,
+      grossAmount:  deal.grossAmount,
+      netAmount:    deal.netAmount,
+      leadSource:   deal.leadSource,
+      processor:    deal.processor,
+      dmSetter:     deal.dmSetter ?? null,
+      setter:       deal.setter ?? null,
+      closer:       deal.closer ?? null,
+      payouts:      deal.payouts,
+      payoutStatus: deal.payoutStatus,
+      notes:        deal.notes ?? null,
+    };
+    triggerScenario("MAKE_DEAL_WEBHOOK_URL", dealPayload).catch(() => {});
+    if (!process.env.MAKE_DEAL_WEBHOOK_URL) {
+      syncDealToSheets(deal).catch(e => console.error("[sheets]", e));
+    }
   }
 
   // Coaching client creation requires both email and name
@@ -127,8 +147,7 @@ export async function POST(req: Request) {
     createdAt: client.createdAt, updatedAt: client.createdAt, contactHistory: [],
   };
   await kv.set(`sns:leads:${leadId}`, lead);
-  const leadIndex = (await kv.get<string[]>("sns:leads:index")) ?? [];
-  await kv.set("sns:leads:index", [leadId, ...leadIndex]);
+  await kv.lpush("sns:leads:index", leadId);
 
   after(async () => {
     const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";

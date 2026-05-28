@@ -1,10 +1,22 @@
-import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet, getOrCreateDriveFolder, uploadTextToDrive } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
+import { sendErrorAlert } from "@/lib/alert";
+import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
+export const maxDuration = 20; // Vercel function max duration in seconds
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "https://stack-n-scale-site.vercel.app",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
 
 const DISCORD_API  = "https://discord.com/api/v10";
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN ?? "";
@@ -15,7 +27,7 @@ const ADMIN2_ID    = process.env.DISCORD_ADMIN2_USER_ID ?? "";
 const GENERAL_CH   = process.env.DISCORD_GENERAL_CHANNEL_ID ?? "";
 const BOILER_ROOM_CH = process.env.DISCORD_BOILER_ROOM_CHANNEL_ID ?? "";
 const CLIENT_ID    = process.env.DISCORD_CLIENT_ID ?? "";
-const APP_URL      = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
+const APP_URL      = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
 
 async function discordRequest(path: string, method: string, body?: unknown) {
   const res = await fetch(`${DISCORD_API}${path}`, {
@@ -59,7 +71,7 @@ export async function POST(req: Request) {
       const rateLimitKey = `sns:onboarding:ratelimit:${rawEmail}`;
       const last = await kv.get<number>(rateLimitKey);
       if (last && Date.now() - last < 60_000) {
-        return Response.json({ ok: false, error: "Too many requests — please wait before resubmitting." }, { status: 429 });
+        return Response.json({ ok: false, error: "Too many requests — please wait before resubmitting." }, { status: 429, headers: CORS_HEADERS });
       }
       await kv.set(rateLimitKey, Date.now(), { ex: 3600 });
     }
@@ -77,14 +89,14 @@ export async function POST(req: Request) {
     ];
     for (const [val, label] of requiredFields) {
       const err = validateTextField(val, label);
-      if (err) return Response.json({ ok: false, error: err }, { status: 400 });
+      if (err) return Response.json({ ok: false, error: err }, { status: 400, headers: CORS_HEADERS });
     }
     if (additionalNotes && (typeof additionalNotes !== "string" || additionalNotes.length > MAX_TEXT_LEN)) {
-      return Response.json({ ok: false, error: "Additional notes exceeds maximum length" }, { status: 400 });
+      return Response.json({ ok: false, error: "Additional notes exceeds maximum length" }, { status: 400, headers: CORS_HEADERS });
     }
 
     if (!EMAIL_REGEX.test(email)) {
-      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400 });
+      return Response.json({ ok: false, error: "Invalid email address" }, { status: 400, headers: CORS_HEADERS });
     }
 
     const submittedAt = new Date().toISOString();
@@ -104,6 +116,19 @@ export async function POST(req: Request) {
     if (existing) {
       await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
     }
+
+    // Trigger Make.com Onboarding Form scenario (non-blocking)
+    triggerScenario("MAKE_ONBOARDING_FORM_WEBHOOK_URL", {
+      name,
+      email: email.toLowerCase(),
+      ghlContactId: existing?.ghlContactId ?? null,
+      responses: {
+        goal: goal30Days,
+        current_income: "",
+        commitment_hours: "",
+      },
+      submittedAt,
+    }).catch(() => {});
 
     // 3. Append to Google Sheets (non-blocking)
     const sheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
@@ -154,37 +179,31 @@ export async function POST(req: Request) {
     ].join("\n");
     const formFile = Buffer.from(formText, "utf8").toString("base64");
 
-    // 4. Send form received confirmation email + Drive doc upload (non-blocking via after).
-    // Always use after() so the upload survives past the response — re-reads KV to pick up
-    // any driveFolder the ID route may have created between our initial read and now.
-    after(async () => {
-      try {
-        const latest = await kv.get<CoachingClient>(clientKey);
-        let onboardingFolderId = latest?.driveFolder?.onboardingFolderId;
-        let notesFolderId = latest?.driveFolder?.notesFolderId;
+    // 4. Create Drive folder + upload form doc (async — don't block the user).
+    let onboardingFolderId: string | undefined;
+    let notesFolderId: string | undefined;
 
-        if (!onboardingFolderId) {
-          const folder = await getOrCreateDriveFolder(clientKey, latest?.name || name);
-          onboardingFolderId = folder?.onboardingFolderId;
-          notesFolderId = folder?.notesFolderId;
-        }
+    getOrCreateDriveFolder(clientKey, existing?.name || name)
+      .then(folder => {
+        onboardingFolderId = folder.onboardingFolderId;
+        notesFolderId      = folder.notesFolderId;
+        return uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+      })
+      .catch(async (driveError) => {
+        await kv.set(`sns:drive:failed:form:${email.toLowerCase()}`, {
+          error: driveError instanceof Error ? driveError.message : String(driveError),
+          failedAt: new Date().toISOString(),
+        });
+        sendErrorAlert("Drive folder/upload failed — onboarding form", driveError, { email, name }).catch(() => {});
+      });
 
-        const emailPayload = { onboardingFolderId, notesFolderId, formData };
+    const emailPayload = { onboardingFolderId, notesFolderId, formData };
 
-        if (onboardingFolderId) {
-          await uploadTextToDrive(onboardingFolderId, "Onboarding Form.txt", formText)
-            .catch(e => console.error("Drive upload error:", e));
-        }
-        triggerEmail("form_received", email, name, emailPayload)
-          .catch(e => console.error("Form received email error:", e));
-        triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
-          .catch(e => console.error("Drive docs error:", e));
-      } catch (e) {
-        console.error("Drive folder setup error (form):", e);
-        triggerEmail("form_received", email, name, { formData })
-          .catch(err => console.error("Form received email error:", err));
-      }
-    });
+    // Trigger email + Drive docs webhooks (non-blocking — Drive work is already done above)
+    triggerEmail("form_received", email, name, emailPayload)
+      .catch(e => console.error("Form received email error:", e));
+    triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
+      .catch(e => console.error("Drive docs error:", e));
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth
     let discordOAuthUrl: string | null = null;
@@ -282,9 +301,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return Response.json({ ok: true, discordOAuthUrl });
+    return Response.json({ ok: true, discordOAuthUrl }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("Onboarding form error:", err);
-    return Response.json({ ok: false, error: "Server error" }, { status: 500 });
+    return Response.json({ ok: false, error: "Server error" }, { status: 500, headers: CORS_HEADERS });
   }
 }

@@ -561,6 +561,12 @@ export default function Dashboard() {
               </Link>
             )}
             {isAdmin && (
+              <Link href="/staff/expenses"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
+                Expenses
+              </Link>
+            )}
+            {isAdmin && (
               <Button size="sm" variant="ghost" onClick={syncKpiData} disabled={kpiSyncing}
                 className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
                 <RefreshCw className={`h-3.5 w-3.5 ${kpiSyncing ? "animate-spin" : ""}`} />

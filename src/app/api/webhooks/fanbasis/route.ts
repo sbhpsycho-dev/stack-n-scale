@@ -1,5 +1,5 @@
 import { kv } from "@vercel/kv";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual, createHash } from "crypto";
 import { createContact } from "@/lib/ghl";
 import { triggerEmail, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
@@ -8,8 +8,45 @@ import type { Lead } from "@/lib/lead-types";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts } from "@/lib/payout-calc";
 import { syncDealToSheets } from "@/lib/sheets-sync";
+import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
+
+/** LPUSH that self-heals if the key holds a wrong type (deletes + retries). */
+async function kvSafeLpush(key: string, value: string): Promise<void> {
+  try {
+    await kv.lpush(key, value);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("WRONGTYPE")) {
+      await kv.del(key);
+      await kv.lpush(key, value);
+    } else {
+      throw e;
+    }
+  }
+}
+
+function verifyFanbasisSecret(provided: string | null, expected: string): boolean {
+  if (!provided) return false;
+  if (provided.length !== expected.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
+function getFanbasisDealId(paymentId: string | undefined, email: string, amount: number, date: string): string {
+  if (paymentId) return `fanbasis-${paymentId}`;
+  // Deterministic fallback: hash of email + amount + date (rounded to day)
+  const day = date.split("T")[0]; // "2026-05-26"
+  const hash = createHash("sha256")
+    .update(`${email}:${amount}:${day}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `fanbasis-anon-${hash}`;
+}
 
 // Accepts two shapes:
 //   Native Fanbasis: { payment_id, buyer: { email, name }, amount }
@@ -34,10 +71,20 @@ type FanbasisPayload = {
 };
 
 export async function POST(req: Request) {
+  try {
+    return await handleFanbasis(req);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[fanbasis] Unhandled error:", msg);
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
+}
+
+async function handleFanbasis(req: Request) {
   const secret = process.env.FANBASIS_WEBHOOK_SECRET;
   if (!secret) return new Response("Webhook not configured", { status: 500 });
   const provided = req.headers.get("x-webhook-secret");
-  if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+  if (!verifyFanbasisSecret(provided, secret)) return new Response("Unauthorized", { status: 401 });
 
   let payload: FanbasisPayload;
   try {
@@ -63,11 +110,12 @@ export async function POST(req: Request) {
 
   // ── Deal record ────────────────────────────────────────────────────────────────
   if (amountCents > 0) {
-    const dealId      = payload.payment_id ? `fanbasis-${payload.payment_id}` : `fanbasis-${Date.now()}`;
+    const dealDate    = new Date().toISOString();
     const grossAmount = amountCents / 100;
+    const dealId      = getFanbasisDealId(payload.payment_id, email, grossAmount, dealDate);
     const deal: Deal  = {
       id:           dealId,
-      date:         new Date().toISOString().split("T")[0],
+      date:         dealDate.split("T")[0],
       clientName:   rawName,
       offer:        ((payload as Record<string, string>).offer === "10K" ? "10K" : "5K") as Deal["offer"],
       grossAmount,
@@ -83,10 +131,34 @@ export async function POST(req: Request) {
       notes:        "",
     };
     deal.payouts = calculatePayouts(deal);
-    await kv.set(`sns:deals:${dealId}`, deal);
-    const idx = (await kv.get<string[]>("sns:deals:index")) ?? [];
-    await kv.set("sns:deals:index", [dealId, ...idx]);
-    syncDealToSheets(deal).catch(e => console.error("Sheets sync error:", e));
+    // Idempotency check: skip if this deal ID was already stored
+    const dedupKey = `sns:fanbasis:deal:${dealId}`;
+    const alreadyStored = !(await kv.set(dedupKey, true, { nx: true, ex: 60 * 60 * 24 * 7 }));
+    if (!alreadyStored) {
+      await kv.set(`sns:deals:${dealId}`, deal);
+      await kvSafeLpush("sns:deals:index", dealId);
+      // Dual-path: Make.com (primary) + direct Sheets (fallback while migrating)
+      const dealPayload = {
+        id:           deal.id,
+        date:         deal.date,
+        clientName:   deal.clientName,
+        offer:        deal.offer,
+        grossAmount:  deal.grossAmount,
+        netAmount:    deal.netAmount,
+        leadSource:   deal.leadSource,
+        processor:    deal.processor,
+        dmSetter:     deal.dmSetter ?? null,
+        setter:       deal.setter ?? null,
+        closer:       deal.closer ?? null,
+        payouts:      deal.payouts,
+        payoutStatus: deal.payoutStatus,
+        notes:        deal.notes ?? null,
+      };
+      triggerScenario("MAKE_DEAL_WEBHOOK_URL", dealPayload).catch(() => {});
+      if (!process.env.MAKE_DEAL_WEBHOOK_URL) {
+        syncDealToSheets(deal).catch(e => console.error("[sheets]", e));
+      }
+    }
   }
 
   const clientKey = `sns:coaching:client:${email}`;
@@ -154,15 +226,18 @@ export async function POST(req: Request) {
     createdAt: now, updatedAt: now, contactHistory: [],
   };
   await kv.set(`sns:leads:${leadId}`, lead);
-  const leadIndex = (await kv.get<string[]>("sns:leads:index")) ?? [];
-  await kv.set("sns:leads:index", [leadId, ...leadIndex]);
+  await kvSafeLpush("sns:leads:index", leadId);
 
   // 4. Welcome + onboarding email + campaign sequence
   const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
+  const APP_URL = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
+  const idVerificationUrl = `${APP_URL}/onboarding/id-submit?email=${encodeURIComponent(email)}&name=${encodeURIComponent(rawName)}`;
   triggerEmail("welcome", email, rawName, {
     driveFolderUrl: driveFolder?.url,
     skoolLink: SKOOL_LINK,
   }).catch(e => console.error("Welcome email error:", e));
+  triggerEmail("id_verification_request", email, rawName, { idVerificationUrl })
+    .catch(e => console.error("ID verification request email error:", e));
   triggerCampaign(email, rawName, amountCents, "fanbasis").catch(e => console.error("Campaign trigger error:", e));
 
   // 5. Discord notifications

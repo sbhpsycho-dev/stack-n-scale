@@ -2,8 +2,33 @@
  * Creates and activates the SNS Rep Daily Log scenario on Make.com.
  * Prints the generated webhook URL to set as MAKE_REPLOG_WEBHOOK_URL in Vercel.
  *
- * Run: node scripts/create_replog_webhook.mjs
+ * Usage (pick one):
+ *   DISCORD_WEBHOOK_BOILER_ROOM=https://discord.com/api/webhooks/... node scripts/create_replog_webhook.mjs
+ *   node scripts/create_replog_webhook.mjs https://discord.com/api/webhooks/...
+ *   (or set DISCORD_WEBHOOK_BOILER_ROOM= in .env.local)
+ *
+ * Get the Discord webhook URL from:
+ *   Discord → channel settings → Integrations → Webhooks → #boiler-room
  */
+
+import { readFileSync } from "fs";
+
+// Load .env.local so DISCORD_WEBHOOK_BOILER_ROOM can be set there
+let envLocal = {};
+try {
+  const raw = readFileSync(new URL("../.env.local", import.meta.url), "utf-8");
+  envLocal = Object.fromEntries(
+    raw
+      .split("\n")
+      .filter(l => l.includes("=") && !l.trimStart().startsWith("#"))
+      .map(l => {
+        const i = l.indexOf("=");
+        return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^"|"$/g, "")];
+      })
+  );
+} catch {
+  // .env.local not found — that's fine, we'll check process.env and argv
+}
 
 const TOKEN       = "8b0d2a1a-a0ab-49c9-818e-ba1d0ad7d32a";
 const BASE        = "https://us2.make.com/api/v2";
@@ -12,9 +37,21 @@ const EXISTING_ID = 4869898; // email router — used to discover teamId
 const APP_URL       = "https://stack-n-scale.vercel.app";
 const SHEETS_SECRET = "97b88badbfe6465a86b2621d942e8c0b9e942c31e0d0cbb8459c46d113e8497e";
 
-// Discord webhook URL for #boiler-room — fill in after getting it from Discord
-// Channel: Server Settings → Integrations → Webhooks → boiler-room
-const DISCORD_WEBHOOK_URL = "REPLACE_WITH_BOILER_ROOM_DISCORD_WEBHOOK_URL";
+// Discord webhook URL for #boiler-room
+// Set DISCORD_WEBHOOK_BOILER_ROOM in .env.local or pass as the first CLI argument
+const DISCORD_WEBHOOK_URL =
+  process.env.DISCORD_WEBHOOK_BOILER_ROOM ||
+  envLocal.DISCORD_WEBHOOK_BOILER_ROOM ||
+  process.argv[2] ||
+  (() => {
+    console.error("\n❌  Discord boiler-room webhook URL is required.\n");
+    console.error("Get it from: Discord → #boiler-room → Edit Channel → Integrations → Webhooks\n");
+    console.error("Then run one of:");
+    console.error("  DISCORD_WEBHOOK_BOILER_ROOM=https://discord.com/api/webhooks/... node scripts/create_replog_webhook.mjs");
+    console.error("  node scripts/create_replog_webhook.mjs https://discord.com/api/webhooks/...");
+    console.error("  (or set DISCORD_WEBHOOK_BOILER_ROOM= in .env.local)\n");
+    process.exit(1);
+  })();
 
 const headers = { "Authorization": `Token ${TOKEN}`, "Content-Type": "application/json" };
 

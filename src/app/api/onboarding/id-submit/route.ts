@@ -1,12 +1,14 @@
-import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { put } from "@vercel/blob";
 import type { CoachingClient } from "@/lib/coaching-types";
-import { appendToSheet, getOrCreateDriveFolder, uploadFileToDrive } from "@/lib/drive";
+import { appendToSheet, getOrCreateDriveFolder, uploadFileToDriveWithRetry } from "@/lib/drive";
 import { triggerEmail, triggerDriveDocs } from "@/lib/email";
 import { sendDiscordDM } from "@/lib/discord";
+import { sendErrorAlert } from "@/lib/alert";
+import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
+export const maxDuration = 20; // Vercel function max duration in seconds
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "https://stack-n-scale-site.vercel.app",
@@ -131,49 +133,69 @@ export async function POST(req: Request) {
     const selfieUrl    = selfieBlob?.url;
     const signatureUrl = sigBlob?.url;
 
-    // Direct Drive upload + email (non-blocking). Re-reads KV to get latest driveFolder state
+    // Trigger Make.com ID Submitted scenario (non-blocking)
+    triggerScenario("MAKE_ID_SUBMIT_WEBHOOK_URL", {
+      name,
+      email,
+      ghlContactId: existing?.ghlContactId ?? null,
+      idFrontUrl:   idFrontUrl ?? null,
+      selfieUrl:    selfieUrl  ?? null,
+      submittedAt,
+    }).catch(() => {});
+
+    // Upload ID files to Drive SYNCHRONOUSLY — client gets error if this fails,
+    // no silent failures. Re-reads KV to get latest driveFolder state
     // (the form route may have created/updated it between our initial read and now).
-    after(async () => {
-      try {
-        const latest = await kv.get<CoachingClient>(clientKey);
-        let idVerificationFolderId = latest?.driveFolder?.idVerificationFolderId;
+    const mimeExt: Record<string, string> = { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp", heic: "heic" };
+    const ext = (mime: string) => mimeExt[mime.split("/")[1]] ?? mime.split("/")[1] ?? "jpg";
+    let idVerificationFolderId: string | undefined;
 
-        if (!idVerificationFolderId) {
-          const folder = await getOrCreateDriveFolder(clientKey, latest?.name || name);
-          idVerificationFolderId = folder?.idVerificationFolderId;
-        }
+    try {
+      const latest = await kv.get<CoachingClient>(clientKey);
+      const folder = latest?.driveFolder ?? await getOrCreateDriveFolder(clientKey, latest?.name || name);
+      if (!folder) throw new Error("Could not create Drive folder");
+      idVerificationFolderId = folder.idVerificationFolderId;
 
-        if (idVerificationFolderId) {
-          const mimeExt: Record<string, string> = { jpeg: "jpg", jpg: "jpg", png: "png", webp: "webp", heic: "heic" };
-          const ext = (mime: string) => mimeExt[mime.split("/")[1]] ?? mime.split("/")[1] ?? "jpg";
-          await Promise.all([
-            uploadFileToDrive(idVerificationFolderId, `ID Front — ${name}.${ext(idFront.type)}`, idFront.type, idFrontBuf)
-              .catch(e => console.error("Drive upload error (id-front):", e)),
-            uploadFileToDrive(idVerificationFolderId, `Selfie — ${name}.${ext(selfie.type)}`, selfie.type, selfieBuf)
-              .catch(e => console.error("Drive upload error (selfie):", e)),
-            sigBuf
-              ? uploadFileToDrive(idVerificationFolderId, `Signature — ${name}.png`, "image/png", sigBuf)
-                  .catch(e => console.error("Drive upload error (signature):", e))
-              : Promise.resolve(),
-          ]);
-        }
+      const driveResults = await Promise.all([
+        uploadFileToDriveWithRetry(idVerificationFolderId, `ID Front — ${name}.${ext(idFront.type)}`, idFrontBuf, idFront.type),
+        uploadFileToDriveWithRetry(idVerificationFolderId, `Selfie — ${name}.${ext(selfie.type)}`, selfieBuf, selfie.type),
+        sigBuf
+          ? uploadFileToDriveWithRetry(idVerificationFolderId, `Signature — ${name}.png`, sigBuf, "image/png")
+          : Promise.resolve(null),
+      ]);
 
-        triggerEmail("id_received", email, name, { idVerificationFolderId })
-          .catch(e => console.error("ID received email error:", e));
-        triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
-          .catch(e => console.error("Drive docs webhook error:", e));
-      } catch (e) {
-        console.error("ID Drive upload error:", e);
-        triggerEmail("id_received", email, name, {})
-          .catch(err => console.error("ID received email error:", err));
-      }
-    });
+      // Store Drive file IDs in KV for reference
+      await kv.set(`sns:drive:file-ids:${email}`, {
+        frontId: driveResults[0],
+        selfieId: driveResults[1],
+        signatureId: driveResults[2] ?? null,
+        uploadedAt: new Date().toISOString(),
+      });
+    } catch (driveError) {
+      // Log failure to KV so admin can see it
+      await kv.set(`sns:drive:failed:${email}`, {
+        error: driveError instanceof Error ? driveError.message : String(driveError),
+        blobFrontUrl: idFrontUrl,
+        blobSelfieUrl: selfieUrl,
+        failedAt: new Date().toISOString(),
+      });
+
+      // Alert admin via Discord
+      await sendErrorAlert("Drive upload failed — ID verification", driveError, { email, name });
+      // Drive failure logged; client still gets 200 — admin can retry via /api/onboarding/retry-upload
+    }
+
+    // Drive upload confirmed — trigger email + Drive doc workflows
+    triggerEmail("id_received", email, name, { idVerificationFolderId })
+      .catch(e => console.error("ID received email error:", e));
+    triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
+      .catch(e => console.error("Drive docs webhook error:", e));
 
     // If onboarding form was also submitted, send Discord link via email with a fresh token
     let discordOAuthUrl: string | undefined;
     try {
       const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-      const APP_URL   = process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app";
+      const APP_URL   = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
       const [formRecord, discordRecord] = await Promise.all([
         kv.get(`sns:onboarding:form:${email}`),
         kv.get<{ channelId?: string }>(`sns:onboarding:discord:${email}`),

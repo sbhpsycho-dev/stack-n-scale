@@ -112,6 +112,30 @@ export async function uploadFileToDrive(
   });
 }
 
+// Explicit retry wrapper with exponential backoff (1s, 2s, 4s).
+// Exists as a named export so callers can signal intent — "this upload
+// will be retried" — without relying on the internal withRetry().
+export async function uploadFileToDriveWithRetry(
+  folderId: string,
+  fileName: string,
+  buffer: Buffer,
+  mimeType: string,
+  retries = 3
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await uploadFileToDrive(folderId, fileName, mimeType, buffer);
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export type ClientDocs = {
   folderUrl: string;
   folderId: string;
@@ -133,11 +157,14 @@ export async function appendToSheet(spreadsheetId: string, row: string[], range 
 
 // Atomically get or create a client's Drive folder, preventing duplicate creation
 // under concurrent form + ID submissions. Uses a KV setnx lock.
+// Throws on failure — callers must not treat a missing folder as a non-fatal condition.
 export async function getOrCreateDriveFolder(
   clientKey: string,
   clientName: string
-): Promise<DriveFolder | null> {
-  if (!process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) return null;
+): Promise<DriveFolder> {
+  if (!process.env.GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID) {
+    throw new Error(`GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID is not configured — cannot create Drive folder for ${clientName}`);
+  }
 
   const fresh = await kv.get<CoachingClient>(clientKey);
   if (fresh?.driveFolder) return fresh.driveFolder;
@@ -152,11 +179,17 @@ export async function getOrCreateDriveFolder(
       const polled = await kv.get<CoachingClient>(clientKey);
       if (polled?.driveFolder) return polled.driveFolder;
     }
-    return null;
+    throw new Error(`Drive folder creation timed out for ${clientKey} — folder lock held by concurrent request`);
   }
 
   try {
-    const folders = await setupClientFolder(clientName);
+    let folders: ClientDocs;
+    try {
+      folders = await setupClientFolder(clientName);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to set up Drive folder for client "${clientName}": ${msg}`);
+    }
     const driveFolder: DriveFolder = {
       url: folders.folderUrl,
       id: folders.folderId,

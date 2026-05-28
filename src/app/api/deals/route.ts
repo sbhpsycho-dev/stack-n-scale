@@ -7,7 +7,9 @@ import type { Session } from "next-auth";
 import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts, getWeekId } from "@/lib/payout-calc";
 import { syncDealToSheets, triggerMakeDealWebhook } from "@/lib/sheets-sync";
+import { triggerScenario } from "@/lib/make";
 import { BLANK, type SalesData } from "@/lib/sales-data";
+import { logAudit } from "@/lib/audit";
 
 function authGuard(session: Session | null) {
   return !session || (session.user.role !== "admin" && session.user.role !== "staff");
@@ -24,7 +26,7 @@ export async function GET(req: Request) {
   const rep       = searchParams.get("rep");
   const source    = searchParams.get("source");
 
-  const ids = (await kv.get<string[]>("sns:deals:index")) ?? [];
+  const ids = (await kv.lrange("sns:deals:index", 0, -1)) ?? [];
   if (!ids.length) return Response.json({ deals: [] });
 
   const deals = (
@@ -86,26 +88,52 @@ export async function POST(req: Request) {
 
   await kv.set(`sns:deals:${id}`, partial);
 
-  // Append to index
-  const existing = (await kv.get<string[]>("sns:deals:index")) ?? [];
-  await kv.set("sns:deals:index", [id, ...existing]);
+  // Append to index — atomic, no read-modify-write race
+  await kv.lpush("sns:deals:index", id);
 
-  // Add to weekly pending
+  // Audit log — fire and forget, never blocks the response
+  logAudit(
+    session?.user?.clientId ?? "system",
+    (session?.user as any)?.name ?? "system",
+    "deal.created",
+    partial.id,
+    "deal",
+    { after: { clientName: partial.clientName, grossAmount: partial.grossAmount, offer: partial.offer } }
+  ).catch(() => {});
+
+  // Add to weekly pending — atomic lpush
   const weekId = getWeekId(new Date(body.date));
   const pendingKey = "sns:payouts:pending";
-  const pending = (await kv.get<string[]>(pendingKey)) ?? [];
-  if (!pending.includes(id)) await kv.set(pendingKey, [...pending, id]);
+  await kv.lpush(pendingKey, id);
 
-  // Update weekly batch
-  const weekKey = `sns:payouts:weekly:${weekId}`;
-  const week = await kv.get<{ dealIds: string[] }>(weekKey);
-  const weekDealIds = week?.dealIds ?? [];
-  if (!weekDealIds.includes(id)) {
-    await kv.set(weekKey, { ...week, weekId, dealIds: [...weekDealIds, id], status: "pending" });
+  // Update weekly batch — store deal list atomically, metadata separately
+  const weekDealsKey = `sns:payouts:weekly:deals:${weekId}`;
+  const weekMetaKey  = `sns:payouts:weekly:meta:${weekId}`;
+  await kv.lpush(weekDealsKey, id);
+  // Only set metadata if it doesn't already exist (nx keeps first-writer wins)
+  await kv.set(weekMetaKey, { weekId, status: "pending" }, { nx: true });
+
+  // Dual-path: Make.com (primary) + direct Sheets (fallback while migrating)
+  const dealPayload = {
+    id:            partial.id,
+    date:          partial.date,
+    clientName:    partial.clientName,
+    offer:         partial.offer,
+    grossAmount:   partial.grossAmount,
+    netAmount:     partial.netAmount,
+    leadSource:    partial.leadSource,
+    processor:     partial.processor,
+    dmSetter:      partial.dmSetter ?? null,
+    setter:        partial.setter ?? null,
+    closer:        partial.closer ?? null,
+    payouts:       partial.payouts,
+    payoutStatus:  partial.payoutStatus,
+    notes:         partial.notes ?? null,
+  };
+  triggerScenario("MAKE_DEAL_WEBHOOK_URL", dealPayload).catch(() => {});
+  if (!process.env.MAKE_DEAL_WEBHOOK_URL) {
+    syncDealToSheets(partial).catch(e => console.error("[sheets]", e));
   }
-
-  // Sync to Google Sheets immediately — fire and forget
-  syncDealToSheets(partial).catch(e => console.error("[deals] sheets sync failed:", e));
   // Trigger Make.com payout agent — fires automatically with every new deal
   triggerMakeDealWebhook(partial).catch(e => console.error("[deals] make webhook failed:", e));
 
@@ -115,7 +143,7 @@ export async function POST(req: Request) {
     try {
       const now = new Date();
       const monthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-      const allIds = (await kv.get<string[]>("sns:deals:index")) ?? [];
+      const allIds = (await kv.lrange("sns:deals:index", 0, -1)) ?? [];
       const allDeals = (await Promise.all(allIds.map(i => kv.get<Deal>(`sns:deals:${i}`)))).filter((d): d is Deal => d !== null);
       const mtd = allDeals.filter(d => d.date >= monthStr);
 

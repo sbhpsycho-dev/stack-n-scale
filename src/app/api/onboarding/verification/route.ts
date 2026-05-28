@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { updateContact } from "@/lib/ghl";
 import { triggerEmail } from "@/lib/email";
+import { triggerScenario } from "@/lib/make";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -33,6 +34,15 @@ export async function POST(req: Request) {
     });
     await kv.set(clientKey, { ...client, idVerification: "approved", status: "id_verified" });
     triggerEmail("approval", clientEmail, clientName).catch(console.error);
+    triggerScenario("MAKE_VERIFICATION_WEBHOOK_URL", {
+      email:            clientEmail,
+      name:             clientName,
+      status:           "approved",
+      reason:           null,
+      discordChannelId: (client.discordChannel as Record<string, string> | undefined)?.channelId ?? null,
+      driveFolderUrl:   (client.driveFolder as Record<string, string> | undefined)?.url ?? null,
+      timestamp:        new Date().toISOString(),
+    }).catch(() => {});
 
     // Generate a fresh OAuth state token (original expires in 24h; approval may come later)
     const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
@@ -80,6 +90,15 @@ export async function POST(req: Request) {
       rejectionReason: notes,
     });
     triggerEmail("rejection", clientEmail, clientName, { reason: notes ?? "" }).catch(console.error);
+    triggerScenario("MAKE_VERIFICATION_WEBHOOK_URL", {
+      email:            clientEmail,
+      name:             clientName,
+      status:           "rejected",
+      reason:           notes ?? null,
+      discordChannelId: (client.discordChannel as Record<string, string> | undefined)?.channelId ?? null,
+      driveFolderUrl:   (client.driveFolder as Record<string, string> | undefined)?.url ?? null,
+      timestamp:        new Date().toISOString(),
+    }).catch(() => {});
     return Response.json({ ok: true, action: "rejected" });
   }
 

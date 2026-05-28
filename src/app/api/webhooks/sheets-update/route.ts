@@ -1,11 +1,12 @@
 import { kv } from "@vercel/kv";
 import { updatePipelineFromReplogs, bumpPipelineVersion } from "@/lib/sheets-sync";
+import { verifySecret } from "@/lib/webhook-auth";
 import type { StaffMeta } from "@/lib/staff-registry";
 import type { DailyEntry } from "@/app/api/replog/route";
 
 export async function POST(req: Request) {
   const secret = req.headers.get("x-sheets-secret");
-  if (!secret || secret !== process.env.SHEETS_WEBHOOK_SECRET) {
+  if (!verifySecret(secret, process.env.SHEETS_WEBHOOK_SECRET)) {
     return new Response("Forbidden", { status: 403 });
   }
 

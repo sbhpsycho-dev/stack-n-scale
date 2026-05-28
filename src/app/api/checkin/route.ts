@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { kv } from "@vercel/kv";
 import { calculateHealthScore, type CheckInRecord } from "@/lib/health-score";
 import { sendChannelMessage } from "@/lib/discord";
+import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
 
@@ -201,6 +202,22 @@ export async function POST(req: Request) {
     healthScore >= 8 ? sendPositiveSms(payload, score)   : Promise.resolve(),
     sendBoilerRoomDebrief(payload, healthScore, submittedAt),
   ]);
+
+  // Make.com alert for at-risk students (orange = 6–7, red = ≤5)
+  if (healthScore <= 7) {
+    const lowScoreFlags: string[] = [];
+    if (payload.struggled?.trim())     lowScoreFlags.push(`struggled: ${payload.struggled.slice(0, 200)}`);
+    if (payload.needFromCoach?.trim()) lowScoreFlags.push(`needs: ${payload.needFromCoach.slice(0, 200)}`);
+    triggerScenario("MAKE_CHECKIN_ALERT_WEBHOOK_URL", {
+      studentName: payload.fullName,
+      coachDiscordId: null,
+      score:       healthScore,
+      week:        payload.programWeek,
+      flags:       lowScoreFlags,
+      severity:    healthScore <= 5 ? "red" : "orange",
+      timestamp:   submittedAt,
+    }).catch(() => {});
+  }
 
   return Response.json({ ok: true, healthScore });
 }

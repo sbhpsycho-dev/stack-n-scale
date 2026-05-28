@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { type CoachingClient, type StudentProgress, type ProgressNote, STATUS_ORDER, type CoachingStatus } from "@/lib/coaching-types";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -37,6 +38,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const client = await kv.get<CoachingClient>(`sns:coaching:client:${id}`);
   if (!client) return new Response("Not found", { status: 404 });
 
+  // Capture previous status before mutation (for audit log)
+  const previousStatus = client.status;
+
   // Update client fields
   if (body.status && STATUS_ORDER.includes(body.status)) {
     client.status = body.status;
@@ -51,6 +55,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     client.discordId = body.discordId.trim() || undefined;
   }
   await kv.set(`sns:coaching:client:${id}`, client);
+
+  // Audit log for status change — fire and forget, never blocks the response
+  if (body.status && STATUS_ORDER.includes(body.status) && body.status !== previousStatus) {
+    logAudit(
+      session?.user?.clientId ?? "system",
+      (session?.user as any)?.name ?? "system",
+      "client.status_changed",
+      id,
+      "client",
+      {
+        before: { status: previousStatus },
+        after: { status: client.status },
+      }
+    ).catch(() => {});
+  }
 
   // Append progress note
   if (body.note?.trim()) {

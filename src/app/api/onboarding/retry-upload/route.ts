@@ -2,7 +2,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { list } from "@vercel/blob";
-import { getOrCreateDriveFolder, uploadFileToDrive, uploadTextToDrive } from "@/lib/drive";
+import { getOrCreateDriveFolder, uploadFileToDriveWithRetry, uploadTextToDrive } from "@/lib/drive";
+import { sendErrorAlert } from "@/lib/alert";
 import { type CoachingClient } from "@/app/api/onboarding/clients/route";
 
 export const runtime = "nodejs";
@@ -33,13 +34,22 @@ export async function POST(req: Request) {
 
     const clientName = client?.name ?? formData?.name ?? idSubmit?.name ?? email;
 
-    // Ensure Drive folder exists
-    const folder = client?.driveFolder ?? await getOrCreateDriveFolder(clientKey, clientName);
+    // Ensure Drive folder exists — create it if missing rather than returning 500
+    let folder = client?.driveFolder ?? null;
     if (!folder) {
-      return Response.json({ ok: false, error: "GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID is not configured" }, { status: 500 });
+      try {
+        folder = await getOrCreateDriveFolder(clientKey, clientName);
+      } catch (folderErr) {
+        await sendErrorAlert("retry-upload: Drive folder creation failed", folderErr, { email: key, name: clientName });
+        return Response.json(
+          { ok: false, error: "Could not create Drive folder. Check GOOGLE_DRIVE_CLIENTS_ROOT_FOLDER_ID." },
+          { status: 500 }
+        );
+      }
     }
 
     const results: Record<string, string | null> = {};
+    const errors: Record<string, string> = {};
 
     // Re-upload onboarding form text
     if (formData && folder.onboardingFolderId) {
@@ -73,7 +83,12 @@ export async function POST(req: Request) {
         formData.additionalNotes ? `\nAdditional Notes\n${formData.additionalNotes}` : "",
       ].join("\n");
 
-      results.formFileId = await uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+      try {
+        results.formFileId = await uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+      } catch (err) {
+        errors.formFile = err instanceof Error ? err.message : String(err);
+        console.error("retry-upload: form text upload failed:", err);
+      }
     }
 
     // Re-upload ID photos from Vercel Blob
@@ -83,23 +98,44 @@ export async function POST(req: Request) {
 
       await Promise.all(blobs.map(async (blob) => {
         const filename = blob.pathname.split("/").pop()!;
-        const res = await fetch(blob.url);
-        const buf = await res.arrayBuffer();
-        const contentType = filename === "signature" ? "image/png" : "image/jpeg";
-        const ext = contentType.split("/")[1] ?? "jpg";
+        try {
+          const res = await fetch(blob.url);
+          const buf = Buffer.from(await res.arrayBuffer());
+          const contentType = filename === "signature" ? "image/png" : "image/jpeg";
+          const ext = contentType.split("/")[1] ?? "jpg";
 
-        let label: string;
-        if (filename === "id-front")       label = `ID Front — ${clientName}.${ext}`;
-        else if (filename === "selfie")     label = `Selfie — ${clientName}.${ext}`;
-        else if (filename === "signature")  label = `Signature — ${clientName}.png`;
-        else                               label = `${filename} — ${clientName}.${ext}`;
+          let label: string;
+          if (filename === "id-front")       label = `ID Front — ${clientName}.${ext}`;
+          else if (filename === "selfie")     label = `Selfie — ${clientName}.${ext}`;
+          else if (filename === "signature")  label = `Signature — ${clientName}.png`;
+          else                               label = `${filename} — ${clientName}.${ext}`;
 
-        const fileId = await uploadFileToDrive(folder!.idVerificationFolderId!, label, contentType, buf);
-        results[filename] = fileId;
+          const fileId = await uploadFileToDriveWithRetry(folder!.idVerificationFolderId!, label, buf, contentType);
+          results[filename] = fileId;
+        } catch (err) {
+          errors[filename] = err instanceof Error ? err.message : String(err);
+          console.error(`retry-upload: blob re-upload failed for ${filename}:`, err);
+        }
       }));
     }
 
-    return Response.json({ ok: true, ...results });
+    const hasErrors = Object.keys(errors).length > 0;
+    const hasResults = Object.keys(results).length > 0;
+
+    if (hasErrors) {
+      await sendErrorAlert("retry-upload: partial failure", new Error(JSON.stringify(errors)), { email: key, name: clientName });
+    }
+
+    // If all uploads succeeded (no errors), clear the failure marker from KV
+    if (!hasErrors && hasResults) {
+      await kv.del(`sns:drive:failed:${key}`);
+    }
+
+    return Response.json({
+      ok: !hasErrors,
+      succeeded: results,
+      ...(hasErrors ? { failed: errors } : {}),
+    });
   } catch (err) {
     console.error("Retry upload error:", err);
     return Response.json({ ok: false, error: "Server error" }, { status: 500 });

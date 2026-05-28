@@ -3,17 +3,11 @@ import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import type { WeeklyPayout, Deal } from "@/lib/deal-types";
 import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
+import { getStaffDiscordId } from "@/lib/staff-registry";
+import { sendDiscordDM } from "@/lib/discord";
+import { logAudit } from "@/lib/audit";
 
-const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
 const EVAN_ID   = process.env.EVAN_DISCORD_USER_ID!;
-
-const REP_IDS: Record<string, string> = Object.fromEntries(
-  [
-    ["caelum", process.env.DISCORD_REP_ID_CAELUM],
-    ["kian",   process.env.DISCORD_REP_ID_KIAN],
-    ["elias",  process.env.DISCORD_REP_ID_ELIAS],
-  ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
-);
 
 function fmt$(n: number) {
   return `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -24,25 +18,6 @@ function pct(part: number, total: number) {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-async function openDM(userId: string): Promise<string | null> {
-  const res = await fetch("https://discord.com/api/v10/users/@me/channels", {
-    method: "POST",
-    headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient_id: userId }),
-  });
-  if (!res.ok) return null;
-  return (await res.json()).id ?? null;
-}
-
-async function sendDM(userId: string, content: string) {
-  const channelId = await openDM(userId);
-  if (!channelId) return;
-  await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -65,6 +40,16 @@ export async function POST(req: Request) {
 
   const approvedAt = new Date().toISOString();
   await kv.set(weekKey, { ...week, status: "approved", approvedAt });
+
+  // Audit log — fire and forget, never blocks the response
+  logAudit(
+    session?.user?.clientId ?? "system",
+    (session?.user as any)?.name ?? "system",
+    "payout.approved",
+    weekId,
+    "payout",
+    { after: { payoutStatus: "approved", weekId } }
+  ).catch(() => {});
 
   // Fetch deals
   const deals = (
@@ -115,7 +100,10 @@ export async function POST(req: Request) {
   // DM each rep their cut
   await Promise.allSettled(
     repPayouts.map(async (rep) => {
-      const discordId = REP_IDS[rep.key];
+      const discordId =
+        (await getStaffDiscordId(rep.key))
+        ?? process.env[`DISCORD_REP_ID_${rep.key.toUpperCase()}`]
+        ?? null;
       if (!discordId) return;
 
       let message: string;
@@ -159,12 +147,31 @@ export async function POST(req: Request) {
         ].join("\n");
       }
 
-      await sendDM(discordId, message);
+      await sendDiscordDM(discordId, message);
     })
   );
 
-  // Confirm to Evan that DMs were sent
-  await sendDM(EVAN_ID, [
+  // Resolve owner IDs
+  const evanDiscordId =
+    (await getStaffDiscordId("evan"))
+    ?? process.env.EVAN_DISCORD_USER_ID
+    ?? EVAN_ID;
+  const caelumDiscordId =
+    (await getStaffDiscordId("caelum"))
+    ?? process.env.DISCORD_CAELUM_USER_ID
+    ?? null;
+
+  // Build per-rep summary lines for the owner DM
+  const repSummaryLines = repPayouts.map(rep => {
+    const repDealCount = deals.filter(d =>
+      d.dmSetter?.toLowerCase().startsWith(rep.key) ||
+      d.setter?.toLowerCase().startsWith(rep.key) ||
+      d.closer?.toLowerCase().startsWith(rep.key)
+    ).length;
+    return `• ${rep.name} — **${fmt$(rep.amount)}** (${rep.role}) [${repDealCount} deal${repDealCount !== 1 ? "s" : ""}]`;
+  });
+
+  const ownerSummary = [
     `✅ **Payouts approved — week of ${bounds.start}**`,
     ``,
     `**💰 Summary**`,
@@ -172,8 +179,18 @@ export async function POST(req: Request) {
     `Total Going Out: ${fmt$(totalPayouts)} (${pct(totalPayouts, gross)} of gross)`,
     `Evan Take Home: **${fmt$(evanNet)}** (${pct(evanNet, gross)} of gross)`,
     ``,
+    `**📋 Rep Cuts**`,
+    ...repSummaryLines,
+    ``,
     `📬 ${repPayouts.length} rep${repPayouts.length !== 1 ? "s" : ""} have been DM'd their cuts.`,
-  ].join("\n"));
+  ].join("\n");
+
+  // Send owner summary to both Evan and Caelum
+  await Promise.allSettled(
+    [evanDiscordId, caelumDiscordId]
+      .filter((id): id is string => Boolean(id))
+      .map(id => sendDiscordDM(id, ownerSummary))
+  );
 
   return Response.json({ ok: true, weekId, status: "approved", notified: repPayouts.length });
 }

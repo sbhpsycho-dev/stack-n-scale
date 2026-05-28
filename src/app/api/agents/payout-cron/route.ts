@@ -3,6 +3,8 @@ import type { WeeklyPayout, Deal } from "@/lib/deal-types";
 import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
 import { sendDiscordDM } from "@/lib/discord";
 import { verifyCronSecret } from "@/lib/cron-auth";
+import { getStaffDiscordId } from "@/lib/staff-registry";
+import { triggerScenario } from "@/lib/make";
 
 const EVAN_ID = process.env.EVAN_DISCORD_USER_ID!;
 
@@ -84,10 +86,17 @@ export async function GET(req: Request) {
       return [header, ...bullets].join("\n");
     });
 
-  // DM Evan — summary + approval request
-  await sendDiscordDM(EVAN_ID, [
-    `📋 **Payout ready for review — week of ${bounds.start}**`,
-    ``,
+  // Resolve owner Discord IDs
+  const evanDiscordId =
+    (await getStaffDiscordId("evan"))
+    ?? process.env.EVAN_DISCORD_USER_ID
+    ?? EVAN_ID;
+  const caelumDiscordId =
+    (await getStaffDiscordId("caelum"))
+    ?? process.env.DISCORD_CAELUM_USER_ID
+    ?? null;
+
+  const summaryLines = [
     `**💰 Summary**`,
     `Gross Collected: ${fmt$(gross)}`,
     `Processor Fees: -${fmt$(fees)}`,
@@ -100,9 +109,47 @@ export async function GET(req: Request) {
     ``,
     `Company Reinvestment — **${fmt$(companyReinvestment)}** (10% of remainder)`,
     `Evan — **${fmt$(evanNet)}** (take home)`,
+  ];
+
+  // DM Evan — summary + approval request
+  await sendDiscordDM(evanDiscordId, [
+    `📋 **Payout ready for review — week of ${bounds.start}**`,
+    ``,
+    ...summaryLines,
     ``,
     `📦 ${deals.length} deal${deals.length !== 1 ? "s" : ""} | ✅ Go to /staff/payouts to approve and send rep notifications.`,
   ].join("\n"));
+
+  // DM Caelum — read-only breakdown (no approval action)
+  if (caelumDiscordId) {
+    await sendDiscordDM(caelumDiscordId, [
+      `📋 **Payout breakdown — week of ${bounds.start}**`,
+      ``,
+      ...summaryLines,
+      ``,
+      `📦 ${deals.length} deal${deals.length !== 1 ? "s" : ""} | 👀 Pending Evan's approval.`,
+    ].join("\n"));
+  }
+
+  // Resolve per-rep Discord IDs for Make.com payload
+  const repEntries = Object.entries(repTotals).filter(([, v]) => v.amount > 0);
+  const repDiscordIds = await Promise.all(
+    repEntries.map(([key]) => getStaffDiscordId(key).catch(() => null))
+  );
+
+  // Trigger Make.com payout dispatch scenario — sends full breakdown for Sheets logging + notifications
+  triggerScenario("MAKE_PAYOUT_WEBHOOK_URL", {
+    weekId,
+    weekStart: bounds.start,
+    payouts: repEntries.map(([key, v], i) => ({
+      staffDiscordId: repDiscordIds[i] ?? process.env[`DISCORD_REP_ID_${key.toUpperCase()}`] ?? null,
+      staffName:      key.charAt(0).toUpperCase() + key.slice(1),
+      amount:         v.amount,
+      deals:          v.deals,
+    })),
+    totalGMV:  gross,
+    timestamp: new Date().toISOString(),
+  }).catch(() => {});
 
   return Response.json({ ok: true, week: weekId, deals: deals.length });
 }

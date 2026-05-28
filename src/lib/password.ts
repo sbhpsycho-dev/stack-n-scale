@@ -13,8 +13,7 @@ export function hashPassword(plain: string): string {
 
 export function verifyPassword(plain: string, stored: string): boolean {
   if (!stored.startsWith(PREFIX)) {
-    // Legacy plaintext — allows migration of existing accounts on next login
-    return plain === stored;
+    return false;
   }
   const [, salt, storedHash] = stored.split(":");
   const derived = pbkdf2Sync(plain, salt, ITERATIONS, KEY_LEN, DIGEST).toString("hex");

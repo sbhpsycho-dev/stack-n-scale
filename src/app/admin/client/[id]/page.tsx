@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -86,11 +86,23 @@ export default function AdminClientView() {
             <span className="font-bold text-sm tracking-wide">{data.clientRegistry?.find(c => c.id === id)?.name ?? id}</span>
             <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Admin View</Badge>
           </div>
-          <Link href="/?tab=master"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Admin
-          </Link>
+          <div className="flex items-center gap-2">
+            {process.env.NEXT_PUBLIC_CLIENT_ANALYTICS_URL && (
+              <a
+                href={`${process.env.NEXT_PUBLIC_CLIENT_ANALYTICS_URL}/admin`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Analytics Dashboard
+              </a>
+            )}
+            <Link href="/?tab=master"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to Admin
+            </Link>
+          </div>
         </div>
       </header>
 
