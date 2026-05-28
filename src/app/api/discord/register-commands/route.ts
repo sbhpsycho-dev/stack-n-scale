@@ -32,6 +32,57 @@ const COMMANDS = [
       },
     ],
   },
+  {
+    name:        "log-deal",
+    description: "Log a new deal",
+    type:        1,
+    options: [
+      { name: "client",  description: "Client full name",                              type: 3,  required: true },
+      { name: "amount",  description: "Gross amount in dollars (e.g. 5000)",           type: 10, required: true },
+      {
+        name:        "offer",
+        description: "Offer tier",
+        type:        3,
+        required:    true,
+        choices: [
+          { name: "5K",  value: "5K"  },
+          { name: "10K", value: "10K" },
+        ],
+      },
+      { name: "setter",  description: "Setter first name (leave blank if none)",       type: 3,  required: false },
+      { name: "closer",  description: "Closer first name (leave blank if none)",       type: 3,  required: false },
+      {
+        name:        "source",
+        description: "Lead source",
+        type:        3,
+        required:    false,
+        choices: [
+          { name: "Ad",      value: "ad"      },
+          { name: "Organic", value: "organic" },
+        ],
+      },
+    ],
+  },
+  {
+    name:        "my-stats",
+    description: "See your KPIs for the current week",
+    type:        1,
+    options:     [],
+  },
+  {
+    name:        "client-status",
+    description: "Check onboarding status for a client",
+    type:        1,
+    options: [
+      { name: "email", description: "Client email address", type: 3, required: true },
+    ],
+  },
+  {
+    name:        "pending-payouts",
+    description: "List deals waiting for payout approval",
+    type:        1,
+    options:     [],
+  },
 ];
 
 export async function POST() {

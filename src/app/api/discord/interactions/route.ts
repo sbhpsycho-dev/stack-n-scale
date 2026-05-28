@@ -2,23 +2,22 @@ import { kv } from "@vercel/kv";
 import type { WeeklyPayout, Deal } from "@/lib/deal-types";
 import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
 import { triggerOnboarding } from "@/lib/onboarding";
+import { getStaffDiscordId } from "@/lib/staff-registry";
 
 const EVAN_USER_ID = process.env.EVAN_DISCORD_USER_ID!;
 const PUBLIC_KEY   = process.env.DISCORD_PUBLIC_KEY!;
 const BOT_TOKEN    = process.env.DISCORD_BOT_TOKEN!;
 const APP_ID       = process.env.DISCORD_CLIENT_ID!;
 
-// rep first name (lowercase) → Discord user ID — loaded from env vars
-const REP_IDS: Record<string, string> = Object.fromEntries(
-  [
-    ["caelum", process.env.DISCORD_REP_ID_CAELUM],
-    ["kian",   process.env.DISCORD_REP_ID_KIAN],
-    ["elias",  process.env.DISCORD_REP_ID_ELIAS],
-    ["naomi",  process.env.DISCORD_REP_ID_NAOMI],
-    ["callum", process.env.DISCORD_REP_ID_CALLUM],
-    ["taha",   process.env.DISCORD_REP_ID_TAHA],
-  ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
-);
+// rep first name (lowercase) → Discord user ID
+// Resolved from staff registry first; falls back to env var for transition period
+async function getRepDiscordId(key: string): Promise<string | null> {
+  return (
+    (await getStaffDiscordId(key))
+    ?? process.env[`DISCORD_REP_ID_${key.toUpperCase()}`]
+    ?? null
+  );
+}
 
 // ─── Crypto ──────────────────────────────────────────────────────────────────
 
@@ -84,6 +83,19 @@ async function editInteractionReply(token: string, content: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
   });
+}
+
+function getOptionValue(options: Array<{ name: string; value: unknown }>, name: string): unknown {
+  return options?.find((o) => o.name === name)?.value ?? null;
+}
+
+function getWeekStart(): Date {
+  const now  = new Date();
+  const day  = now.getDay(); // 0 = Sunday
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  const monday = new Date(now.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
 }
 
 // ─── Payout processing ────────────────────────────────────────────────────────
@@ -173,7 +185,7 @@ async function processApproval(
   // DM each rep their individual info only
   await Promise.allSettled(
     repPayouts.map(async (rep) => {
-      const discordId = REP_IDS[rep.key];
+      const discordId = await getRepDiscordId(rep.key);
       if (!discordId) return;
 
       let message: string;
@@ -280,6 +292,196 @@ export async function POST(req: Request) {
       ).catch(e => editInteractionReply(token, `❌ Error: ${String(e)}`));
 
       return Response.json({ type: 5, data: { flags: 64 } });
+    }
+
+    // ── /log-deal ─────────────────────────────────────────────────────────
+    if (command === "log-deal") {
+      const options = (interaction.data?.options ?? []) as Array<{ name: string; value: unknown }>;
+
+      const clientName  = getOptionValue(options, "client")  as string;
+      const grossAmount = getOptionValue(options, "amount")   as number;
+      const offer       = (getOptionValue(options, "offer")   as string  | null) ?? "5K";
+      const setterName  = (getOptionValue(options, "setter")  as string  | null) ?? null;
+      const closerName  = (getOptionValue(options, "closer")  as string  | null) ?? null;
+      const leadSource  = (getOptionValue(options, "source")  as string  | null) ?? "organic";
+
+      const registry = await kv.get<any[]>("sns-staff-registry") ?? [];
+      const actor    = registry.find(s => s.discordId === userId);
+
+      const processorFee = Math.round(grossAmount * 0.03);
+      const netAmount    = grossAmount - processorFee;
+
+      const dealRes = await fetch(`${process.env.NEXTAUTH_URL}/api/deals`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${process.env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({
+          date:         new Date().toISOString(),
+          clientName,
+          offer,
+          grossAmount,
+          processorFee,
+          netAmount,
+          leadSource,
+          processor:    "stripe",
+          setter:       setterName,
+          closer:       closerName,
+          dmSetter:     null,
+          notes:        `Logged via Discord by ${actor?.name ?? userId}`,
+        }),
+      });
+
+      if (!dealRes.ok) {
+        return ephemeral("❌ Failed to log deal. Check your inputs and try again.");
+      }
+
+      const deal = await dealRes.json();
+      return Response.json({
+        type: 4,
+        data: {
+          embeds: [{
+            title:  "✅ Deal Logged",
+            color:  0x22c55e,
+            fields: [
+              { name: "Client", value: clientName,                           inline: true },
+              { name: "Offer",  value: offer,                                inline: true },
+              { name: "Gross",  value: `$${grossAmount.toLocaleString()}`,   inline: true },
+              { name: "Setter", value: setterName ?? "—",                    inline: true },
+              { name: "Closer", value: closerName ?? "—",                    inline: true },
+              { name: "Source", value: leadSource,                           inline: true },
+            ],
+            footer:    { text: `Deal ID: ${deal.id ?? "pending"}` },
+            timestamp: new Date().toISOString(),
+          }],
+        },
+      });
+    }
+
+    // ── /my-stats ─────────────────────────────────────────────────────────
+    if (command === "my-stats") {
+      const registry = await kv.get<any[]>("sns-staff-registry") ?? [];
+      const staff    = registry.find(s => s.discordId === userId);
+
+      if (!staff) {
+        return ephemeral(
+          "❌ Your Discord ID isn't linked to a staff account yet. Ask an admin to run the staff migration or update your profile."
+        );
+      }
+
+      const weekStart = getWeekStart();
+      const dealIds   = await kv.lrange("sns:deals:index", 0, -1);
+      const deals     = (
+        await Promise.all(dealIds.map(id => kv.get<any>(`sns:deals:${id}`)))
+      ).filter(Boolean);
+
+      const firstName = staff.name.split(" ")[0].toLowerCase();
+      const weekDeals = deals.filter(d => {
+        if (!d) return false;
+        const dealDate = new Date(d.date);
+        return (
+          dealDate >= weekStart &&
+          (
+            d.setter?.toLowerCase().startsWith(firstName)  ||
+            d.closer?.toLowerCase().startsWith(firstName)  ||
+            d.setterId === staff.discordId                  ||
+            d.closerId === staff.discordId
+          )
+        );
+      });
+
+      const weekGMV   = weekDeals.reduce((sum, d) => sum + (d?.grossAmount ?? 0), 0);
+      const weekCount = weekDeals.length;
+
+      return Response.json({
+        type: 4,
+        data: {
+          embeds: [{
+            title:  `📊 ${staff.name}'s Stats — This Week`,
+            color:  0xf97316,
+            fields: [
+              { name: "Deals", value: String(weekCount),                  inline: true },
+              { name: "GMV",   value: `$${weekGMV.toLocaleString()}`,     inline: true },
+              { name: "Role",  value: staff.role ?? "setter",             inline: true },
+            ],
+            timestamp: new Date().toISOString(),
+          }],
+          flags: 64,
+        },
+      });
+    }
+
+    // ── /client-status ────────────────────────────────────────────────────
+    if (command === "client-status") {
+      const opts            = (interaction.data?.options ?? []) as Array<{ name: string; value: unknown }>;
+      const email           = getOptionValue(opts, "email") as string;
+
+      if (!email) return ephemeral("❌ Email is required.");
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const client          = await kv.get<any>(`sns:coaching:client:${normalizedEmail}`);
+
+      if (!client) return ephemeral(`❌ No client found for \`${email}\``);
+
+      const statusEmojis: Record<string, string> = {
+        payment_received:    "💳",
+        id_pending:          "⏳",
+        id_pending_review:   "🔍",
+        id_verified:         "✅",
+        onboarding_form_sent:"📝",
+        onboarding_complete: "🎉",
+        coach_assigned:      "👤",
+        kickoff_booked:      "📅",
+        active:              "🟢",
+        alumni:              "🏆",
+      };
+
+      return Response.json({
+        type: 4,
+        data: {
+          embeds: [{
+            title:  `${statusEmojis[client.status] ?? "❓"} ${client.name}`,
+            color:  0x3b82f6,
+            fields: [
+              { name: "Status",          value: client.status?.replace(/_/g, " ") ?? "unknown", inline: true },
+              { name: "Coach",           value: client.coachAssigned ?? "Unassigned",            inline: true },
+              { name: "ID Verification", value: client.idVerification ?? "pending",              inline: true },
+              { name: "Email",           value: email,                                           inline: false },
+            ],
+            timestamp: new Date().toISOString(),
+          }],
+          flags: 64,
+        },
+      });
+    }
+
+    // ── /pending-payouts ──────────────────────────────────────────────────
+    if (command === "pending-payouts") {
+      const pendingIds = await kv.lrange("sns:payouts:pending", 0, -1);
+
+      if (!pendingIds.length) return ephemeral("✅ No pending payouts.");
+
+      const deals = (
+        await Promise.all(pendingIds.slice(0, 10).map(id => kv.get<any>(`sns:deals:${id}`)))
+      ).filter(Boolean);
+
+      const lines = deals
+        .map(d => `• **${d.clientName}** — $${d.grossAmount?.toLocaleString()} (${d.offer}) — ${d.setter ?? "no setter"}`)
+        .join("\n");
+
+      return Response.json({
+        type: 4,
+        data: {
+          embeds: [{
+            title:       `⏳ Pending Payouts (${pendingIds.length})`,
+            description: lines + (pendingIds.length > 10 ? `\n_...and ${pendingIds.length - 10} more_` : ""),
+            color:       0xeab308,
+            timestamp:   new Date().toISOString(),
+          }],
+          flags: 64,
+        },
+      });
     }
 
     // /approve and /decline are Evan-only
