@@ -3,11 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
 import { getDriveFailures } from "@/lib/alert";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: Request) {
+  const isCron = verifyCronSecret(req.headers.get("authorization"));
+  if (!isCron) {
+    const session = await getServerSession(authOptions);
+    if (!session || session.user.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   const [driveFailures, lastDriveConfirm, lastSheetsSync] = await Promise.allSettled([
