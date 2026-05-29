@@ -67,7 +67,7 @@ async function listTemplates(): Promise<{ id: string; name: string }[]> {
   );
 }
 
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseMs = 600): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, attempts = 2, baseMs = 400): Promise<T> {
   let last: unknown;
   for (let i = 0; i < attempts; i++) {
     try { return await fn(); } catch (e) {
@@ -76,6 +76,17 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseMs = 600): P
     }
   }
   throw last;
+}
+
+// Single Drive API call — no retry. Used by both upload functions below.
+async function driveFileCreate(folderId: string, fileName: string, mimeType: string, buf: Buffer): Promise<string> {
+  const d = drive();
+  const res = await d.files.create({
+    requestBody: { name: fileName, parents: [folderId] },
+    media: { mimeType, body: Readable.from(buf) },
+    fields: "id",
+  });
+  return res.data.id!;
 }
 
 export async function uploadTextToDrive(folderId: string, fileName: string, content: string): Promise<string> {
@@ -101,35 +112,27 @@ export async function uploadFileToDrive(
   buffer: ArrayBuffer | Buffer
 ): Promise<string> {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  return withRetry(async () => {
-    const d = drive();
-    const res = await d.files.create({
-      requestBody: { name: fileName, parents: [folderId] },
-      media: { mimeType, body: Readable.from(buf) },
-      fields: "id",
-    });
-    return res.data.id!;
-  });
+  return withRetry(() => driveFileCreate(folderId, fileName, mimeType, buf));
 }
 
-// Explicit retry wrapper with exponential backoff (1s, 2s, 4s).
-// Exists as a named export so callers can signal intent — "this upload
-// will be retried" — without relying on the internal withRetry().
+// Explicit retry wrapper with exponential backoff (800ms, 1600ms).
+// Calls driveFileCreate directly — does NOT nest inside uploadFileToDrive
+// to avoid double-retry stacking that would exceed the function timeout.
 export async function uploadFileToDriveWithRetry(
   folderId: string,
   fileName: string,
   buffer: Buffer,
   mimeType: string,
-  retries = 3
+  retries = 2
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      return await uploadFileToDrive(folderId, fileName, mimeType, buffer);
+      return await driveFileCreate(folderId, fileName, mimeType, buffer);
     } catch (err) {
       lastError = err;
       if (attempt < retries - 1) {
-        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
       }
     }
   }

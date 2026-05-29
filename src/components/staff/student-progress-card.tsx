@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { type CoachingClient, STATUS_ORDER, STATUS_LABELS, type CoachingStatus } from "@/lib/coaching-types";
 import { User, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, daysSince } from "@/lib/utils";
 
 const STATUS_COLORS: Record<CoachingStatus, string> = {
   payment_received:    "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
@@ -67,9 +67,12 @@ export function StudentProgressCard({ client, noteCount = 0 }: Props) {
 
       {/* Footer */}
       <div className="flex items-center justify-between mt-2.5">
-        <span className="text-[10px] text-muted-foreground">
-          {noteCount > 0 ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No notes"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">
+            {noteCount > 0 ? `${noteCount} note${noteCount === 1 ? "" : "s"}` : "No notes"}
+          </span>
+          <span className="text-[10px] text-muted-foreground">· Day {daysSince(client.createdAt)}</span>
+        </div>
         {client.driveFolder?.url && (
           <a
             href={client.driveFolder.url}

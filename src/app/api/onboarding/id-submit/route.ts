@@ -8,7 +8,7 @@ import { sendErrorAlert } from "@/lib/alert";
 import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
-export const maxDuration = 20; // Vercel function max duration in seconds
+export const maxDuration = 10; // Vercel Hobby plan hard cap
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "https://stack-n-scale-site.vercel.app",
@@ -171,6 +171,12 @@ export async function POST(req: Request) {
         signatureId: driveResults[2] ?? null,
         uploadedAt: new Date().toISOString(),
       });
+
+      // Drive confirmed — trigger email + Drive doc workflows
+      triggerEmail("id_received", email, name, { idVerificationFolderId })
+        .catch(e => console.error("ID received email error:", e));
+      triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
+        .catch(e => console.error("Drive docs webhook error:", e));
     } catch (driveError) {
       // Log failure to KV so admin can see it
       await kv.set(`sns:drive:failed:${email}`, {
@@ -184,12 +190,6 @@ export async function POST(req: Request) {
       await sendErrorAlert("Drive upload failed — ID verification", driveError, { email, name });
       // Drive failure logged; client still gets 200 — admin can retry via /api/onboarding/retry-upload
     }
-
-    // Drive upload confirmed — trigger email + Drive doc workflows
-    triggerEmail("id_received", email, name, { idVerificationFolderId })
-      .catch(e => console.error("ID received email error:", e));
-    triggerDriveDocs("id_received", email, name, { idVerificationFolderId, idFrontUrl, selfieUrl, signatureUrl })
-      .catch(e => console.error("Drive docs webhook error:", e));
 
     // If onboarding form was also submitted, send Discord link via email with a fresh token
     let discordOAuthUrl: string | undefined;

@@ -205,6 +205,10 @@ export default function Dashboard() {
   const [kpiSyncMsg, setKpiSyncMsg] = useState("");
 
   useEffect(() => {
+    if (session?.user?.role === "biz_client") router.replace("/client-portal");
+  }, [session, router]);
+
+  useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t) setTab(t);
   }, []);
@@ -555,6 +559,12 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && (
+              <Link href="/manage-clients"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
+                Clients
+              </Link>
+            )}
+            {isAdmin && (
               <Link href="/onboarding"
                 className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
                 Onboarding
@@ -645,7 +655,7 @@ export default function Dashboard() {
                         <p className="text-sm font-semibold text-orange-400">No data yet</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Connect integrations to pull live data automatically, or use <strong>Edit Data</strong> to enter numbers manually.</p>
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => setTab("integrations")}
+                      <Button size="sm" variant="ghost" onClick={() => setTab("customize")}
                         className="text-xs h-7 shrink-0 text-orange-400 hover:text-orange-300 border border-orange-500/30">
                         Set up integrations
                       </Button>

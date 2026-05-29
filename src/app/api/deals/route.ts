@@ -10,6 +10,7 @@ import { syncDealToSheets, triggerMakeDealWebhook } from "@/lib/sheets-sync";
 import { triggerScenario } from "@/lib/make";
 import { BLANK, type SalesData } from "@/lib/sales-data";
 import { logAudit } from "@/lib/audit";
+import { buildDealClosedMessage } from "@/lib/discord";
 
 function authGuard(session: Session | null) {
   return !session || (session.user.role !== "admin" && session.user.role !== "staff");
@@ -69,20 +70,22 @@ export async function POST(req: Request) {
 
   const partial: Deal = {
     id,
-    date:         body.date,
-    clientName:   body.clientName,
-    offer:        body.offer,
-    grossAmount:  Number(body.grossAmount),
-    processor:    body.processor,
-    processorFee: Number(body.processorFee),
+    date:          body.date,
+    clientName:    body.clientName,
+    offer:         body.offer,
+    grossAmount:   Number(body.grossAmount),
+    processor:     body.processor,
+    processorFee:  Number(body.processorFee),
     netAmount,
-    leadSource:   body.leadSource,
-    dmSetter:     body.dmSetter ?? null,
-    setter:       body.setter ?? null,
-    closer:       body.closer ?? null,
-    payouts:      {} as Deal["payouts"],
-    payoutStatus: "pending",
-    notes:        body.notes ?? "",
+    leadSource:    body.leadSource,
+    dmSetter:      body.dmSetter ?? null,
+    setter:        body.setter ?? null,
+    closer:        body.closer ?? null,
+    clientEmail:   (body as any).clientEmail?.trim() || null,
+    contractValue: (body as any).contractValue ? Number((body as any).contractValue) : null,
+    payouts:       {} as Deal["payouts"],
+    payoutStatus:  "pending",
+    notes:         body.notes ?? "",
   };
   partial.payouts = calculatePayouts(partial);
 
@@ -136,6 +139,24 @@ export async function POST(req: Request) {
   }
   // Trigger Make.com payout agent — fires automatically with every new deal
   triggerMakeDealWebhook(partial).catch(e => console.error("[deals] make webhook failed:", e));
+
+  // Discord real-time notification
+  const discordWebhook = process.env.DISCORD_WEBHOOK_DEAL_CLOSED;
+  if (discordWebhook) {
+    fetch(discordWebhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: buildDealClosedMessage({
+        name:          partial.clientName,
+        email:         partial.clientEmail,
+        setter:        partial.setter,
+        closer:        partial.closer,
+        grossAmount:   partial.grossAmount,
+        contractValue: partial.contractValue,
+      })}),
+      signal: AbortSignal.timeout(5000),
+    }).catch(e => console.error("[deals] discord notify failed:", e));
+  }
 
   // Patch admin dashboard MTD totals + rep leaderboard from deals so admin page stays live.
   // Uses after() so the patch survives past the response being sent.

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StudentProgressCard } from "@/components/staff/student-progress-card";
 import { type CoachingClient, type StudentProgress, STATUS_ORDER, type CoachingStatus, STATUS_LABELS } from "@/lib/coaching-types";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 type ClientWithProgress = CoachingClient & { progress: StudentProgress | null };
+
+const POLL_INTERVAL_MS = 30_000;
 
 export default function StudentsPage() {
   const [clients, setClients] = useState<ClientWithProgress[]>([]);
@@ -15,23 +17,30 @@ export default function StudentsPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
   const [filterCoach, setFilterCoach] = useState<string>("all");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  function load() {
-    setLoading(true);
+  const load = useCallback(async (isInitial = false) => {
+    if (!isInitial) setRefreshing(true);
     setError("");
-    fetch("/api/staff/students")
-      .then((r) => {
-        if (!r.ok) throw new Error(`Server error ${r.status}`);
-        return r.json();
-      })
-      .then(setClients)
-      .catch((err) => {
-        setError(err.message ?? "Failed to load students. Check your connection.");
-      })
-      .finally(() => setLoading(false));
-  }
+    try {
+      const r = await fetch("/api/staff/students");
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      setClients(await r.json());
+      setLastUpdated(new Date());
+    } catch (err: unknown) {
+      setError((err as Error).message ?? "Failed to load students. Check your connection.");
+    } finally {
+      if (isInitial) setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load(true);
+    const id = setInterval(() => load(false), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [load]);
 
   const coaches = Array.from(new Set(clients.map((c) => c.coachAssigned).filter(Boolean))) as string[];
 
@@ -60,7 +69,7 @@ export default function StudentsPage() {
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <p className="text-sm text-muted-foreground">{error}</p>
         <button
-          onClick={load}
+          onClick={() => load(true)}
           className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors"
         >
           Retry
@@ -75,6 +84,25 @@ export default function StudentsPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight">Students</h1>
           <p className="text-xs text-muted-foreground mt-0.5">{clients.length} total · {filtered.length} shown</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+              Live · {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </div>
+          )}
+          <button
+            onClick={() => load(false)}
+            disabled={refreshing}
+            className="h-8 w-8 flex items-center justify-center rounded-lg bg-muted hover:bg-muted/80 transition-colors disabled:opacity-50"
+            aria-label="Refresh students"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
         </div>
       </div>
 

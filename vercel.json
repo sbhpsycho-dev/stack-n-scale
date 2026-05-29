@@ -17,6 +17,22 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/admin/sync-leaderboard",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/admin/sync-leaderboard",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/admin/sync-leaderboard",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/admin/sync-leaderboard",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/agents/student-summary",
       "schedule": "0 11 * * 1"
     },

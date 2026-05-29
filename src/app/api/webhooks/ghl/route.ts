@@ -350,6 +350,14 @@ async function handleOpportunity(payload: GHLPayload): Promise<Response> {
   await kv.set(`sns:deals:${dealId}`, deal);
   await kv.set("sns:deals:index", [dealId, ...dealIds]);
 
+  // Trigger a background dashboard refresh so sns-dashboard-v1 reflects this deal immediately
+  const appUrl = (process.env.NEXTAUTH_URL ?? "").replace(/\/$/, "");
+  if (appUrl && process.env.CRON_SECRET) {
+    void fetch(`${appUrl}/api/admin/sync-leaderboard`, {
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
+    }).catch(() => {});
+  }
+
   void sendWebhookEmbed(
     await webhookUrl("DISCORD_WEBHOOK_SALES"),
     buildDealClosedEmbed({

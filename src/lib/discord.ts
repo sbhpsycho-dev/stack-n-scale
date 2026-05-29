@@ -174,6 +174,40 @@ export function buildDealClosedEmbed(p: {
   };
 }
 
+function fmtMoney(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+export function buildDealClosedMessage(p: {
+  name: string;
+  email?: string | null;
+  setter?: string | null;
+  closer?: string | null;
+  grossAmount: number;
+  contractValue?: number | null;
+}): string {
+  const collected = p.grossAmount;
+  const contract  = p.contractValue ?? p.grossAmount;
+  const remaining = contract - collected;
+
+  const revLine = remaining > 0
+    ? `$${fmtMoney(collected)} today ($${fmtMoney(remaining)} tmr)`
+    : `$${fmtMoney(collected)}`;
+
+  return ([
+    "**Deal Closed**",
+    "",
+    `Client name : ${sanitize(p.name)}`,
+    p.email ? `Client Email : ${p.email}` : null,
+    "",
+    `Setter: ${sanitize(p.setter || "—")}`,
+    `Closer: ${sanitize(p.closer || "—")}`,
+    "",
+    `Revenue: ${revLine}`,
+    `Contract Value: $${fmtMoney(contract)}`,
+  ] as (string | null)[]).filter((l): l is string => l !== null).join("\n");
+}
+
 export function buildMetaLeadEmbed(p: {
   name: string;
   email?: string;

@@ -3,17 +3,35 @@ import type { NextAuthOptions } from "next-auth";
 import { type ClientMeta, SEED_REGISTRY } from "@/lib/sales-data";
 import { type StaffMeta, STAFF_KV_KEY } from "@/lib/staff-registry";
 import { verifyPassword } from "@/lib/password";
+import { type BizClient } from "@/lib/biz-client-types";
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Password",
       credentials: {
+        username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         const pw = credentials?.password;
+        const username = credentials?.username?.trim();
         if (!pw) return null;
+
+        // Biz client portal login — username + password
+        if (username) {
+          try {
+            const { kv } = await import("@vercel/kv");
+            const bizClients = await kv.get<BizClient[]>("sns:biz-clients") ?? [];
+            const bizClient = bizClients.find(
+              (c) => c.portalUsername === username && c.portalPasswordHash && verifyPassword(pw, c.portalPasswordHash)
+            );
+            if (bizClient) {
+              return { id: bizClient.id, name: bizClient.name, role: "biz_client", clientId: bizClient.id };
+            }
+          } catch { /* fall through */ }
+          return null;
+        }
 
         // Admin check — requires ADMIN_PASSWORD_HASH (bcrypt hash of admin password)
         const adminHash = process.env.ADMIN_PASSWORD_HASH;
@@ -61,7 +79,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role     = (user as { role: "admin" | "client" | "staff" }).role;
+        token.role     = (user as { role: "admin" | "client" | "staff" | "biz_client" }).role;
         token.clientId = (user as { clientId: string | null }).clientId;
         token.sheetId  = (user as { sheetId?: string | null }).sheetId ?? null;
       }

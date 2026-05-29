@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { verifyCronSecret } from "@/lib/cron-auth";
 import { kv } from "@vercel/kv";
 import { type SalesData, BLANK } from "@/lib/sales-data";
 import { getSheetsToken, sheetsGet, ingestSetterKPISheet, updatePipelineFromReplogs, bumpPipelineVersion } from "@/lib/sheets-sync";
@@ -34,10 +35,20 @@ function ymOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export async function GET(req: Request) {
+  if (!verifyCronSecret(req.headers.get("authorization"))) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  return runDashboardSync();
+}
+
 export async function POST() {
   const session = await getServerSession(authOptions);
   if (session?.user.role !== "admin") return new Response("Unauthorized", { status: 401 });
+  return runDashboardSync();
+}
 
+async function runDashboardSync() {
   const now     = new Date();
   const thisY   = String(now.getFullYear());
   const thisYM  = ymOf(now);

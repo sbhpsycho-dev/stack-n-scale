@@ -57,15 +57,15 @@ function PayoutPreview({ p }: { p: DealPayout }) {
 // ─── Add Deal Modal ──────────────────────────────────────────────────────────
 
 type FormData = {
-  date: string; clientName: string; offer: "5K" | "10K";
-  grossAmount: string; processor: "fanbasis" | "stripe";
+  date: string; clientName: string; clientEmail: string; offer: "5K" | "10K";
+  grossAmount: string; contractValue: string; processor: "fanbasis" | "stripe";
   processorFee: string; leadSource: "ad" | "organic";
   dmSetter: string; setter: string; closer: string; notes: string;
 };
 
 const EMPTY: FormData = {
   date: new Date().toISOString().slice(0, 10),
-  clientName: "", offer: "5K", grossAmount: "",
+  clientName: "", clientEmail: "", offer: "5K", grossAmount: "", contractValue: "",
   processor: "fanbasis", processorFee: "",
   leadSource: "organic", dmSetter: "", setter: "", closer: "", notes: "",
 };
@@ -125,8 +125,10 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          grossAmount:  gross,
-          processorFee: fee,
+          grossAmount:   gross,
+          processorFee:  fee,
+          clientEmail:   form.clientEmail.trim() || null,
+          contractValue: form.contractValue ? parseFloat(form.contractValue) : null,
           dmSetter: form.dmSetter.trim() || null,
           setter:   form.setter.trim()   || null,
           closer:   form.closer.trim()   || null,
@@ -186,14 +188,20 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
             </div>
           </div>
 
-          <div>
-            <label htmlFor="deal-client" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client Name</label>
-            <input id="deal-client" className={inp} placeholder="e.g. John Smith" value={form.clientName} onChange={e => set("clientName", e.target.value)} required />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="deal-client" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client Name</label>
+              <input id="deal-client" className={inp} placeholder="e.g. John Smith" value={form.clientName} onChange={e => set("clientName", e.target.value)} required />
+            </div>
+            <div>
+              <label htmlFor="deal-email" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Client Email</label>
+              <input id="deal-email" type="email" className={inp} placeholder="client@email.com" value={form.clientEmail} onChange={e => set("clientEmail", e.target.value)} />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="deal-gross" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Gross Amount ($)</label>
+              <label htmlFor="deal-gross" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Collected Today ($)</label>
               <input
                 id="deal-gross" type="number" className={inp} placeholder="5000"
                 min="1" value={form.grossAmount}
@@ -201,6 +209,17 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
                 required
               />
             </div>
+            <div>
+              <label htmlFor="deal-contract" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Contract Value ($)</label>
+              <input
+                id="deal-contract" type="number" className={inp} placeholder="Same as collected (or total if split)"
+                min="1" value={form.contractValue}
+                onChange={e => set("contractValue", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="deal-fee" className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Processor Fee ($)</label>
               <input
@@ -211,7 +230,7 @@ function AddDealModal({ onClose, onSaved, reps }: { onClose: () => void; onSaved
               />
               {feeError && <p className="text-[11px] text-red-400 mt-1">{feeError}</p>}
             </div>
-          </div>
+            <div /></div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -308,6 +327,7 @@ export default function DealsPage() {
   const [showModal, setShowModal] = useState(false);
   const [reps, setReps] = useState<string[]>([]);
   const [dateError, setDateError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   useEffect(() => {
     fetch("/api/staff/reps").then(r => r.ok ? r.json() : []).then((list: { name: string }[]) => {
@@ -325,7 +345,7 @@ export default function DealsPage() {
     if (f.rep)       p.set("rep", f.rep);
     try {
       const res = await fetch(`/api/deals?${p}`);
-      if (res.ok) setDeals((await res.json()).deals);
+      if (res.ok) { setDeals((await res.json()).deals); setLastUpdated(new Date()); }
       else toastError("Failed to load deals");
     } catch {
       toastError("Network error", "Could not fetch deals.");
@@ -335,6 +355,12 @@ export default function DealsPage() {
   }, []);
 
   useEffect(() => { load(filters); }, [load, filters]);
+
+  // Auto-refresh every 30s so deals logged by teammates appear without a manual reload
+  useEffect(() => {
+    const id = setInterval(() => load(filters), 30_000);
+    return () => clearInterval(id);
+  }, [load, filters]);
 
   function setFilter(k: keyof Filters, v: string) {
     if (k === "to" && filters.from && v && v < filters.from) {
@@ -373,7 +399,9 @@ export default function DealsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">Deal Log</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">All closed deals with auto-calculated payouts</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            All closed deals · live · as of {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+          </p>
         </div>
         <div className="flex gap-2 items-center">
           <button
