@@ -9,6 +9,7 @@ export async function triggerEmail(
     discordOAuthUrl?: string;
     driveFolderUrl?: string;
     onboardingFolderId?: string;
+    notesFolderId?: string;
     idVerificationFolderId?: string;
     formData?: Record<string, string>;
     skoolLink?: string;
