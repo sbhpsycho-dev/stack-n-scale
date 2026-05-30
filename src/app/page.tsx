@@ -203,6 +203,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState("dashboard");
   const [kpiSyncing, setKpiSyncing] = useState(false);
   const [kpiSyncMsg, setKpiSyncMsg] = useState("");
+  const [lastKpiSynced, setLastKpiSynced] = useState<string | null>(null);
 
   useEffect(() => {
     if (session?.user?.role === "biz_client") router.replace("/client-portal");
@@ -338,6 +339,7 @@ export default function Dashboard() {
       const json = await res.json();
       if (json.ok) {
         setKpiSyncMsg("Synced!");
+        setLastKpiSynced(new Date().toLocaleString());
         refresh(false);
       } else {
         setKpiSyncMsg("Sync failed");
@@ -617,12 +619,14 @@ export default function Dashboard() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="bg-muted border border-border h-9 mb-6 flex-wrap">
             {config.tabs.dashboard  && <TabsTrigger value="dashboard"    className="text-xs px-4">Dashboard</TabsTrigger>}
-            <TabsTrigger value="my-performance" className="text-xs px-4 relative">
-              <BarChart2 className="h-3 w-3 mr-1" />My Performance
-              {!replog.some(e => e.date === todayStr) && (
-                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
-              )}
-            </TabsTrigger>
+            {(isAdmin || session?.user?.role === "staff") && (
+              <TabsTrigger value="my-performance" className="text-xs px-4 relative">
+                <BarChart2 className="h-3 w-3 mr-1" />My Performance
+                {!replog.some(e => e.date === todayStr) && (
+                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+                )}
+              </TabsTrigger>
+            )}
             {config.tabs.pipeline   && <TabsTrigger value="pipeline"     className="text-xs px-4">Pipeline</TabsTrigger>}
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
@@ -640,9 +644,9 @@ export default function Dashboard() {
                 <motion.div key="dashboard" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
 
                   {/* Last synced */}
-                  {lastSynced && (
+                  {(lastSynced || lastKpiSynced) && (
                     <p className="text-[10px] text-muted-foreground -mt-3">
-                      Last synced {new Date(lastSynced).toLocaleString()}
+                      Last synced {lastSynced ? new Date(lastSynced).toLocaleString() : lastKpiSynced}
                     </p>
                   )}
 
@@ -1415,7 +1419,7 @@ export default function Dashboard() {
             )}
 
             {/* ══════════════ MY PERFORMANCE ══════════════ */}
-            {tab === "my-performance" && (
+            {tab === "my-performance" && (isAdmin || session?.user?.role === "staff") && (
               <TabsContent value="my-performance">
                 <motion.div key="my-performance" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5 max-w-3xl">
                   <div>
