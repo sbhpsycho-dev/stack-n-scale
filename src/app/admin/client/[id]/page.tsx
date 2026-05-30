@@ -16,7 +16,42 @@ import { RevenueOverTimeChart, NetByProductChart, NetByProcessorChart, CheckInTr
 import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/funnel-chart";
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
-import { SEED, type SalesData } from "@/lib/sales-data";
+import { SEED, type SalesData, type TopAd } from "@/lib/sales-data";
+
+type ScoringWeights = { leads: number; cpl: number; roas: number };
+type AdScore = TopAd & { score: number; recommendation: "Scale" | "Maintain" | "Watch" | "Cut" };
+
+function scoreAds(ads: TopAd[], weights: ScoringWeights): AdScore[] {
+  if (ads.length === 0) return [];
+  const maxLeads = Math.max(...ads.map(a => a.leads));
+  const minLeads = Math.min(...ads.map(a => a.leads));
+  const maxCpl   = Math.max(...ads.map(a => a.cpl));
+  const minCpl   = Math.min(...ads.map(a => a.cpl));
+  const maxRoas  = Math.max(...ads.map(a => a.roas));
+  const minRoas  = Math.min(...ads.map(a => a.roas));
+  const norm = (v: number, min: number, max: number, invert = false) => {
+    if (max === min) return 0.5;
+    const n = (v - min) / (max - min);
+    return invert ? 1 - n : n;
+  };
+  return ads.map(ad => {
+    const score = Math.round(
+      norm(ad.leads, minLeads, maxLeads)       * weights.leads +
+      norm(ad.cpl,   minCpl,   maxCpl,   true) * weights.cpl +
+      norm(ad.roas,  minRoas,  maxRoas)         * weights.roas
+    );
+    const recommendation: AdScore["recommendation"] =
+      score >= 75 ? "Scale" : score >= 50 ? "Maintain" : score >= 25 ? "Watch" : "Cut";
+    return { ...ad, score, recommendation };
+  }).sort((a, b) => b.score - a.score);
+}
+
+const recStyle: Record<AdScore["recommendation"], string> = {
+  Scale:    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  Maintain: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  Watch:    "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  Cut:      "bg-red-500/10 text-red-400 border-red-500/20",
+};
 
 const tabAnim: Variants = {
   initial: { opacity: 0, y: 8 },
@@ -43,6 +78,7 @@ export default function AdminClientView() {
   const [data, setData] = useState<SalesData>(SEED);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("dashboard");
+  const [weights, setWeights] = useState<ScoringWeights>({ leads: 30, cpl: 40, roas: 30 });
 
   useEffect(() => {
     if (status === "unauthenticated") { router.replace("/login"); return; }
@@ -276,41 +312,149 @@ export default function AdminClientView() {
                     <ChartCard title="Ad Spend Split">
                       <AdSpendSplitChart data={a.spendSplit} />
                     </ChartCard>
-                    <ChartCard title="Top Performing Ads">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                              <th className="pb-2 font-medium">Ad</th>
-                              <th className="pb-2 font-medium text-right">Leads</th>
-                              <th className="pb-2 font-medium text-right">CPL</th>
-                              <th className="pb-2 font-medium text-right">ROAS</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {a.topAds.map((ad, i) => (
-                              <tr key={i} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
-                                <td className="py-2">{ad.name}</td>
-                                <td className="py-2 text-right">{ad.leads}</td>
-                                <td className="py-2 text-right text-muted-foreground">${ad.cpl.toFixed(2)}</td>
-                                <td className="py-2 text-right">
-                                  <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">{ad.roas.toFixed(1)}x</Badge>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t border-border text-xs text-muted-foreground">
-                              <td className="pt-2 font-semibold text-foreground">Total</td>
-                              <td className="pt-2 text-right font-semibold text-foreground">{a.topAds.reduce((s, ad) => s + ad.leads, 0)}</td>
-                              <td className="pt-2 text-right">${(a.topAds.reduce((s, ad) => s + ad.cpl, 0) / Math.max(a.topAds.length, 1)).toFixed(2)}</td>
-                              <td className="pt-2 text-right">{a.roas.toFixed(1)}x</td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                    <ChartCard title="CPL by Ad Set">
+                      <div className="space-y-2 pt-1">
+                        {a.cplByAdSet.map((row, i) => (
+                          <div key={i} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">{row.adSet}</span>
+                            <span className="font-semibold">${row.cpl.toFixed(2)}</span>
+                          </div>
+                        ))}
                       </div>
                     </ChartCard>
                   </div>
+
+                  {/* ── Ad Scorecard ── */}
+                  {(() => {
+                    const scored = scoreAds(a.topAds, weights);
+                    const weightsValid = weights.leads + weights.cpl + weights.roas === 100;
+                    const top = scored[0];
+                    const drag = scored[scored.length - 1];
+                    return (
+                      <>
+                        <Separator className="bg-border/50" />
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Ad Scorecard</p>
+
+                        {/* Scoring weights */}
+                        <Card className="bg-card border-border">
+                          <CardHeader className="pb-2 pt-4 px-4">
+                            <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                              Scoring Weights
+                              {!weightsValid && (
+                                <span className="text-[10px] text-red-400 font-normal">Weights must sum to 100 (currently {weights.leads + weights.cpl + weights.roas})</span>
+                              )}
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-4 pb-4">
+                            <div className="grid grid-cols-3 gap-4">
+                              {(["leads", "cpl", "roas"] as const).map(key => (
+                                <div key={key} className="space-y-1">
+                                  <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                                    {key === "cpl" ? "CPL" : key.charAt(0).toUpperCase() + key.slice(1)} %
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => setWeights(w => ({ ...w, [key]: Math.max(0, w[key] - 5) }))}
+                                      className="h-6 w-6 rounded border border-border bg-muted hover:bg-muted/80 text-xs font-bold flex items-center justify-center transition-colors"
+                                    >−</button>
+                                    <span className="w-8 text-center text-sm font-semibold">{weights[key]}</span>
+                                    <button
+                                      onClick={() => setWeights(w => ({ ...w, [key]: Math.min(100, w[key] + 5) }))}
+                                      className="h-6 w-6 rounded border border-border bg-muted hover:bg-muted/80 text-xs font-bold flex items-center justify-center transition-colors"
+                                    >+</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Callout cards */}
+                        {scored.length >= 2 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Card className="bg-card border-border border-l-2 border-l-emerald-500">
+                              <CardHeader className="pb-1 pt-4 px-4">
+                                <CardTitle className="text-xs text-emerald-400 uppercase tracking-widest font-semibold">Top Performer</CardTitle>
+                              </CardHeader>
+                              <CardContent className="px-4 pb-4 space-y-1">
+                                <p className="font-semibold text-sm">{top?.name}</p>
+                                <p className="text-xs text-muted-foreground">Score: {top?.score}/100 · {top?.leads} leads · ${top?.cpl.toFixed(2)} CPL · {top?.roas.toFixed(1)}x ROAS</p>
+                                <p className="text-xs text-emerald-400 mt-1">Keep scaling — allocate more budget to this ad.</p>
+                              </CardContent>
+                            </Card>
+                            <Card className="bg-card border-border border-l-2 border-l-red-500">
+                              <CardHeader className="pb-1 pt-4 px-4">
+                                <CardTitle className="text-xs text-red-400 uppercase tracking-widest font-semibold">Biggest Drag</CardTitle>
+                              </CardHeader>
+                              <CardContent className="px-4 pb-4 space-y-1">
+                                <p className="font-semibold text-sm">{drag?.name}</p>
+                                <p className="text-xs text-muted-foreground">Score: {drag?.score}/100 · {drag?.leads} leads · ${drag?.cpl.toFixed(2)} CPL · {drag?.roas.toFixed(1)}x ROAS</p>
+                                <p className="text-xs text-red-400 mt-1">Pause or test a new creative — this ad is underperforming.</p>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        )}
+
+                        {/* Ranked table */}
+                        <Card className="bg-card border-border">
+                          <CardHeader className="pb-2 pt-4 px-4">
+                            <CardTitle className="text-sm font-semibold">Ranked Ads</CardTitle>
+                          </CardHeader>
+                          <CardContent className="px-4 pb-4">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm min-w-[540px]">
+                                <thead>
+                                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                                    <th className="pb-2 font-medium w-6">#</th>
+                                    <th className="pb-2 font-medium">Ad</th>
+                                    <th className="pb-2 font-medium">Score</th>
+                                    <th className="pb-2 font-medium text-right">Leads</th>
+                                    <th className="pb-2 font-medium text-right">CPL</th>
+                                    <th className="pb-2 font-medium text-right">ROAS</th>
+                                    <th className="pb-2 font-medium text-right">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {scored.map((ad, i) => (
+                                    <tr key={i} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
+                                      <td className="py-2.5 text-muted-foreground text-xs">{i + 1}</td>
+                                      <td className="py-2.5 font-medium pr-3">{ad.name}</td>
+                                      <td className="py-2.5 pr-3">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-20 bg-muted rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full ${ad.score >= 75 ? "bg-emerald-500" : ad.score >= 50 ? "bg-blue-500" : ad.score >= 25 ? "bg-yellow-500" : "bg-red-500"}`}
+                                              style={{ width: `${ad.score}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-xs font-semibold w-6">{ad.score}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-2.5 text-right">{ad.leads}</td>
+                                      <td className="py-2.5 text-right text-muted-foreground">${ad.cpl.toFixed(2)}</td>
+                                      <td className="py-2.5 text-right">{ad.roas.toFixed(1)}x</td>
+                                      <td className="py-2.5 text-right">
+                                        <Badge className={`text-[10px] ${recStyle[ad.recommendation]}`}>{ad.recommendation}</Badge>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="border-t border-border text-xs text-muted-foreground">
+                                    <td colSpan={3} className="pt-2 font-semibold text-foreground">Total</td>
+                                    <td className="pt-2 text-right font-semibold text-foreground">{a.topAds.reduce((s, ad) => s + ad.leads, 0)}</td>
+                                    <td className="pt-2 text-right">${(a.topAds.reduce((s, ad) => s + ad.cpl, 0) / Math.max(a.topAds.length, 1)).toFixed(2)}</td>
+                                    <td className="pt-2 text-right">{a.roas.toFixed(1)}x</td>
+                                    <td />
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </>
+                    );
+                  })()}
                 </motion.div>
               </TabsContent>
             )}
