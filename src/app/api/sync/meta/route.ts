@@ -2,11 +2,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { syncMeta } from "@/lib/sync-runners";
 
-export async function POST() {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return new Response("Unauthorized", { status: 401 });
 
-  const clientId = session.user.role === "admin" ? "admin" : session.user.clientId!;
+  const { searchParams } = new URL(req.url);
+  const target = searchParams.get("target");
+  // Admin can pass ?target=<clientId> to sync a specific client
+  const clientId = session.user.role === "admin"
+    ? (target ?? "admin")
+    : session.user.clientId!;
+
   try {
     await syncMeta(clientId);
     return Response.json({ ok: true });

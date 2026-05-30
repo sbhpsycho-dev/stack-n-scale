@@ -1,5 +1,5 @@
 import { kv } from "@vercel/kv";
-import { BLANK, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint, type NameAmount } from "@/lib/sales-data";
+import { BLANK, type SalesData, type CampaignLead, type AdSetCPL, type LeadPoint, type StageCount, type Rep, type TimePoint, type NameAmount, type TopAd, type SpendSplit } from "@/lib/sales-data";
 import { getIntegrations, saveIntegrations } from "@/lib/integrations";
 
 const clientKey = (id: string) => `sns-client-${id}`;
@@ -68,10 +68,55 @@ export async function syncMeta(clientId: string): Promise<void> {
     }))
     .filter((d: LeadPoint) => d.leads > 0);
 
+  // Individual ad performance — populates the Ad Scorecard
+  const adRes = await fetch(`${base}?${common}&level=ad&fields=ad_name,spend,actions,action_values&limit=20`);
+  const adData = await adRes.json();
+  const topAds: TopAd[] = (adData?.data ?? [])
+    .map((a: { ad_name: string; spend: string; actions?: { action_type: string; value: string }[]; action_values?: { value: string }[] }) => {
+      const adLeads   = (a.actions ?? []).filter((ac) => ac.action_type === "lead").reduce((s: number, ac) => s + parseInt(ac.value ?? "0"), 0);
+      const adSpend   = parseFloat(a.spend ?? "0");
+      const adRevenue = (a.action_values ?? []).reduce((s: number, av) => s + parseFloat(av.value ?? "0"), 0);
+      return {
+        name:  a.ad_name,
+        leads: adLeads,
+        cpl:   adLeads > 0 ? parseFloat((adSpend / adLeads).toFixed(2)) : 0,
+        roas:  adSpend > 0 ? parseFloat((adRevenue / adSpend).toFixed(2)) : 0,
+      };
+    })
+    .filter((a: TopAd) => a.leads > 0)
+    .sort((a: TopAd, b: TopAd) => b.leads - a.leads)
+    .slice(0, 10);
+
+  // Platform breakdown — populates Ad Spend Split chart and Instagram CPL
+  const platformRes = await fetch(`${base}?${common}&fields=spend,actions&breakdowns=publisher_platform`);
+  const platformData = await platformRes.json();
+  const platformRows: { publisher_platform: string; spend: string; actions?: { action_type: string; value: string }[] }[] = platformData?.data ?? [];
+  const totalPlatSpend = platformRows.reduce((s, p) => s + parseFloat(p.spend ?? "0"), 0);
+  const spendSplit: SpendSplit[] = platformRows
+    .map((p) => ({
+      platform: p.publisher_platform.charAt(0).toUpperCase() + p.publisher_platform.slice(1),
+      pct: totalPlatSpend > 0 ? parseFloat(((parseFloat(p.spend ?? "0") / totalPlatSpend) * 100).toFixed(1)) : 0,
+    }))
+    .filter((p) => p.pct > 0);
+  const instaRow = platformRows.find((p) => p.publisher_platform === "instagram");
+  const instaLeads = instaRow
+    ? (instaRow.actions ?? []).filter((a) => a.action_type === "lead").reduce((s, a) => s + parseInt(a.value ?? "0"), 0)
+    : 0;
+  const instaSpend = instaRow ? parseFloat(instaRow.spend ?? "0") : 0;
+  const instaCPL   = instaLeads > 0 ? parseFloat((instaSpend / instaLeads).toFixed(2)) : 0;
+
   const existing = await getClientData(clientId);
   await saveClientData(clientId, {
     ...existing,
-    ads: { ...existing.ads, totalAdSpend: spend, totalLeads, cpl: parseFloat(cpl.toFixed(2)), roas: parseFloat(roas.toFixed(2)), ctr: parseFloat(ctr.toFixed(2)), cpc: parseFloat(cpc.toFixed(2)), impressions, reach, leadsByCampaign, cplByAdSet, leadsOverTime },
+    ads: {
+      ...existing.ads,
+      totalAdSpend: spend, totalLeads,
+      cpl: parseFloat(cpl.toFixed(2)), roas: parseFloat(roas.toFixed(2)),
+      ctr: parseFloat(ctr.toFixed(2)), cpc: parseFloat(cpc.toFixed(2)),
+      impressions, reach,
+      leadsByCampaign, cplByAdSet, leadsOverTime,
+      topAds, spendSplit, instaCPL,
+    },
   });
 }
 

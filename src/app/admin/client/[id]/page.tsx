@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, ExternalLink } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, ExternalLink, RefreshCw } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,19 @@ export default function AdminClientView() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("dashboard");
   const [weights, setWeights] = useState<ScoringWeights>({ leads: 30, cpl: 40, roas: 30 });
+  const [syncing, setSyncing] = useState(false);
+
+  async function handleSyncAds() {
+    setSyncing(true);
+    try {
+      await fetch(`/api/sync/meta?target=${encodeURIComponent(id)}`, { method: "POST" });
+      const r = await fetch(`/api/data?target=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      setData(d ?? SEED);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") { router.replace("/login"); return; }
@@ -276,7 +289,19 @@ export default function AdminClientView() {
               <TabsContent value="ads">
                 <motion.div key="ads" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
                   <div>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 font-semibold">Facebook Ads</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Facebook Ads</p>
+                      <button
+                        onClick={handleSyncAds}
+                        disabled={syncing}
+                        className="inline-flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 h-7 px-3 rounded-lg border border-orange-500/20 hover:bg-orange-500/5 disabled:opacity-50 transition-colors"
+                      >
+                        {syncing
+                          ? <span className="h-3 w-3 rounded-full border border-orange-400 border-t-transparent animate-spin" />
+                          : <RefreshCw className="h-3 w-3" />}
+                        {syncing ? "Syncing…" : "Sync Ads"}
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                       <MetricCard label="Ad Spend"      value={a.totalAdSpend} prefix="$" variant="orange" index={0} />
                       <MetricCard label="Total Leads"   value={a.totalLeads}              variant="orange" index={1} />
