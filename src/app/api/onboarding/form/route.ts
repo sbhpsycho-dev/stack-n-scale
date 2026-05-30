@@ -6,7 +6,7 @@ import { sendErrorAlert } from "@/lib/alert";
 import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
-export const maxDuration = 20; // Vercel function max duration in seconds
+export const maxDuration = 10; // Vercel Hobby plan hard cap
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "https://stack-n-scale-site.vercel.app",
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     if (rawEmail) {
       const rateLimitKey = `sns:onboarding:ratelimit:${rawEmail}`;
       const last = await kv.get<number>(rateLimitKey);
-      if (last && Date.now() - last < 60_000) {
+      if (last && Date.now() - last < 3_600_000) {
         return Response.json({ ok: false, error: "Too many requests — please wait before resubmitting." }, { status: 429, headers: CORS_HEADERS });
       }
       await kv.set(rateLimitKey, Date.now(), { ex: 3600 });
@@ -122,12 +122,16 @@ export async function POST(req: Request) {
       name,
       email: email.toLowerCase(),
       ghlContactId: existing?.ghlContactId ?? null,
-      responses: {
-        goal: goal30Days,
-        current_income: "",
-        commitment_hours: "",
-      },
       submittedAt,
+      motivation,
+      whySNS,
+      goal30Days,
+      goal3Months,
+      goal6Months,
+      goal1Year,
+      biggestChallenge,
+      successIn90Days,
+      additionalNotes: additionalNotes ?? "",
     }).catch(() => {});
 
     // 3. Append to Google Sheets (non-blocking)
@@ -179,31 +183,31 @@ export async function POST(req: Request) {
     ].join("\n");
     const formFile = Buffer.from(formText, "utf8").toString("base64");
 
-    // 4. Create Drive folder + upload form doc (async — don't block the user).
+    // 4. Create Drive folder + upload form doc.
     let onboardingFolderId: string | undefined;
     let notesFolderId: string | undefined;
 
-    getOrCreateDriveFolder(clientKey, existing?.name || name)
-      .then(folder => {
-        onboardingFolderId = folder.onboardingFolderId;
-        notesFolderId      = folder.notesFolderId;
-        return uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
-      })
-      .catch(async (driveError) => {
-        await kv.set(`sns:drive:failed:form:${email.toLowerCase()}`, {
-          error: driveError instanceof Error ? driveError.message : String(driveError),
-          failedAt: new Date().toISOString(),
-        });
-        sendErrorAlert("Drive folder/upload failed — onboarding form", driveError, { email, name }).catch(() => {});
+    try {
+      const folder = await getOrCreateDriveFolder(clientKey, existing?.name || name);
+      onboardingFolderId = folder.onboardingFolderId;
+      notesFolderId      = folder.notesFolderId;
+      await uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+
+      // Drive confirmed — trigger Drive docs Make.com scenario with real folder IDs
+      triggerDriveDocs("form_received", email, name, { onboardingFolderId, notesFolderId, formData, formFile })
+        .catch(e => console.error("Drive docs error:", e));
+    } catch (driveError) {
+      await kv.set(`sns:drive:failed:${email.toLowerCase()}`, {
+        error: driveError instanceof Error ? driveError.message : String(driveError),
+        failedAt: new Date().toISOString(),
       });
+      sendErrorAlert("Drive folder/upload failed — onboarding form", driveError, { email, name }).catch(() => {});
+      // Drive failure logged; client still gets 200 — admin can retry via /api/onboarding/retry-upload
+    }
 
-    const emailPayload = { onboardingFolderId, notesFolderId, formData };
-
-    // Trigger email + Drive docs webhooks (non-blocking — Drive work is already done above)
-    triggerEmail("form_received", email, name, emailPayload)
+    // Always send confirmation email regardless of Drive outcome
+    triggerEmail("form_received", email, name, { onboardingFolderId, notesFolderId, formData })
       .catch(e => console.error("Form received email error:", e));
-    triggerDriveDocs("form_received", email, name, { ...emailPayload, formFile })
-      .catch(e => console.error("Drive docs error:", e));
 
     // 5. Discord — create private channel, welcome in #general, store channel for OAuth
     let discordOAuthUrl: string | null = null;
@@ -228,9 +232,9 @@ export async function POST(req: Request) {
           permission_overwrites: overwrites,
         }) as { id: string };
 
-        // Post intake summary in private channel
+        // Post intake summary in private channel (fire-and-forget — saves ~1s off the 10s cap)
         const sd = sanitizeDiscord;
-        await discordRequest(`/channels/${channel.id}/messages`, "POST", {
+        discordRequest(`/channels/${channel.id}/messages`, "POST", {
           content: [
             `📋 **New Client Intake — ${sd(name)}**`,
             `📧 ${sd(email)}`,
@@ -252,7 +256,7 @@ export async function POST(req: Request) {
             `**Success in 90 Days**`, sd(successIn90Days),
             additionalNotes ? `\n**Additional Notes**\n${sd(additionalNotes)}` : "",
           ].join("\n"),
-        });
+        }).catch(() => {});
 
         // Welcome in #general student chat
         if (GENERAL_CH) {

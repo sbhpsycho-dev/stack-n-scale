@@ -617,14 +617,12 @@ export default function Dashboard() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="bg-muted border border-border h-9 mb-6 flex-wrap">
             {config.tabs.dashboard  && <TabsTrigger value="dashboard"    className="text-xs px-4">Dashboard</TabsTrigger>}
-            {!isAdmin && (
-              <TabsTrigger value="my-performance" className="text-xs px-4 relative">
-                <BarChart2 className="h-3 w-3 mr-1" />My Performance
-                {!replog.some(e => e.date === todayStr) && (
-                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
-                )}
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="my-performance" className="text-xs px-4 relative">
+              <BarChart2 className="h-3 w-3 mr-1" />My Performance
+              {!replog.some(e => e.date === todayStr) && (
+                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-orange-500" />
+              )}
+            </TabsTrigger>
             {config.tabs.pipeline   && <TabsTrigger value="pipeline"     className="text-xs px-4">Pipeline</TabsTrigger>}
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
@@ -1417,7 +1415,7 @@ export default function Dashboard() {
             )}
 
             {/* ══════════════ MY PERFORMANCE ══════════════ */}
-            {tab === "my-performance" && !isAdmin && (
+            {tab === "my-performance" && (
               <TabsContent value="my-performance">
                 <motion.div key="my-performance" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5 max-w-3xl">
                   <div>

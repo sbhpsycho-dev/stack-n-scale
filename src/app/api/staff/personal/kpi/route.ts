@@ -44,7 +44,7 @@ const EMPTY = {
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "staff") {
+  if (!session || (session.user.role !== "staff" && session.user.role !== "admin")) {
     return new Response("Unauthorized", { status: 401 });
   }
 

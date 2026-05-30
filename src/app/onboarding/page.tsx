@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Users, ShieldCheck, ClipboardList, Zap, ArrowRight, Loader2 } from "lucide-react";
+import { Users, ShieldCheck, ClipboardList, Zap, ArrowRight, Loader2, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import type { CoachingClient } from "@/lib/coaching-types";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,22 @@ export default function OnboardingDashboard() {
   const router = useRouter();
   const [clients, setClients] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ succeeded: number; failed: number; total: number } | null>(null);
+
+  async function runBackfill() {
+    setBackfilling(true);
+    setBackfillResult(null);
+    try {
+      const res = await fetch("/api/admin/backfill-drive", { method: "POST" });
+      const json = await res.json();
+      setBackfillResult({ succeeded: json.succeeded ?? 0, failed: json.failed ?? 0, total: json.total ?? 0 });
+    } catch {
+      setBackfillResult({ succeeded: 0, failed: -1, total: 0 });
+    } finally {
+      setBackfilling(false);
+    }
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") { router.push("/login"); return; }
@@ -124,6 +140,43 @@ export default function OnboardingDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Drive backfill */}
+        <Card className="border border-border">
+          <CardContent className="px-4 py-4 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-sm">Sync All Forms to Drive</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {backfillResult
+                  ? backfillResult.failed === -1
+                    ? "Network error — try again"
+                    : `Done: ${backfillResult.succeeded} synced${backfillResult.failed > 0 ? `, ${backfillResult.failed} failed` : ""} of ${backfillResult.total} clients`
+                  : "Upload all onboarding forms + ID files to their Drive folders"}
+              </p>
+            </div>
+            <button
+              onClick={runBackfill}
+              disabled={backfilling}
+              className={cn(
+                "h-8 px-3 flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-colors",
+                backfillResult?.failed === 0
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : "bg-orange-500 hover:bg-orange-600 text-white",
+                backfilling && "opacity-60 cursor-not-allowed"
+              )}
+            >
+              {backfilling ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…</>
+              ) : backfillResult?.failed === 0 ? (
+                <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>
+              ) : backfillResult && backfillResult.failed > 0 ? (
+                <><AlertCircle className="h-3.5 w-3.5" /> Retry</>
+              ) : (
+                <><RefreshCw className="h-3.5 w-3.5" /> Run Sync</>
+              )}
+            </button>
+          </CardContent>
+        </Card>
 
         {/* Recent activity */}
         <Card className="bg-card border-border">
