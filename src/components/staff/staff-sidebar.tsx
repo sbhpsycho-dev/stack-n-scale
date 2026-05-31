@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Calendar, Users, BookOpen, MessageSquare, BarChart2, Trophy, TrendingUp, ArrowLeft, Settings, Menu, Receipt } from "lucide-react";
+import { Calendar, Users, BookOpen, MessageSquare, BarChart2, Trophy, TrendingUp, ArrowLeft, Settings, Menu, Receipt, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -15,6 +15,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ElementType; staffOn
   { href: "/staff/messages",    label: "Messages",    icon: MessageSquare },
   { href: "/staff/my-numbers",  label: "My Numbers",  icon: TrendingUp, staffOnly: true },
   { href: "/staff/insights",    label: "Insights",    icon: BarChart2 },
+  { href: "/staff/ads",         label: "Ad Scorecard", icon: Megaphone, adminOnly: true },
   { href: "/staff/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/staff/expenses",    label: "Expenses",    icon: Receipt,    adminOnly: true },
 ];
