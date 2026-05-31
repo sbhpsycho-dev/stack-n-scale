@@ -44,7 +44,8 @@ export default function ManageClientsPage() {
 
   useEffect(() => {
     if (status === "loading") return;
-    if (session?.user?.role !== "admin") router.replace("/login");
+    if (status === "unauthenticated") { router.replace("/login"); return; }
+    if (status === "authenticated" && session?.user?.role !== "admin") router.replace("/");
   }, [session, status, router]);
 
   const load = useCallback(async (isInitial = false) => {

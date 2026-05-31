@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, CheckCircle, XCircle, AlertTriangle, Copy, Check, Play, Zap } from "lucide-react";
@@ -88,6 +88,12 @@ export default function MakeScenariosPage() {
   const [setupError,   setSetupError]   = useState<string | null>(null);
   const [testError,    setTestError]    = useState<string | null>(null);
 
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") { router.replace("/login"); return; }
+    if (session?.user?.role !== "admin") router.replace("/");
+  }, [status, session, router]);
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -96,10 +102,7 @@ export default function MakeScenariosPage() {
     );
   }
 
-  if (!session || session.user.role !== "admin") {
-    router.push("/login");
-    return null;
-  }
+  if (status !== "authenticated" || session?.user?.role !== "admin") return null;
 
   async function runSetup() {
     setSetupLoading(true);
