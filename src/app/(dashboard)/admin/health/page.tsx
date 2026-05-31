@@ -125,7 +125,6 @@ export default function SystemHealthPage() {
     setError(null);
     try {
       const res = await fetch("/api/admin/system-health");
-      if (res.status === 401) { router.replace("/login"); return; }
       if (!res.ok) { setError("Failed to load system health"); return; }
       const data = await res.json() as HealthData;
       setHealth(data);
@@ -135,7 +134,7 @@ export default function SystemHealthPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [router]);
+  }, []);
 
   // Initial load + 30-second poll
   useEffect(() => {

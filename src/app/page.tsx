@@ -192,7 +192,7 @@ function OnboardingTab() {
 }
 
 export default function Dashboard() {
-  const { data: session } = useSession();
+  const { data: session, status: authStatus } = useSession();
   const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
   const clientId = isAdmin ? "admin" : (session?.user?.clientId ?? null);
@@ -206,8 +206,9 @@ export default function Dashboard() {
   const [lastKpiSynced, setLastKpiSynced] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session?.user?.role === "biz_client") router.replace("/client-portal");
-  }, [session, router]);
+    if (authStatus === "unauthenticated") { router.replace("/login"); return; }
+    if (authStatus === "authenticated" && session?.user?.role === "biz_client") router.replace("/client-portal");
+  }, [authStatus, session, router]);
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
@@ -539,6 +540,8 @@ export default function Dashboard() {
   const totalRevShareOwed = clients.reduce((s, c) => s + c.cashCollectedMTD * (c.revSharePct / 100), 0);
   const paidCount = clients.filter(c => c.revSharePaid).length;
   const pendingCount = clients.length - paidCount;
+
+  if (authStatus === "loading") return null;
 
   return (
     <div className="min-h-screen bg-background">
