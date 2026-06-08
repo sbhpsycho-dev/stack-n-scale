@@ -66,6 +66,14 @@ const STATUS_COLOR: Record<CoachingStatus, string> = {
   alumni:              "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
 };
 
+const LEADWELL_STAFF = [
+  { name: "Harneet", role: "Sales Director" },
+  { name: "Sylis",   role: "Setter" },
+  { name: "Izaiah",  role: "Setter" },
+  { name: "Celest",  role: "Setter" },
+  { name: "Chona",   role: "VA & Ops" },
+];
+
 function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
@@ -201,6 +209,8 @@ export default function Dashboard() {
   const [editOpen, setEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
+  const [masterSubTab, setMasterSubTab] = useState<"overview" | "onboarding" | "client-managed" | "staff">("overview");
+  const [leadwellExpanded, setLeadwellExpanded] = useState(false);
   const [kpiSyncing, setKpiSyncing] = useState(false);
   const [kpiSyncMsg, setKpiSyncMsg] = useState("");
   const [lastKpiSynced, setLastKpiSynced] = useState<string | null>(null);
@@ -563,51 +573,9 @@ export default function Dashboard() {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
-              <Link href="/manage-clients"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
-                Clients
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/onboarding"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
-                Onboarding
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/staff/expenses"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg hover:bg-muted transition-colors">
-                Expenses
-              </Link>
-            )}
-            {isAdmin && (
-              <Button size="sm" variant="ghost" onClick={syncKpiData} disabled={kpiSyncing}
-                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
-                <RefreshCw className={`h-3.5 w-3.5 ${kpiSyncing ? "animate-spin" : ""}`} />
-                {kpiSyncMsg || "Sync KPI"}
-              </Button>
-            )}
-            {isAdmin && (
-              <Button size="sm" variant="ghost" onClick={backfillDeals} disabled={kpiSyncing}
-                className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
-                <Download className="h-3.5 w-3.5" />
-                Backfill Deals
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={reset}
-              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset
-            </Button>
             <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
               <Settings className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="sm" onClick={() => setEditOpen(true)}
-              className="gap-1.5 text-xs h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white">
-              <Edit3 className="h-3.5 w-3.5" />
-              Edit Data
             </Button>
             <Button size="sm" variant="ghost" onClick={() => signOut({ callbackUrl: "/login" })}
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5">
@@ -633,10 +601,8 @@ export default function Dashboard() {
             {config.tabs.pipeline   && <TabsTrigger value="pipeline"     className="text-xs px-4">Pipeline</TabsTrigger>}
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
-            {config.tabs.resources  && <TabsTrigger value="resources"    className="text-xs px-4">Resources</TabsTrigger>}
-            <TabsTrigger value="customize" className="text-xs px-4"><Sliders className="h-3 w-3 mr-1" />Customize</TabsTrigger>
-            {isAdmin  && <TabsTrigger value="master"       className="text-xs px-4">Master</TabsTrigger>}
-            {isAdmin  && <TabsTrigger value="onboarding"   className="text-xs px-4">Onboarding</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="master"   className="text-xs px-4">Master</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="settings" className="text-xs px-4">Settings</TabsTrigger>}
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -658,11 +624,11 @@ export default function Dashboard() {
                     <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 flex items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-semibold text-orange-400">No data yet</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Connect integrations to pull live data automatically, or use <strong>Edit Data</strong> to enter numbers manually.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Connect integrations in Settings to pull live data automatically.</p>
                       </div>
-                      <Button size="sm" variant="ghost" onClick={() => setTab("customize")}
+                      <Button size="sm" variant="ghost" onClick={() => setSettingsOpen(true)}
                         className="text-xs h-7 shrink-0 text-orange-400 hover:text-orange-300 border border-orange-500/30">
-                        Set up integrations
+                        Open Settings
                       </Button>
                     </div>
                   )}
@@ -1187,239 +1153,7 @@ export default function Dashboard() {
               </TabsContent>
             )}
 
-            {/* ══════════════ RESOURCES ══════════════ */}
-            {tab === "resources" && config.tabs.resources && (
-              <TabsContent value="resources">
-                <motion.div key="resources" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-base font-bold flex items-center gap-2"><BookOpen className="h-4 w-4 text-orange-400" />Resources</h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">SOPs, trainings, tools, and templates curated for you.</p>
-                    </div>
-                    {isAdmin && (
-                      <Button size="sm" onClick={() => setAddingResource(true)}
-                        className="gap-1.5 text-xs h-8 bg-orange-500 hover:bg-orange-600 text-white">
-                        <Plus className="h-3.5 w-3.5" /> Add Resource
-                      </Button>
-                    )}
-                  </div>
 
-                  {/* Admin add form */}
-                  {isAdmin && addingResource && (
-                    <Card className="bg-card border-orange-500/30">
-                      <CardContent className="px-4 py-4 space-y-3">
-                        <p className="text-xs font-semibold text-orange-400">New Resource</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Title</Label>
-                            <Input value={newResource.title} onChange={e => setNewResource(p => ({...p, title: e.target.value}))} placeholder="e.g. Cold Outreach SOP" className="h-8 text-sm bg-muted border-border" />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">URL</Label>
-                            <Input value={newResource.url} onChange={e => setNewResource(p => ({...p, url: e.target.value}))} placeholder="https://..." className="h-8 text-sm bg-muted border-border" />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Category</Label>
-                            <Input value={newResource.category} onChange={e => setNewResource(p => ({...p, category: e.target.value}))} placeholder="e.g. Sales Processes" className="h-8 text-sm bg-muted border-border" />
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Type</Label>
-                            <select value={newResource.type} onChange={e => setNewResource(p => ({...p, type: e.target.value as ResourceType}))}
-                              className="h-8 text-sm bg-muted border border-border rounded-md px-2 text-foreground">
-                              <option value="sop">SOP</option>
-                              <option value="training">Training</option>
-                              <option value="tool">Tool</option>
-                              <option value="template">Template</option>
-                            </select>
-                          </div>
-                          <div className="sm:col-span-2 flex flex-col gap-1">
-                            <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Description</Label>
-                            <Input value={newResource.description} onChange={e => setNewResource(p => ({...p, description: e.target.value}))} placeholder="Brief description..." className="h-8 text-sm bg-muted border-border" />
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={addResource} className="h-7 bg-orange-500 hover:bg-orange-600 text-white text-xs">Save</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setAddingResource(false)} className="h-7 text-xs">Cancel</Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Filter pills */}
-                  <div className="flex gap-2 flex-wrap">
-                    {(["all", "sop", "training", "tool", "template"] as const).map(f => (
-                      <button key={f} onClick={() => setResourceFilter(f)}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${resourceFilter === f ? "bg-orange-500 border-orange-500 text-white" : "border-border text-muted-foreground hover:border-orange-500/40 hover:text-orange-400"}`}>
-                        {f === "all" ? "All" : f === "sop" ? "SOPs" : f === "training" ? "Trainings" : f === "tool" ? "Tools" : "Templates"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Resource cards grouped by category */}
-                  {(() => {
-                    const filtered = resources.filter(r => resourceFilter === "all" || r.type === resourceFilter);
-                    const byCategory = filtered.reduce<Record<string, Resource[]>>((acc, r) => {
-                      const cat = r.category || "General";
-                      if (!acc[cat]) acc[cat] = [];
-                      acc[cat].push(r);
-                      return acc;
-                    }, {});
-                    if (filtered.length === 0) return (
-                      <div className="text-center py-12 text-muted-foreground text-sm">
-                        {resources.length === 0 ? "No resources added yet. Admin can add resources above." : "No resources match this filter."}
-                      </div>
-                    );
-                    const typeIcon = (type: ResourceType) => {
-                      if (type === "sop") return <FileText className="h-3.5 w-3.5 text-orange-400" />;
-                      if (type === "training") return <Video className="h-3.5 w-3.5 text-blue-400" />;
-                      if (type === "tool") return <Wrench className="h-3.5 w-3.5 text-emerald-400" />;
-                      return <Layout className="h-3.5 w-3.5 text-purple-400" />;
-                    };
-                    return Object.entries(byCategory).map(([cat, items]) => (
-                      <div key={cat} className="space-y-2">
-                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{cat}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {items.map(resource => (
-                            <Card key={resource.id} className="bg-card border-border hover:border-orange-500/30 transition-colors group">
-                              <CardContent className="px-4 py-3 flex flex-col gap-1.5">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    {typeIcon(resource.type)}
-                                    <span className="text-sm font-semibold truncate">{resource.title}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <a href={resource.url} target="_blank" rel="noopener noreferrer">
-                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-orange-400">
-                                        <ExternalLink className="h-3 w-3" />
-                                      </Button>
-                                    </a>
-                                    {isAdmin && (
-                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => deleteResource(resource.id)}>
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                                {resource.description && <p className="text-xs text-muted-foreground leading-relaxed">{resource.description}</p>}
-                                <Badge className="w-fit text-[10px] bg-muted border-border">{resource.type.toUpperCase()}</Badge>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </motion.div>
-              </TabsContent>
-            )}
-
-            {/* ══════════════ CUSTOMIZE ══════════════ */}
-            {tab === "customize" && (
-              <TabsContent value="customize">
-                <motion.div key="customize" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-6 max-w-2xl">
-                  <div>
-                    <h2 className="text-base font-bold flex items-center gap-2"><Sliders className="h-4 w-4 text-orange-400" />Customize Dashboard</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">Choose your business type to auto-configure, then fine-tune individual sections.</p>
-                  </div>
-
-                  {/* Business type cards */}
-                  <Card className="bg-card border-border">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold">Business Type</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4">
-                      <div className="grid grid-cols-2 gap-2">
-                        {(["coaching"] as BusinessType[]).map(type => (
-                          <button key={type} onClick={() => saveConfig(BUSINESS_PRESETS[type])}
-                            className={`rounded-lg border px-3 py-3 text-center text-xs font-medium transition-all ${config.businessType === type ? "bg-orange-500/10 border-orange-500/50 text-orange-400" : "border-border text-muted-foreground hover:border-orange-500/30 hover:text-foreground"}`}>
-                            {type === "coaching" ? "🎯 Coaching" : "🤝 Business to Business"}
-                          </button>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Tab toggles */}
-                  <Card className="bg-card border-border">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold">Visible Tabs</CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4 space-y-3">
-                      {([["dashboard","Dashboard"],["pipeline","Pipeline"],["ads","Ads"],["reps","Rep Leaderboard"],["resources","Resources"]] as [keyof DashboardConfig["tabs"], string][]).map(([key, label]) => (
-                        <div key={key} className="flex items-center justify-between">
-                          <span className="text-sm text-foreground">{label}</span>
-                          <Switch checked={config.tabs[key]} onCheckedChange={v => saveConfig({ ...config, businessType: "custom", tabs: { ...config.tabs, [key]: v } })} />
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-
-                  {/* Widget toggles by section */}
-                  {([
-                    ["Dashboard Widgets", [
-                      ["kpiCards","KPI Cards (Cash, Revenue, Leads, etc.)"],
-                      ["monthlyGoal","Monthly Goal Progress"],
-                      ["paceToGoal","Pace to Goal"],
-                      ["reactivation","Reactivation Campaign"],
-                      ["revenueChart","Revenue Over Time Chart"],
-                      ["netByProduct","Net by Product / Offer Chart"],
-                      ["netByProcessor","Net by Processor Chart"],
-                      ["checkInScores","Client Pulse (Check-In Scores)"],
-                    ]],
-                    ["Pipeline Widgets", [
-                      ["callMetrics","Call & Demo Metrics"],
-                      ["funnelChart","Pipeline Funnel Chart"],
-                      ["stageBreakdown","Stage Breakdown Chart"],
-                    ]],
-                    ["Ads Widgets", [
-                      ["adMetrics","Facebook & Instagram Ad Metrics"],
-                      ["leadsOverTime","Leads Over Time & by Campaign"],
-                      ["topAds","Ad Spend Split & Top Ads"],
-                    ]],
-                    ["Rep Leaderboard Widgets", [
-                      ["leaderboard","Rep Leaderboard Table & Snapshot"],
-                      ["repCharts","Rep Performance Charts"],
-                    ]],
-                  ] as [string, [keyof DashboardConfig["widgets"], string][]][]).map(([section, items]) => (
-                    <Card key={section} className="bg-card border-border">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold">{section}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-3">
-                        {items.map(([key, label]) => (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-sm text-foreground">{label}</span>
-                            <Switch checked={config.widgets[key]} onCheckedChange={v => saveConfig({ ...config, businessType: "custom", widgets: { ...config.widgets, [key]: v } })} />
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {/* Per-card KPI toggles — only shown when kpiCards widget is enabled */}
-                  {config.widgets.kpiCards && (
-                    <Card className="bg-card border-border">
-                      <CardHeader className="pb-2 pt-4 px-4">
-                        <CardTitle className="text-sm font-semibold">Individual KPI Cards</CardTitle>
-                      </CardHeader>
-                      <CardContent className="px-4 pb-4 space-y-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Show or hide specific metric cards</p>
-                        {(Object.entries(KPI_CARD_LABELS) as [KpiCardKey, string][]).map(([key, label]) => (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-sm text-foreground">{label}</span>
-                            <Switch
-                              checked={kpiVisible(key)}
-                              onCheckedChange={v => saveConfig({ ...config, kpiCardVisibility: { ...config.kpiCardVisibility, [key]: v } })}
-                            />
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  )}
-                </motion.div>
-              </TabsContent>
-            )}
 
             {/* ══════════════ MY PERFORMANCE ══════════════ */}
             {tab === "my-performance" && (isAdmin || session?.user?.role === "staff") && (
@@ -1593,270 +1327,429 @@ export default function Dashboard() {
               <TabsContent value="master">
                 <motion.div key="master" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
 
-                  {/* Cumulative Revenue Banner */}
-                  <Card className="bg-orange-500/5 border-orange-500/20">
-                    <CardContent className="px-6 py-5 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-widest text-orange-400 font-semibold mb-1">
-                          Total Revenue Generated Across All Clients
-                        </p>
-                        <p className="text-3xl font-bold text-foreground">
-                          ${totalCumulativeRevenue.toLocaleString()}
-                        </p>
-                      </div>
-                      <TrendingUp className="h-10 w-10 text-orange-500/40" />
-                    </CardContent>
-                  </Card>
-
-                  {/* Rev Share Summary Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <MetricCard label="Rev Share Owed (MTD)" value={totalRevShareOwed} prefix="$" variant="orange" index={0} />
-                    <MetricCard label="Clients Paid"         value={paidCount}                     variant="green"  index={1} />
-                    <MetricCard label="Clients Pending"      value={pendingCount}                   variant="default" index={2} />
+                  {/* Sub-navigation */}
+                  <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit border border-border">
+                    {(["overview", "onboarding", "client-managed", "staff"] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setMasterSubTab(v)}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          masterSubTab === v
+                            ? "bg-background text-foreground shadow-sm border border-border"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {v === "overview" ? "Overview" : v === "onboarding" ? "Onboarding" : v === "client-managed" ? "Client Managed" : "Staff Views"}
+                      </button>
+                    ))}
                   </div>
 
-                  {/* Client Dashboards */}
-                  <Card className="bg-card border-border">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Users className="h-4 w-4 text-orange-400" />
-                        Client Dashboards
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4">
-                      {(data.clientRegistry ?? []).length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No clients added yet.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {(data.clientRegistry ?? []).map((c) => (
-                            editingClientId === c.id ? (
-                              <div key={c.id} className="flex items-center gap-1">
-                                <Input
-                                  autoFocus
-                                  value={editingClientName}
-                                  onChange={(e) => setEditingClientName(e.target.value)}
-                                  className="h-7 text-xs w-36 bg-muted border-orange-500/40"
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") saveClientName(c.id);
-                                    if (e.key === "Escape") setEditingClientId(null);
-                                  }}
-                                />
-                                <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-400" onClick={() => saveClientName(c.id)}><Check className="h-3 w-3" /></Button>
-                                <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingClientId(null)}><X className="h-3 w-3" /></Button>
-                              </div>
-                            ) : (
-                              <div key={c.id} className="flex items-center gap-1">
-                                <Link href={`/admin/client/${c.id}`}>
-                                  <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
-                                    {c.name}
-                                  </Badge>
-                                </Link>
-                                <Button
-                                  size="icon" variant="ghost"
-                                  className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
-                                  onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  {/* ── Overview ── */}
+                  {masterSubTab === "overview" && (
+                    <div className="space-y-5">
+                      {/* Cumulative Revenue Banner */}
+                      <Card className="bg-orange-500/5 border-orange-500/20">
+                        <CardContent className="px-6 py-5 flex items-center justify-between">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-widest text-orange-400 font-semibold mb-1">
+                              Total Revenue Generated Across All Clients
+                            </p>
+                            <p className="text-3xl font-bold text-foreground">
+                              ${totalCumulativeRevenue.toLocaleString()}
+                            </p>
+                          </div>
+                          <TrendingUp className="h-10 w-10 text-orange-500/40" />
+                        </CardContent>
+                      </Card>
 
-                  {/* Add Client */}
-                  <Card className="bg-card border-border">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <UserPlus className="h-4 w-4 text-orange-400" />
-                        Manage Client Access
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Client Name</Label>
-                          <Input
-                            value={newClientName}
-                            onChange={(e) => setNewClientName(e.target.value)}
-                            placeholder="e.g. Alpha Coaching"
-                            className="h-8 text-sm bg-muted border-border"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Login Password</Label>
-                          <Input
-                            value={newClientPassword}
-                            onChange={(e) => setNewClientPassword(e.target.value)}
-                            placeholder="e.g. alpha2026"
-                            className="h-8 text-sm bg-muted border-border"
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={clientSaving || !newClientName.trim() || !newClientPassword.trim()}
-                          onClick={addClient}
-                          className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs"
-                        >
-                          {clientSaving ? "Saving…" : "Add Client"}
-                        </Button>
+                      {/* Rev Share Summary Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <MetricCard label="Rev Share Owed (MTD)" value={totalRevShareOwed} prefix="$" variant="orange" index={0} />
+                        <MetricCard label="Clients Paid"         value={paidCount}                     variant="green"  index={1} />
+                        <MetricCard label="Clients Pending"      value={pendingCount}                   variant="default" index={2} />
                       </div>
-                      {clientMsg && (
-                        <p className="text-xs text-emerald-400 mt-3">{clientMsg}</p>
-                      )}
-                    </CardContent>
-                  </Card>
 
-                  {/* Manage Staff */}
-                  <Card className="bg-card border-border">
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Users className="h-4 w-4 text-orange-400" />
-                          Staff Access
-                        </CardTitle>
-                        {staffList.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            {seedMsg && (
-                              <span className={`text-xs ${seedMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{seedMsg}</span>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={seedingSheets}
-                              onClick={seedSheets}
-                              className="h-7 text-xs gap-1.5 border-border"
-                            >
-                              {seedingSheets ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                              Link Sheets
+                      {/* Client Dashboards */}
+                      <Card className="bg-card border-border">
+                        <CardHeader className="pb-2 pt-4 px-4">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <Users className="h-4 w-4 text-orange-400" />
+                            Client Dashboards
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                          {(data.clientRegistry ?? []).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No clients added yet.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {(data.clientRegistry ?? []).map((c) => (
+                                editingClientId === c.id ? (
+                                  <div key={c.id} className="flex items-center gap-1">
+                                    <Input
+                                      autoFocus
+                                      value={editingClientName}
+                                      onChange={(e) => setEditingClientName(e.target.value)}
+                                      className="h-7 text-xs w-36 bg-muted border-orange-500/40"
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") saveClientName(c.id);
+                                        if (e.key === "Escape") setEditingClientId(null);
+                                      }}
+                                    />
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-400" onClick={() => saveClientName(c.id)}><Check className="h-3 w-3" /></Button>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingClientId(null)}><X className="h-3 w-3" /></Button>
+                                  </div>
+                                ) : (
+                                  <div key={c.id} className="flex items-center gap-1">
+                                    <Link href={`/admin/client/${c.id}`}>
+                                      <Badge className="cursor-pointer px-3 py-1.5 text-xs bg-muted hover:bg-orange-500/10 hover:text-orange-400 hover:border-orange-500/30 border border-border transition-colors">
+                                        {c.name}
+                                      </Badge>
+                                    </Link>
+                                    <Button
+                                      size="icon" variant="ghost"
+                                      className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
+                                      onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Add Client */}
+                      <Card className="bg-card border-border">
+                        <CardHeader className="pb-2 pt-4 px-4">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <UserPlus className="h-4 w-4 text-orange-400" />
+                            Manage Client Access
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Client Name</Label>
+                              <Input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="e.g. Alpha Coaching" className="h-8 text-sm bg-muted border-border" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Login Password</Label>
+                              <Input value={newClientPassword} onChange={(e) => setNewClientPassword(e.target.value)} placeholder="e.g. alpha2026" className="h-8 text-sm bg-muted border-border" />
+                            </div>
+                            <Button size="sm" disabled={clientSaving || !newClientName.trim() || !newClientPassword.trim()} onClick={addClient} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
+                              {clientSaving ? "Saving…" : "Add Client"}
                             </Button>
                           </div>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4 space-y-4">
-                      {staffList.length > 0 && (
-                        <div className="space-y-1.5">
-                          {staffList.map((s) => (
-                            <div key={s.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-medium truncate">{s.name}</span>
-                                {s.sheetId
-                                  ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0">Sheet ✓</span>
-                                  : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 font-medium shrink-0">No sheet</span>
-                                }
+                          {clientMsg && <p className="text-xs text-emerald-400 mt-3">{clientMsg}</p>}
+                        </CardContent>
+                      </Card>
+
+                      {/* Manage Staff */}
+                      <Card className="bg-card border-border">
+                        <CardHeader className="pb-2 pt-4 px-4">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                              <Users className="h-4 w-4 text-orange-400" />
+                              Staff Access
+                            </CardTitle>
+                            {staffList.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                {seedMsg && <span className={`text-xs ${seedMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{seedMsg}</span>}
+                                <Button size="sm" variant="outline" disabled={seedingSheets} onClick={seedSheets} className="h-7 text-xs gap-1.5 border-border">
+                                  {seedingSheets ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                  Link Sheets
+                                </Button>
                               </div>
-                              <Button
-                                size="icon" variant="ghost"
-                                className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-400 transition-colors"
-                                onClick={() => removeStaff(s.id)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4 space-y-4">
+                          {staffList.length > 0 && (
+                            <div className="space-y-1.5">
+                              {staffList.map((s) => (
+                                <div key={s.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-medium truncate">{s.name}</span>
+                                    {s.sheetId
+                                      ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0">Sheet ✓</span>
+                                      : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 font-medium shrink-0">No sheet</span>
+                                    }
+                                  </div>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-400 transition-colors" onClick={() => removeStaff(s.id)}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                          <p className="text-[11px] text-muted-foreground pt-1">
-                            After adding Kian, Elias, or Naomi — click <strong>Link Sheets</strong> to connect their Google Sheets automatically.
+                          )}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
+                              <Input value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} placeholder="e.g. Kian Williams" className="h-8 text-sm bg-muted border-border" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
+                              <Input value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} placeholder="e.g. staff2026" className="h-8 text-sm bg-muted border-border" />
+                            </div>
+                            <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
+                              {staffSaving ? "Saving…" : "Add Staff"}
+                            </Button>
+                          </div>
+                          {staffMsg && <p className={`text-xs mt-1 ${staffMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{staffMsg}</p>}
+                        </CardContent>
+                      </Card>
+
+                      {/* Client Health Heatmap */}
+                      <ChartCard title="Client Health Heatmap">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm min-w-[640px]">
+                            <thead>
+                              <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                                {["Client", "Cash MTD", "Check-In", "Health", "Rev Share Owed", "Rev Share", "ROI Status"].map(h => (
+                                  <th key={h} className="pb-2 pr-4 font-medium whitespace-nowrap">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {clients.map((client, i) => {
+                                const score = client.checkInScore;
+                                const healthLabel = score >= 7 ? "On Track" : score >= 4 ? "Needs Attention" : "At Risk";
+                                const healthClass = score >= 7
+                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                  : score >= 4
+                                  ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                                  : "bg-red-500/10 text-red-400 border-red-500/20";
+                                const revOwed = client.cashCollectedMTD * (client.revSharePct / 100);
+                                const roiRecovered = client.cumulativeRevenue >= client.setupFee;
+                                const roiGap = client.setupFee - client.cumulativeRevenue;
+                                return (
+                                  <tr key={i} className="border-b border-border/30 last:border-0 hover:bg-muted/40 transition-colors">
+                                    <td className="py-3 pr-4 font-semibold whitespace-nowrap">{client.name}</td>
+                                    <td className="py-3 pr-4 text-foreground">${client.cashCollectedMTD.toLocaleString()}</td>
+                                    <td className="py-3 pr-4 text-muted-foreground">{score}/10</td>
+                                    <td className="py-3 pr-4"><Badge className={`text-[10px] ${healthClass}`}>{healthLabel}</Badge></td>
+                                    <td className="py-3 pr-4 text-foreground">${revOwed.toLocaleString()}</td>
+                                    <td className="py-3 pr-4">
+                                      <Badge className={client.revSharePaid ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]" : "bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]"}>
+                                        {client.revSharePaid ? "Paid" : "Pending"}
+                                      </Badge>
+                                    </td>
+                                    <td className="py-3 pr-4">
+                                      {roiRecovered
+                                        ? <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Recovered</Badge>
+                                        : <span className="text-xs text-muted-foreground">${roiGap.toLocaleString()} to go</span>
+                                      }
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </ChartCard>
+                    </div>
+                  )}
+
+                  {/* ── Onboarding ── */}
+                  {masterSubTab === "onboarding" && <OnboardingTab />}
+
+                  {/* ── Client Managed ── */}
+                  {masterSubTab === "client-managed" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-bold flex items-center gap-2">
+                          <Users className="h-4 w-4 text-orange-400" />
+                          Client Managed
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">Read-only view of managed client dashboards. Data is live — no edits can be made from here.</p>
+                      </div>
+
+                      {!leadwellExpanded ? (
+                        <Card
+                          className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
+                          onClick={() => setLeadwellExpanded(true)}
+                        >
+                          <CardContent className="px-4 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                                <span className="text-base font-bold text-orange-400">L</span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold">Leadwell</p>
+                                <p className="text-xs text-muted-foreground">Sales operations dashboard</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Live</Badge>
+                              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold">Leadwell</span>
+                              <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Read Only</Badge>
+                              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Live</Badge>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => setLeadwellExpanded(false)}
+                              className="h-7 text-xs text-muted-foreground gap-1">
+                              <X className="h-3.5 w-3.5" />Close
+                            </Button>
+                          </div>
+                          <div className="relative rounded-lg overflow-hidden border border-border">
+                            <iframe
+                              src="https://leadwell-dashboard.vercel.app"
+                              className="w-full h-[720px]"
+                              title="Leadwell Dashboard (read-only)"
+                            />
+                            <div className="absolute inset-0 z-10" />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground text-center">
+                            Interaction disabled. Data updates live from GHL.
                           </p>
                         </div>
                       )}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
-                          <Input
-                            value={newStaffName}
-                            onChange={(e) => setNewStaffName(e.target.value)}
-                            placeholder="e.g. Kian Williams"
-                            className="h-8 text-sm bg-muted border-border"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
-                          <Input
-                            value={newStaffPassword}
-                            onChange={(e) => setNewStaffPassword(e.target.value)}
-                            placeholder="e.g. staff2026"
-                            className="h-8 text-sm bg-muted border-border"
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()}
-                          onClick={addStaff}
-                          className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs"
-                        >
-                          {staffSaving ? "Saving…" : "Add Staff"}
-                        </Button>
-                      </div>
-                      {staffMsg && (
-                        <p className={`text-xs mt-1 ${staffMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{staffMsg}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Client Health Heatmap */}
-                  <ChartCard title="Client Health Heatmap">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm min-w-[640px]">
-                        <thead>
-                          <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                            {["Client", "Cash MTD", "Check-In", "Health", "Rev Share Owed", "Rev Share", "ROI Status"].map(h => (
-                              <th key={h} className="pb-2 pr-4 font-medium whitespace-nowrap">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {clients.map((client, i) => {
-                            const score = client.checkInScore;
-                            const healthLabel = score >= 7 ? "On Track" : score >= 4 ? "Needs Attention" : "At Risk";
-                            const healthClass = score >= 7
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                              : score >= 4
-                              ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                              : "bg-red-500/10 text-red-400 border-red-500/20";
-                            const revOwed = client.cashCollectedMTD * (client.revSharePct / 100);
-                            const roiRecovered = client.cumulativeRevenue >= client.setupFee;
-                            const roiGap = client.setupFee - client.cumulativeRevenue;
-                            return (
-                              <tr key={i} className="border-b border-border/30 last:border-0 hover:bg-muted/40 transition-colors">
-                                <td className="py-3 pr-4 font-semibold whitespace-nowrap">{client.name}</td>
-                                <td className="py-3 pr-4 text-foreground">${client.cashCollectedMTD.toLocaleString()}</td>
-                                <td className="py-3 pr-4 text-muted-foreground">{score}/10</td>
-                                <td className="py-3 pr-4">
-                                  <Badge className={`text-[10px] ${healthClass}`}>{healthLabel}</Badge>
-                                </td>
-                                <td className="py-3 pr-4 text-foreground">${revOwed.toLocaleString()}</td>
-                                <td className="py-3 pr-4">
-                                  <Badge className={client.revSharePaid
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
-                                    : "bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]"}>
-                                    {client.revSharePaid ? "Paid" : "Pending"}
-                                  </Badge>
-                                </td>
-                                <td className="py-3 pr-4">
-                                  {roiRecovered
-                                    ? <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Recovered</Badge>
-                                    : <span className="text-xs text-muted-foreground">${roiGap.toLocaleString()} to go</span>
-                                  }
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
                     </div>
-                  </ChartCard>
+                  )}
+
+                  {/* ── Staff Views ── */}
+                  {masterSubTab === "staff" && (
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-base font-bold flex items-center gap-2">
+                          <Users className="h-4 w-4 text-orange-400" />
+                          Staff Views
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">Live read-only stats for each team member, pulled from GHL on every KPI sync.</p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {LEADWELL_STAFF.map(({ name, role }) => {
+                          const repData = r.leaderboard.find(rep =>
+                            rep.name.toLowerCase().includes(name.toLowerCase())
+                          );
+                          return (
+                            <Card key={name} className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all">
+                              <CardContent className="px-4 py-4 space-y-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold">{name}</p>
+                                    <p className="text-xs text-muted-foreground">{role}</p>
+                                  </div>
+                                </div>
+                                {repData ? (
+                                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                    <div>
+                                      <p className="text-muted-foreground">Calls</p>
+                                      <p className="font-bold text-foreground">{repData.callsMade}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Closed</p>
+                                      <p className="font-bold text-orange-400">{repData.dealsClosed}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Cash</p>
+                                      <p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-muted-foreground">No leaderboard data yet — run Sync KPI to pull from GHL.</p>
+                                )}
+                                <Link href="/?tab=reps">
+                                  <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 border-border hover:border-orange-500/30 hover:text-orange-400">
+                                    <ExternalLink className="h-3 w-3" />View Leaderboard
+                                  </Button>
+                                </Link>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                 </motion.div>
               </TabsContent>
             )}
 
-            {/* ══════════════ ONBOARDING ══════════════ */}
-            {tab === "onboarding" && isAdmin && (
-              <TabsContent value="onboarding">
-                <OnboardingTab />
+            {/* ══════════════ SETTINGS ══════════════ */}
+            {tab === "settings" && isAdmin && (
+              <TabsContent value="settings">
+                <motion.div key="settings" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-6 max-w-2xl">
+                  <div>
+                    <h2 className="text-base font-bold">Admin Settings</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">System utilities and data controls.</p>
+                  </div>
+
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">Data Utilities</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 divide-y divide-border">
+
+                      {/* Sync KPI */}
+                      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">Sync KPI</p>
+                          <p className="text-xs text-muted-foreground">Pull latest pipeline data from GHL into the leaderboard.</p>
+                          {lastKpiSynced && <p className="text-[10px] text-muted-foreground">Last synced: {lastKpiSynced}</p>}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={syncKpiData} disabled={kpiSyncing}
+                          className="gap-1.5 text-xs h-8 border-border shrink-0 ml-4">
+                          <RefreshCw className={`h-3.5 w-3.5 ${kpiSyncing ? "animate-spin" : ""}`} />
+                          {kpiSyncMsg || "Sync KPI"}
+                        </Button>
+                      </div>
+
+                      {/* Backfill Deals */}
+                      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">Backfill Deals</p>
+                          <p className="text-xs text-muted-foreground">Import historical GHL deals into the dashboard.</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={backfillDeals} disabled={kpiSyncing}
+                          className="gap-1.5 text-xs h-8 border-border shrink-0 ml-4">
+                          <Download className="h-3.5 w-3.5" />
+                          Backfill
+                        </Button>
+                      </div>
+
+                      {/* Expenses */}
+                      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">Expenses</p>
+                          <p className="text-xs text-muted-foreground">View and manage staff expense submissions.</p>
+                        </div>
+                        <Link href="/staff/expenses">
+                          <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8 border-border shrink-0 ml-4">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Open
+                          </Button>
+                        </Link>
+                      </div>
+
+                      {/* Reset */}
+                      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-red-400">Reset Dashboard</p>
+                          <p className="text-xs text-muted-foreground">Clear all manually entered data and reset to blank state. This cannot be undone.</p>
+                        </div>
+                        <Button size="sm" variant="outline" onClick={reset}
+                          className="gap-1.5 text-xs h-8 border-red-500/30 text-red-400 hover:bg-red-500/10 shrink-0 ml-4">
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Reset
+                        </Button>
+                      </div>
+
+                    </CardContent>
+                  </Card>
+                </motion.div>
               </TabsContent>
             )}
 
@@ -1864,8 +1757,6 @@ export default function Dashboard() {
         </Tabs>
       </main>
 
-      <EditDataSheet open={editOpen} data={data} onClose={() => setEditOpen(false)}
-        onSave={(next) => { update(next); setEditOpen(false); }} />
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );

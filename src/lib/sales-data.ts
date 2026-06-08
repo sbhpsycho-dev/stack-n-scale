@@ -123,7 +123,7 @@ export const BLANK: SalesData = {
     cashCollectedYTD: 0,
     cashCollectedMTD: 0, leadsThisMonth: 0, totalDealsClosedMTD: 0,
     netRevenueMTD: 0, costPerClose: 0, mrr: 0, totalRefund: 0,
-    totalRefundPct: 0, monthlyGoal: 0, cashCollectedLastMonth: 0,
+    totalRefundPct: 0, monthlyGoal: 100000, cashCollectedLastMonth: 0,
     avgLeadResponseTimeMin: 0,
     reactivation: { contacted: 0, replied: 0, booked: 0, closed: 0 },
     checkInScores: [], revenueOverTime: [], netByProduct: [], netByProcessor: [], leadsBySource: [],
@@ -158,7 +158,7 @@ export const SEED: SalesData = {
     mrr: 13750,
     totalRefund: 500,
     totalRefundPct: 0.02,
-    monthlyGoal: 70000,
+    monthlyGoal: 100000,
     cashCollectedLastMonth: 16200,
     avgLeadResponseTimeMin: 4.2,
     reactivation: {
