@@ -122,20 +122,14 @@ export async function GET(req: Request): Promise<Response> {
 
   for (const { name, envKey } of NOTIFY_CHANNELS) {
     try {
-      let channel = byName[name] as { id: string; name: string } | undefined;
+      const channel = byName[name] as { id: string; name: string } | undefined;
 
       if (!channel) {
-        log.push(`Creating #${name}...`);
-        const created = await discordApi(`/guilds/${cleanGuildId}/channels`, "POST", { name, type: 0 });
-        if (!created || typeof (created as { id?: string }).id !== "string") {
-          log.push(`✗ Failed to create #${name}: ${JSON.stringify(created)}`);
-          continue;
-        }
-        channel = created as { id: string; name: string };
-        log.push(`Created #${name} (${channel.id})`);
-      } else {
-        log.push(`#${name} already exists (${channel.id})`);
+        log.push(`⚠ #${name} not found — bot may not have access to this private channel. Grant the bot Manage Webhooks permission there and re-run.`);
+        continue;
       }
+
+      log.push(`#${name} found (${channel.id})`);
 
       const webhooks = await discordApi(`/channels/${channel.id}/webhooks`);
       const existingHook = Array.isArray(webhooks) && (webhooks as Array<{ id: string; name: string; token: string }>).find((w) => w.name === WEBHOOK_NAME);
