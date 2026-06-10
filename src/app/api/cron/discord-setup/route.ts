@@ -41,11 +41,11 @@ const GHL_EVENTS = [
   "OpportunityStatusUpdate",
 ];
 
+let _botToken = "";
 async function discordApi(path: string, method = "GET", body?: object) {
-  const token = process.env.DISCORD_BOT_TOKEN!;
   const r = await fetch(`${DISCORD_API}${path}`, {
     method,
-    headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bot ${_botToken}`, "Content-Type": "application/json" },
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(10000),
   });
@@ -93,40 +93,73 @@ export async function GET(req: Request): Promise<Response> {
   const results: Record<string, string> = {};
   const log: string[] = [];
 
+  // Strip any accidental BOM / whitespace from bot token + guild id
+  const cleanToken   = botToken.replace(/^﻿/, "").trim();
+  const cleanGuildId = guildId.replace(/^﻿/, "").trim();
+  _botToken = cleanToken;
+
   // ── Step 1: Create Discord channels + webhooks ────────────────────────────
 
   log.push("Fetching existing Discord channels...");
-  const existing = await discordApi(`/guilds/${guildId}/channels`) as Array<{ id: string; name: string }>;
-  const byName = Object.fromEntries(existing.map((ch: { id: string; name: string }) => [ch.name, ch]));
+  let rawChannels: unknown;
+  try {
+    rawChannels = await discordApi(`/guilds/${cleanGuildId}/channels`, "GET");
+  } catch (e) {
+    return Response.json({ error: `Discord API error: ${String(e)}`, log }, { status: 500 });
+  }
+
+  if (!Array.isArray(rawChannels)) {
+    return Response.json({
+      error: "Discord returned non-array for channels — bot may not be in the guild or token is invalid",
+      discordResponse: rawChannels,
+      log,
+    }, { status: 500 });
+  }
+
+  const existing = rawChannels as Array<{ id: string; name: string }>;
+  const byName = Object.fromEntries(existing.map((ch) => [ch.name, ch]));
   log.push(`Found ${existing.length} existing channels`);
 
   for (const { name, envKey } of NOTIFY_CHANNELS) {
-    let channel = byName[name] as { id: string; name: string } | undefined;
+    try {
+      let channel = byName[name] as { id: string; name: string } | undefined;
 
-    if (!channel) {
-      log.push(`Creating #${name}...`);
-      channel = await discordApi(`/guilds/${guildId}/channels`, "POST", { name, type: 0 }) as { id: string; name: string };
-      log.push(`Created #${name} (${channel.id})`);
-    } else {
-      log.push(`#${name} already exists (${channel.id})`);
+      if (!channel) {
+        log.push(`Creating #${name}...`);
+        const created = await discordApi(`/guilds/${cleanGuildId}/channels`, "POST", { name, type: 0 });
+        if (!created || typeof (created as { id?: string }).id !== "string") {
+          log.push(`✗ Failed to create #${name}: ${JSON.stringify(created)}`);
+          continue;
+        }
+        channel = created as { id: string; name: string };
+        log.push(`Created #${name} (${channel.id})`);
+      } else {
+        log.push(`#${name} already exists (${channel.id})`);
+      }
+
+      const webhooks = await discordApi(`/channels/${channel.id}/webhooks`);
+      const existingHook = Array.isArray(webhooks) && (webhooks as Array<{ id: string; name: string; token: string }>).find((w) => w.name === WEBHOOK_NAME);
+
+      if (existingHook) {
+        log.push(`Reusing existing webhook for #${name}`);
+        results[envKey] = `https://discord.com/api/webhooks/${existingHook.id}/${existingHook.token}`;
+      } else {
+        log.push(`Creating webhook for #${name}...`);
+        const hook = await discordApi(`/channels/${channel.id}/webhooks`, "POST", { name: WEBHOOK_NAME }) as { id: string; token: string };
+        if (!hook?.id || !hook?.token) {
+          log.push(`✗ Failed to create webhook for #${name}: ${JSON.stringify(hook)}`);
+          continue;
+        }
+        results[envKey] = `https://discord.com/api/webhooks/${hook.id}/${hook.token}`;
+        log.push(`Created webhook for #${name}`);
+      }
+
+      // Store in KV — notifications work immediately without env var changes
+      await kv.set(`sns:config:${envKey}`, results[envKey]);
+      log.push(`Saved ${envKey} to KV`);
+    } catch (e) {
+      log.push(`✗ Error setting up #${name}: ${String(e)}`);
     }
-
-    const webhooks = await discordApi(`/channels/${channel.id}/webhooks`) as Array<{ id: string; name: string; token: string }>;
-    const existingHook = Array.isArray(webhooks) && webhooks.find((w: { name: string }) => w.name === WEBHOOK_NAME);
-
-    if (existingHook) {
-      log.push(`Reusing existing webhook for #${name}`);
-      results[envKey] = `https://discord.com/api/webhooks/${existingHook.id}/${existingHook.token}`;
-    } else {
-      log.push(`Creating webhook for #${name}...`);
-      const hook = await discordApi(`/channels/${channel.id}/webhooks`, "POST", { name: WEBHOOK_NAME }) as { id: string; token: string };
-      results[envKey] = `https://discord.com/api/webhooks/${hook.id}/${hook.token}`;
-      log.push(`Created webhook for #${name}`);
-    }
-
-    // Store in KV — notifications work immediately without env var changes
-    await kv.set(`sns:config:${envKey}`, results[envKey]);
-    log.push(`Saved ${envKey} to KV`);
   }
 
   // ── Step 2: Register GHL webhook ─────────────────────────────────────────

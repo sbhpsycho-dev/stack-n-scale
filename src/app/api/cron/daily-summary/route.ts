@@ -2,7 +2,7 @@ import { verifyCronSecret } from "@/lib/cron-auth";
 import { kv } from "@vercel/kv";
 import { sendChannelMessage } from "@/lib/discord";
 
-const BOILER_ROOM_CHANNEL_ID = "1497034366335979662";
+const BOILER_ROOM_CHANNEL_ID = process.env.DISCORD_BOILER_ROOM_CHANNEL_ID ?? "1497034366335979662";
 
 type StaffMeta = { id: string; name: string };
 type DailyEntry = {
