@@ -203,7 +203,9 @@ export default function Dashboard() {
   const { data: session, status: authStatus } = useSession();
   const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
-  const clientId = isAdmin ? "admin" : (session?.user?.clientId ?? null);
+  const isSalesExec = session?.user?.role === "sales_exec";
+  const isAdminView = isAdmin || isSalesExec;
+  const clientId = isAdminView ? "admin" : (session?.user?.clientId ?? null);
 
   const { data, update, reset, loading, refresh } = useSalesData(clientId);
   const [editOpen, setEditOpen] = useState(false);
@@ -301,7 +303,7 @@ export default function Dashboard() {
   // Auto-redirect new clients to setup wizard (only if they haven't completed it)
   const redirectedRef = useRef(false);
   useEffect(() => {
-    if (redirectedRef.current || loading || isAdmin || !clientId) return;
+    if (redirectedRef.current || loading || isAdminView || !clientId) return;
     if (data.dashboard.cashCollectedMTD !== SEED.dashboard.cashCollectedMTD ||
         data.dashboard.leadsThisMonth !== SEED.dashboard.leadsThisMonth) return;
     // Check setup completion server-side (not localStorage, which can be spoofed)
@@ -318,7 +320,7 @@ export default function Dashboard() {
 
   // Load integrations for client
   useEffect(() => {
-    if (isAdmin || !clientId) return;
+    if (isAdminView || !clientId) return;
     fetch("/api/integrations")
       .then((r) => r.json())
       .then((d) => {
@@ -398,10 +400,10 @@ export default function Dashboard() {
   const [staffSaving, setStaffSaving] = useState(false);
   const [staffMsg, setStaffMsg] = useState("");
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdminView) {
       fetch("/api/admin/staff").then((r) => r.json()).then(setStaffList).catch(() => {});
     }
-  }, [isAdmin]);
+  }, [isAdminView]);
   const addStaff = useCallback(async () => {
     if (!newStaffName.trim() || !newStaffPassword.trim()) return;
     setStaffSaving(true);
@@ -566,10 +568,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <Image src="/logo.png" alt="Stack N Scale" width={32} height={32} className="object-contain" />
             <span className="font-bold text-sm tracking-wide">
-              {isAdmin ? "Stack N Scale" : (session?.user?.name ?? "Dashboard")}
+              {isAdminView ? "Stack N Scale" : (session?.user?.name ?? "Dashboard")}
             </span>
             <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">
-              {isAdmin ? "Admin" : "Sales Pipeline"}
+              {isAdmin ? "Admin" : isSalesExec ? "Manager" : "Sales Pipeline"}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -590,7 +592,7 @@ export default function Dashboard() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="bg-muted border border-border h-9 mb-6 flex-wrap">
             {config.tabs.dashboard  && <TabsTrigger value="dashboard"    className="text-xs px-4">Dashboard</TabsTrigger>}
-            {(isAdmin || session?.user?.role === "staff") && (
+            {(isAdminView || session?.user?.role === "staff") && (
               <TabsTrigger value="my-performance" className="text-xs px-4 relative">
                 <BarChart2 className="h-3 w-3 mr-1" />My Performance
                 {!replog.some(e => e.date === todayStr) && (
@@ -601,8 +603,8 @@ export default function Dashboard() {
             {config.tabs.pipeline   && <TabsTrigger value="pipeline"     className="text-xs px-4">Pipeline</TabsTrigger>}
             {config.tabs.ads        && <TabsTrigger value="ads"          className="text-xs px-4">Ads</TabsTrigger>}
             {config.tabs.reps       && <TabsTrigger value="reps"         className="text-xs px-4">Rep Leaderboard</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="master"   className="text-xs px-4">Master</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="settings" className="text-xs px-4">Settings</TabsTrigger>}
+            {isAdminView && <TabsTrigger value="master"   className="text-xs px-4">Master</TabsTrigger>}
+            {isAdmin     && <TabsTrigger value="settings" className="text-xs px-4">Settings</TabsTrigger>}
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -867,7 +869,7 @@ export default function Dashboard() {
                   )}
 
                   {/* Sales Team Snapshot */}
-                  {isAdmin && r.leaderboard.length > 0 && (
+                  {isAdminView && r.leaderboard.length > 0 && (
                     <Card className="bg-card border-border">
                       <CardHeader className="pb-2 pt-4 px-4">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1462,13 +1464,15 @@ export default function Dashboard() {
                                         {c.name}
                                       </Badge>
                                     </Link>
-                                    <Button
-                                      size="icon" variant="ghost"
-                                      className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
-                                      onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
-                                    >
-                                      <Pencil className="h-3 w-3" />
-                                    </Button>
+                                    {isAdmin && (
+                                      <Button
+                                        size="icon" variant="ghost"
+                                        className="h-5 w-5 opacity-60 hover:opacity-100 transition-opacity text-muted-foreground hover:text-orange-400"
+                                        onClick={() => { setEditingClientId(c.id); setEditingClientName(c.name); }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    )}
                                   </div>
                                 )
                               ))}
@@ -1477,8 +1481,8 @@ export default function Dashboard() {
                         </CardContent>
                       </Card>
 
-                      {/* Add Client */}
-                      <Card className="bg-card border-border">
+                      {/* Add Client — admin only */}
+                      {isAdmin && <Card className="bg-card border-border">
                         <CardHeader className="pb-2 pt-4 px-4">
                           <CardTitle className="text-sm font-semibold flex items-center gap-2">
                             <UserPlus className="h-4 w-4 text-orange-400" />
@@ -1501,7 +1505,7 @@ export default function Dashboard() {
                           </div>
                           {clientMsg && <p className="text-xs text-emerald-400 mt-3">{clientMsg}</p>}
                         </CardContent>
-                      </Card>
+                      </Card>}
 
                       {/* Manage Staff */}
                       <Card className="bg-card border-border">
@@ -1511,7 +1515,7 @@ export default function Dashboard() {
                               <Users className="h-4 w-4 text-orange-400" />
                               Staff Access
                             </CardTitle>
-                            {staffList.length > 0 && (
+                            {isAdmin && staffList.length > 0 && (
                               <div className="flex items-center gap-2">
                                 {seedMsg && <span className={`text-xs ${seedMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{seedMsg}</span>}
                                 <Button size="sm" variant="outline" disabled={seedingSheets} onClick={seedSheets} className="h-7 text-xs gap-1.5 border-border">
@@ -1534,26 +1538,30 @@ export default function Dashboard() {
                                       : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 font-medium shrink-0">No sheet</span>
                                     }
                                   </div>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-400 transition-colors" onClick={() => removeStaff(s.id)}>
-                                    <X className="h-3 w-3" />
-                                  </Button>
+                                  {isAdmin && (
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-muted-foreground hover:text-red-400 transition-colors" onClick={() => removeStaff(s.id)}>
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           )}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
-                              <Input value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} placeholder="e.g. Kian Williams" className="h-8 text-sm bg-muted border-border" />
+                          {isAdmin && (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
+                                <Input value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} placeholder="e.g. Kian Williams" className="h-8 text-sm bg-muted border-border" />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
+                                <Input value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} placeholder="e.g. staff2026" className="h-8 text-sm bg-muted border-border" />
+                              </div>
+                              <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
+                                {staffSaving ? "Saving…" : "Add Staff"}
+                              </Button>
                             </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
-                              <Input value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} placeholder="e.g. staff2026" className="h-8 text-sm bg-muted border-border" />
-                            </div>
-                            <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
-                              {staffSaving ? "Saving…" : "Add Staff"}
-                            </Button>
-                          </div>
+                          )}
                           {staffMsg && <p className={`text-xs mt-1 ${staffMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{staffMsg}</p>}
                         </CardContent>
                       </Card>

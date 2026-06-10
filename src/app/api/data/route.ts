@@ -10,11 +10,12 @@ export async function GET(req: Request) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const target = new URL(req.url).searchParams.get("target");
-  if (target && session.user.role !== "admin") return new Response("Forbidden", { status: 403 });
+  const isAdminLike = session.user.role === "admin" || session.user.role === "sales_exec";
+  if (target && !isAdminLike) return new Response("Forbidden", { status: 403 });
   const key =
-    session.user.role === "admin" && target ? clientKey(target)
-    : session.user.role === "admin"          ? ADMIN_KEY
-    :                                          clientKey(session.user.clientId!);
+    isAdminLike && target ? clientKey(target)
+    : isAdminLike          ? ADMIN_KEY
+    :                        clientKey(session.user.clientId!);
 
   try {
     const { kv } = await import("@vercel/kv");
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return new Response("Unauthorized", { status: 401 });
+  if (session.user.role === "sales_exec") return new Response("Forbidden", { status: 403 });
 
   const target = new URL(req.url).searchParams.get("target");
   if (target && session.user.role !== "admin") return new Response("Forbidden", { status: 403 });

@@ -48,7 +48,8 @@ export const authOptions: NextAuthOptions = {
           if (staffRegistry) {
             const staff = staffRegistry.find((s) => verifyPassword(pw, s.password));
             if (staff) {
-              return { id: staff.id, name: staff.name, role: "staff", clientId: staff.id, sheetId: staff.sheetId ?? null };
+              const role = staff.role === "sales_exec" ? "sales_exec" : "staff";
+              return { id: staff.id, name: staff.name, role, clientId: staff.id, sheetId: staff.sheetId ?? null };
             }
           }
 
@@ -79,7 +80,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role     = (user as { role: "admin" | "client" | "staff" | "biz_client" }).role;
+        token.role     = (user as { role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" }).role;
         token.clientId = (user as { clientId: string | null }).clientId;
         token.sheetId  = (user as { sheetId?: string | null }).sheetId ?? null;
       }
