@@ -397,6 +397,7 @@ export default function Dashboard() {
   const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string; sheetId?: string; role?: string }[]>([]);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
+  const [newStaffRole, setNewStaffRole] = useState<string>("setter");
   const [staffSaving, setStaffSaving] = useState(false);
   const [staffMsg, setStaffMsg] = useState("");
   useEffect(() => {
@@ -411,7 +412,7 @@ export default function Dashboard() {
     const res = await fetch("/api/admin/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newStaffName.trim(), password: newStaffPassword.trim() }),
+      body: JSON.stringify({ name: newStaffName.trim(), password: newStaffPassword.trim(), role: newStaffRole }),
     });
     const json = await res.json();
     if (json.ok) {
@@ -419,11 +420,12 @@ export default function Dashboard() {
       setStaffMsg(`✓ "${newStaffName.trim()}" added. Password: ${newStaffPassword.trim()}`);
       setNewStaffName("");
       setNewStaffPassword("");
+      setNewStaffRole("setter");
     } else {
       setStaffMsg(`✗ ${json.error ?? "Failed to add staff"}`);
     }
     setStaffSaving(false);
-  }, [newStaffName, newStaffPassword]);
+  }, [newStaffName, newStaffPassword, newStaffRole]);
   const removeStaff = useCallback(async (id: string) => {
     await fetch("/api/admin/staff", {
       method: "DELETE",
@@ -1533,6 +1535,9 @@ export default function Dashboard() {
                                 <div key={s.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 hover:bg-muted/70 transition-colors">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-sm font-medium truncate">{s.name}</span>
+                                    {s.role === "sales_exec" && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-400 font-medium shrink-0">Manager</span>
+                                    )}
                                     {s.sheetId
                                       ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium shrink-0">Sheet ✓</span>
                                       : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/15 text-zinc-400 font-medium shrink-0">No sheet</span>
@@ -1548,7 +1553,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           {isAdmin && (
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
                               <div className="flex flex-col gap-1.5">
                                 <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Staff Name</Label>
                                 <Input value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} placeholder="e.g. Kian Williams" className="h-8 text-sm bg-muted border-border" />
@@ -1556,6 +1561,20 @@ export default function Dashboard() {
                               <div className="flex flex-col gap-1.5">
                                 <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Initial Password</Label>
                                 <Input value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} placeholder="e.g. staff2026" className="h-8 text-sm bg-muted border-border" />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-[11px] text-muted-foreground uppercase tracking-wider">Role</Label>
+                                <select
+                                  value={newStaffRole}
+                                  onChange={(e) => setNewStaffRole(e.target.value)}
+                                  className="h-8 text-sm bg-muted border border-border rounded-md px-2 text-foreground"
+                                >
+                                  <option value="setter">Setter</option>
+                                  <option value="closer">Closer</option>
+                                  <option value="dm_setter">DM Setter</option>
+                                  <option value="coach">Coach</option>
+                                  <option value="sales_exec">Sales Manager</option>
+                                </select>
                               </div>
                               <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
                                 {staffSaving ? "Saving…" : "Add Staff"}
