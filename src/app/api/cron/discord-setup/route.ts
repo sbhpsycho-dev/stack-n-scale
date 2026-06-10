@@ -18,16 +18,16 @@ const GHL_API      = "https://services.leadconnectorhq.com";
 const WEBHOOK_NAME = "SNS Notifications";
 
 const NOTIFY_CHANNELS = [
-  { name: "new-leads",           envKey: "DISCORD_WEBHOOK_NEW_LEADS"      },
-  { name: "appointments-booked", envKey: "DISCORD_WEBHOOK_APPOINTMENTS"   },
-  { name: "sales",               envKey: "DISCORD_WEBHOOK_SALES"          },
-  { name: "rep-updates",         envKey: "DISCORD_WEBHOOK_REP_UPDATES"    },
-  { name: "alerts",              envKey: "DISCORD_WEBHOOK_ALERTS"         },
-  { name: "daily-summary",       envKey: "DISCORD_WEBHOOK_DAILY_SUMMARY"  },
-  { name: "deals",               envKey: "DISCORD_WEBHOOK_DEAL_CLOSED"    },
-  { name: "payments",            envKey: "DISCORD_WEBHOOK_PAYMENT"        },
+  { name: "ghl-notifications",   envKey: "DISCORD_WEBHOOK_NEW_LEADS"      },
+  { name: "booked-appointments", envKey: "DISCORD_WEBHOOK_APPOINTMENTS"   },
+  { name: "main-sales-channel",  envKey: "DISCORD_WEBHOOK_SALES"          },
+  { name: "team-updates",        envKey: "DISCORD_WEBHOOK_REP_UPDATES"    },
+  { name: "announcements",       envKey: "DISCORD_WEBHOOK_ALERTS"         },
+  { name: "boiler-room",         envKey: "DISCORD_WEBHOOK_DAILY_SUMMARY"  },
+  { name: "closed-deals",        envKey: "DISCORD_WEBHOOK_DEAL_CLOSED"    },
+  { name: "stripe-payments",     envKey: "DISCORD_WEBHOOK_PAYMENT"        },
   { name: "new-clients",         envKey: "DISCORD_WEBHOOK_NEW_CLIENT"     },
-  { name: "check-ins",           envKey: "DISCORD_WEBHOOK_CHECKIN_ALERT"  },
+  { name: "weekly-check-ins",    envKey: "DISCORD_WEBHOOK_CHECKIN_ALERT"  },
 ];
 
 const GHL_EVENTS = [
@@ -82,12 +82,12 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const botToken   = process.env.DISCORD_BOT_TOKEN;
-  const guildId    = process.env.DISCORD_GUILD_ID;
+  const guildId    = process.env.DISCORD_GUILD_ID || "1496950312236220537";
   const ghlApiKey  = process.env.GHL_API_KEY;
   const locationId = process.env.GHL_LOCATION_ID;
 
-  if (!botToken || !guildId) {
-    return Response.json({ error: "DISCORD_BOT_TOKEN and DISCORD_GUILD_ID are required" }, { status: 500 });
+  if (!botToken) {
+    return Response.json({ error: "DISCORD_BOT_TOKEN is required" }, { status: 500 });
   }
 
   const results: Record<string, string> = {};
