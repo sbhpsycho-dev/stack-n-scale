@@ -458,6 +458,27 @@ export default function Dashboard() {
   const [editingRepIdx, setEditingRepIdx] = useState<number | null>(null);
   const [editingRepName, setEditingRepName] = useState("");
 
+  // Discord notification test
+  type DiscordTestResult = { label: string; envKey: string; hasUrl: boolean; sent: boolean; error?: string };
+  const [discordTesting, setDiscordTesting] = useState(false);
+  const [discordTestResults, setDiscordTestResults] = useState<{
+    channels: DiscordTestResult[];
+    boilerRoom: { sent: boolean; error?: string };
+    summary: { sent: number; noUrl: number; failed: number; total: number };
+  } | null>(null);
+  const runDiscordTest = useCallback(async () => {
+    setDiscordTesting(true);
+    setDiscordTestResults(null);
+    try {
+      const res  = await fetch("/api/admin/test-discord", { method: "POST" });
+      const json = await res.json();
+      setDiscordTestResults(json);
+    } catch {
+      setDiscordTestResults(null);
+    }
+    setDiscordTesting(false);
+  }, []);
+
   const addClient = useCallback(async () => {
     if (!newClientName.trim() || !newClientPassword.trim()) return;
     setClientSaving(true);
@@ -1874,6 +1895,73 @@ export default function Dashboard() {
                         </Button>
                       </div>
 
+                    </CardContent>
+                  </Card>
+
+                  {/* Discord Notifications */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold">Discord Notifications</CardTitle>
+                        <Button size="sm" variant="outline" onClick={runDiscordTest} disabled={discordTesting}
+                          className="gap-1.5 text-xs h-8 border-border shrink-0">
+                          {discordTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          {discordTesting ? "Testing…" : "Test All"}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-3">
+                      {!discordTestResults && !discordTesting && (
+                        <p className="text-xs text-muted-foreground">Fire a test notification to every Discord channel to confirm wiring. Results appear here.</p>
+                      )}
+
+                      {discordTestResults && (
+                        <>
+                          {/* Summary banner */}
+                          <div className={`rounded-lg px-3 py-2 text-xs font-medium flex items-center gap-2 ${
+                            discordTestResults.summary.noUrl > 0 || discordTestResults.summary.failed > 0
+                              ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          }`}>
+                            {discordTestResults.summary.noUrl > 0 || discordTestResults.summary.failed > 0
+                              ? `⚠️ ${discordTestResults.summary.sent}/${discordTestResults.summary.total} channels active — ${discordTestResults.summary.noUrl} not configured, ${discordTestResults.summary.failed} failed`
+                              : `✅ All ${discordTestResults.summary.total} channels firing`}
+                          </div>
+
+                          {/* Per-channel rows */}
+                          <div className="space-y-1">
+                            {discordTestResults.channels.map((ch) => (
+                              <div key={ch.envKey} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 text-xs">
+                                <span className="font-medium">{ch.label}</span>
+                                {ch.sent ? (
+                                  <span className="text-emerald-400 font-semibold">✓ Sent</span>
+                                ) : !ch.hasUrl ? (
+                                  <span className="text-orange-400">No URL — run discord-setup</span>
+                                ) : (
+                                  <span className="text-red-400" title={ch.error}>✗ Failed</span>
+                                )}
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40 text-xs">
+                              <span className="font-medium">Boiler Room (bot)</span>
+                              {discordTestResults.boilerRoom.sent ? (
+                                <span className="text-emerald-400 font-semibold">✓ Sent</span>
+                              ) : (
+                                <span className="text-red-400" title={discordTestResults.boilerRoom.error}>✗ Failed</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Setup link if any URLs missing */}
+                          {discordTestResults.summary.noUrl > 0 && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Missing channels need one-time setup. Hit{" "}
+                              <code className="bg-muted px-1 py-0.5 rounded text-orange-400">/api/cron/discord-setup?secret=YOUR_CRON_SECRET</code>{" "}
+                              after setting <code className="bg-muted px-1 py-0.5 rounded text-orange-400">DISCORD_GUILD_ID</code> in Vercel.
+                            </p>
+                          )}
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
