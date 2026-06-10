@@ -392,7 +392,7 @@ export default function Dashboard() {
   const [editingClientName, setEditingClientName] = useState("");
 
   // Manage Staff state (admin only)
-  const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string; sheetId?: string }[]>([]);
+  const [staffList, setStaffList] = useState<{ id: string; name: string; createdAt: string; sheetId?: string; role?: string }[]>([]);
   const [newStaffName, setNewStaffName] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
   const [staffSaving, setStaffSaving] = useState(false);
@@ -861,6 +861,63 @@ export default function Dashboard() {
                             <p className={`text-xl font-bold ${neededPerDay <= dailyPace ? "text-emerald-400" : "text-red-400"}`}>${Math.round(neededPerDay).toLocaleString()}</p>
                             <p className="text-[10px] text-muted-foreground">{daysLeft}d left</p>
                           </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Sales Team Snapshot */}
+                  {isAdmin && r.leaderboard.length > 0 && (
+                    <Card className="bg-card border-border">
+                      <CardHeader className="pb-2 pt-4 px-4">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Users className="h-4 w-4 text-orange-400" />
+                          Sales Team
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Total Cash</p>
+                            <p className="text-xl font-bold text-emerald-400">
+                              ${r.leaderboard.reduce((s, rep) => s + rep.cashCollected, 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Total Calls</p>
+                            <p className="text-xl font-bold text-foreground">
+                              {r.leaderboard.reduce((s, rep) => s + rep.callsMade, 0).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Total Closed</p>
+                            <p className="text-xl font-bold text-orange-400">
+                              {r.leaderboard.reduce((s, rep) => s + rep.dealsClosed, 0)}
+                            </p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Avg Close Rate</p>
+                            <p className="text-xl font-bold text-foreground">
+                              {r.leaderboard.length > 0
+                                ? (() => {
+                                    const totalShowed  = r.leaderboard.reduce((s, rep) => s + rep.demosShowed, 0);
+                                    const totalClosed  = r.leaderboard.reduce((s, rep) => s + rep.dealsClosed, 0);
+                                    return totalShowed > 0 ? `${((totalClosed / totalShowed) * 100).toFixed(1)}%` : "—";
+                                  })()
+                                : "—"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-1.5">
+                          {r.leaderboard.map((rep, i) => (
+                            <div key={i} className="flex items-center gap-3 text-xs">
+                              <span className="text-muted-foreground w-4 text-right shrink-0">{i + 1}</span>
+                              <span className="font-medium text-foreground flex-1 truncate">{rep.name}</span>
+                              <span className="text-muted-foreground">{rep.callsMade} calls</span>
+                              <span className="text-muted-foreground">{rep.dealsClosed} closed</span>
+                              <span className="text-emerald-400 font-semibold w-20 text-right">${rep.cashCollected.toLocaleString()}</span>
+                            </div>
+                          ))}
                         </div>
                       </CardContent>
                     </Card>
@@ -1618,7 +1675,7 @@ export default function Dashboard() {
 
                   {/* ── Staff Views ── */}
                   {masterSubTab === "staff" && (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       <div>
                         <h2 className="text-base font-bold flex items-center gap-2">
                           <Users className="h-4 w-4 text-orange-400" />
@@ -1626,51 +1683,94 @@ export default function Dashboard() {
                         </h2>
                         <p className="text-xs text-muted-foreground mt-0.5">Live read-only stats for each team member, pulled from GHL on every KPI sync.</p>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {LEADWELL_STAFF.map(({ name, role }) => {
-                          const repData = r.leaderboard.find(rep =>
-                            rep.name.toLowerCase().includes(name.toLowerCase())
-                          );
-                          return (
-                            <Card key={name} className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all">
-                              <CardContent className="px-4 py-4 space-y-3">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-semibold">{name}</p>
-                                    <p className="text-xs text-muted-foreground">{role}</p>
-                                  </div>
-                                </div>
-                                {repData ? (
-                                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                    <div>
-                                      <p className="text-muted-foreground">Calls</p>
-                                      <p className="font-bold text-foreground">{repData.callsMade}</p>
+
+                      {/* Sales Execs tier */}
+                      {staffList.filter(s => s.role === "sales_exec" || s.role === "admin" || s.role === "owner").length > 0 && (
+                        <div className="space-y-3">
+                          <p className="text-[10px] uppercase tracking-widest text-orange-400 font-semibold">Sales Execs</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {staffList
+                              .filter(s => s.role === "sales_exec" || s.role === "admin" || s.role === "owner")
+                              .map((s) => {
+                                const repData = r.leaderboard.find(rep =>
+                                  rep.name.toLowerCase().includes(s.name.toLowerCase())
+                                );
+                                const roleLabel = s.role === "sales_exec" ? "Sales Exec" : s.role === "owner" ? "Owner" : "Admin";
+                                return (
+                                  <Card key={s.id} className="bg-orange-500/5 border-orange-500/20 hover:border-orange-500/40 hover:-translate-y-0.5 transition-all">
+                                    <CardContent className="px-4 py-4 space-y-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                                          <span className="text-sm font-bold text-orange-400">{s.name.charAt(0)}</span>
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-semibold">{s.name}</p>
+                                          <p className="text-xs text-orange-400/80">{roleLabel}</p>
+                                        </div>
+                                      </div>
+                                      {repData ? (
+                                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                          <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
+                                          <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
+                                          <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-[10px] text-muted-foreground">No leaderboard data — run Sync KPI.</p>
+                                      )}
+                                      <Link href="/?tab=reps">
+                                        <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 border-orange-500/30 hover:text-orange-400">
+                                          <ExternalLink className="h-3 w-3" />View Leaderboard
+                                        </Button>
+                                      </Link>
+                                    </CardContent>
+                                  </Card>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sales Reps tier */}
+                      <div className="space-y-3">
+                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Sales Reps</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {LEADWELL_STAFF.map(({ name, role }) => {
+                            const repData = r.leaderboard.find(rep =>
+                              rep.name.toLowerCase().includes(name.toLowerCase())
+                            );
+                            return (
+                              <Card key={name} className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all">
+                                <CardContent className="px-4 py-4 space-y-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
                                     </div>
                                     <div>
-                                      <p className="text-muted-foreground">Closed</p>
-                                      <p className="font-bold text-orange-400">{repData.dealsClosed}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-muted-foreground">Cash</p>
-                                      <p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p>
+                                      <p className="text-sm font-semibold">{name}</p>
+                                      <p className="text-xs text-muted-foreground">{role}</p>
                                     </div>
                                   </div>
-                                ) : (
-                                  <p className="text-[10px] text-muted-foreground">No leaderboard data yet — run Sync KPI to pull from GHL.</p>
-                                )}
-                                <Link href="/?tab=reps">
-                                  <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 border-border hover:border-orange-500/30 hover:text-orange-400">
-                                    <ExternalLink className="h-3 w-3" />View Leaderboard
-                                  </Button>
-                                </Link>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
+                                  {repData ? (
+                                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                      <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
+                                      <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
+                                      <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-muted-foreground">No leaderboard data yet — run Sync KPI to pull from GHL.</p>
+                                  )}
+                                  <Link href="/?tab=reps">
+                                    <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 border-border hover:border-orange-500/30 hover:text-orange-400">
+                                      <ExternalLink className="h-3 w-3" />View Leaderboard
+                                    </Button>
+                                  </Link>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
                       </div>
+                      <p className="text-[10px] text-muted-foreground">Data updates live from GHL on each KPI sync.</p>
                     </div>
                   )}
 

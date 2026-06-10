@@ -116,6 +116,7 @@ export type SalesData = {
   };
   clients: Client[];
   clientRegistry: ClientMeta[];
+  _syncedMonth?: string;
 };
 
 export const BLANK: SalesData = {
