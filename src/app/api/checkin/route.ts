@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { kv } from "@vercel/kv";
 import { calculateHealthScore, type CheckInRecord } from "@/lib/health-score";
-import { sendChannelMessage } from "@/lib/discord";
+import { sendChannelMessage, webhookUrl } from "@/lib/discord";
 import { triggerScenario } from "@/lib/make";
 
 export const runtime = "nodejs";
@@ -69,7 +69,7 @@ async function appendToSheet(payload: CheckInPayload, score: number, submittedAt
 }
 
 async function sendRedAlert(payload: CheckInPayload, score: number) {
-  const discordUrl = process.env.DISCORD_WEBHOOK_CHECKIN_ALERT;
+  const discordUrl = await webhookUrl("DISCORD_WEBHOOK_CHECKIN_ALERT");
   if (discordUrl) {
     await fetch(discordUrl, {
       method: "POST",

@@ -8,6 +8,7 @@ import { syncDealToSheets } from "@/lib/sheets-sync";
 import type { CoachingClient } from "@/lib/coaching-types";
 import type { Lead } from "@/lib/lead-types";
 import type { Deal } from "@/lib/deal-types";
+import { webhookUrl } from "@/lib/discord";
 
 const SKOOL_LINK = "https://www.skool.com/stack-n-scale-enterprises-2384";
 
@@ -142,17 +143,22 @@ export async function triggerOnboarding(opts: {
 
     // Discord notifications
     const amountFormatted = `$${(amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+    const [paymentUrl, dealClosedUrl, newClientUrl] = await Promise.all([
+      webhookUrl("DISCORD_WEBHOOK_PAYMENT"),
+      webhookUrl("DISCORD_WEBHOOK_DEAL_CLOSED"),
+      webhookUrl("DISCORD_WEBHOOK_NEW_CLIENT"),
+    ]);
     const notifications = [
       {
-        url:  process.env.DISCORD_WEBHOOK_PAYMENT ?? "",
+        url:  paymentUrl,
         body: { content: `💰 New payment received from **${rawName}** — ${amountFormatted}` },
       },
       {
-        url:  process.env.DISCORD_WEBHOOK_DEAL_CLOSED ?? "",
+        url:  dealClosedUrl,
         body: { content: `🔥 **DEAL CLOSED — NEW CLIENT**\n**${rawName}** just joined the program!\nAmount: **${amountFormatted}**\n@Coach @Admin — onboarding is firing automatically.` },
       },
       {
-        url:  process.env.DISCORD_WEBHOOK_NEW_CLIENT ?? "",
+        url:  newClientUrl,
         body: {
           embeds: [{
             title:       "🎉 NEW CLIENT ONBOARDED",

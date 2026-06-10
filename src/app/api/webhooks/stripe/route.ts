@@ -11,6 +11,7 @@ import type { Deal } from "@/lib/deal-types";
 import { calculatePayouts } from "@/lib/payout-calc";
 import { syncDealToSheets } from "@/lib/sheets-sync";
 import { triggerScenario } from "@/lib/make";
+import { webhookUrl } from "@/lib/discord";
 
 export const runtime = "nodejs";
 
@@ -160,17 +161,22 @@ export async function POST(req: Request) {
     const amountDollars = (amountTotal / 100).toFixed(2);
     const formatted = `$${Number(amountDollars).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
+    const [paymentUrl, dealClosedUrl, newClientUrl] = await Promise.all([
+      webhookUrl("DISCORD_WEBHOOK_PAYMENT"),
+      webhookUrl("DISCORD_WEBHOOK_DEAL_CLOSED"),
+      webhookUrl("DISCORD_WEBHOOK_NEW_CLIENT"),
+    ]);
     const discordNotifications = [
       {
-        url: process.env.DISCORD_WEBHOOK_PAYMENT ?? "",
+        url: paymentUrl,
         body: { content: `💰 New payment received from **${rawName}** — ${formatted}` },
       },
       {
-        url: process.env.DISCORD_WEBHOOK_DEAL_CLOSED ?? "",
+        url: dealClosedUrl,
         body: { content: `🔥 **DEAL CLOSED — NEW CLIENT**\n**${rawName}** just joined the program!\nAmount: **${formatted}**\n@Coach @Admin — onboarding is firing automatically.` },
       },
       {
-        url: process.env.DISCORD_WEBHOOK_NEW_CLIENT ?? "",
+        url: newClientUrl,
         body: {
           embeds: [{
             title: "🎉 NEW CLIENT ONBOARDED",

@@ -10,7 +10,7 @@ import { syncDealToSheets, triggerMakeDealWebhook } from "@/lib/sheets-sync";
 import { triggerScenario } from "@/lib/make";
 import { BLANK, type SalesData } from "@/lib/sales-data";
 import { logAudit } from "@/lib/audit";
-import { buildDealClosedMessage } from "@/lib/discord";
+import { buildDealClosedMessage, webhookUrl } from "@/lib/discord";
 
 function authGuard(session: Session | null) {
   return !session || (session.user.role !== "admin" && session.user.role !== "staff");
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
   triggerMakeDealWebhook(partial).catch(e => console.error("[deals] make webhook failed:", e));
 
   // Discord real-time notification
-  const discordWebhook = process.env.DISCORD_WEBHOOK_DEAL_CLOSED;
+  const discordWebhook = await webhookUrl("DISCORD_WEBHOOK_DEAL_CLOSED");
   if (discordWebhook) {
     fetch(discordWebhook, {
       method: "POST",

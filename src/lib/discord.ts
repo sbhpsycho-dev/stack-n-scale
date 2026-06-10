@@ -1,5 +1,16 @@
 const DISCORD_API = "https://discord.com/api/v10";
 
+/** Resolve a webhook URL — env var first, then KV fallback set by discord-setup. */
+export async function webhookUrl(envKey: string): Promise<string> {
+  if (process.env[envKey]) return process.env[envKey]!;
+  try {
+    const { kv } = await import("@vercel/kv");
+    return (await kv.get<string>(`sns:config:${envKey}`)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 // ── Embed types ───────────────────────────────────────────────────────────────
 
 export interface DiscordEmbedField {
