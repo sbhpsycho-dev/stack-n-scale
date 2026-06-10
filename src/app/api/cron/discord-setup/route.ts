@@ -18,16 +18,16 @@ const GHL_API      = "https://services.leadconnectorhq.com";
 const WEBHOOK_NAME = "SNS Notifications";
 
 const NOTIFY_CHANNELS = [
-  { name: "ghl-notifications",   envKey: "DISCORD_WEBHOOK_NEW_LEADS"      },
-  { name: "booked-appointments", envKey: "DISCORD_WEBHOOK_APPOINTMENTS"   },
-  { name: "main-sales-channel",  envKey: "DISCORD_WEBHOOK_SALES"          },
-  { name: "team-updates",        envKey: "DISCORD_WEBHOOK_REP_UPDATES"    },
-  { name: "announcements",       envKey: "DISCORD_WEBHOOK_ALERTS"         },
-  { name: "boiler-room",         envKey: "DISCORD_WEBHOOK_DAILY_SUMMARY"  },
-  { name: "closed-deals",        envKey: "DISCORD_WEBHOOK_DEAL_CLOSED"    },
-  { name: "stripe-payments",     envKey: "DISCORD_WEBHOOK_PAYMENT"        },
-  { name: "new-clients",         envKey: "DISCORD_WEBHOOK_NEW_CLIENT"     },
-  { name: "weekly-check-ins",    envKey: "DISCORD_WEBHOOK_CHECKIN_ALERT"  },
+  { name: "ghl-notifications",   channelId: "1497034373193666721", envKey: "DISCORD_WEBHOOK_NEW_LEADS"      },
+  { name: "booked-appointments", channelId: "1497034365761359983", envKey: "DISCORD_WEBHOOK_APPOINTMENTS"   },
+  { name: "main-sales-channel",  channelId: "1497034364914237491", envKey: "DISCORD_WEBHOOK_SALES"          },
+  { name: "team-updates",        channelId: "1497034362821017712", envKey: "DISCORD_WEBHOOK_REP_UPDATES"    },
+  { name: "announcements",       channelId: "1497034362510901359", envKey: "DISCORD_WEBHOOK_ALERTS"         },
+  { name: "boiler-room",         channelId: "1497034366335979662", envKey: "DISCORD_WEBHOOK_DAILY_SUMMARY"  },
+  { name: "closed-deals",        channelId: "1497034367128830054", envKey: "DISCORD_WEBHOOK_DEAL_CLOSED"    },
+  { name: "stripe-payments",     channelId: "1497034372077977771", envKey: "DISCORD_WEBHOOK_PAYMENT"        },
+  { name: "new-clients",         channelId: "1497034368248582285", envKey: "DISCORD_WEBHOOK_NEW_CLIENT"     },
+  { name: "weekly-check-ins",    channelId: "1497034369838088282", envKey: "DISCORD_WEBHOOK_CHECKIN_ALERT"  },
 ];
 
 const GHL_EVENTS = [
@@ -120,16 +120,19 @@ export async function GET(req: Request): Promise<Response> {
   const byName = Object.fromEntries(existing.map((ch) => [ch.name, ch]));
   log.push(`Found ${existing.length} existing channels`);
 
-  for (const { name, envKey } of NOTIFY_CHANNELS) {
+  for (const { name, channelId, envKey } of NOTIFY_CHANNELS) {
     try {
-      const channel = byName[name] as { id: string; name: string } | undefined;
+      // Use hardcoded channelId if available, otherwise fall back to name lookup
+      const channel: { id: string; name: string } | undefined = channelId
+        ? { id: channelId, name }
+        : byName[name] as { id: string; name: string } | undefined;
 
       if (!channel) {
         log.push(`⚠ #${name} not found — bot may not have access to this private channel. Grant the bot Manage Webhooks permission there and re-run.`);
         continue;
       }
 
-      log.push(`#${name} found (${channel.id})`);
+      log.push(`#${name} (${channel.id})`);
 
       const webhooks = await discordApi(`/channels/${channel.id}/webhooks`);
       const existingHook = Array.isArray(webhooks) && (webhooks as Array<{ id: string; name: string; token: string }>).find((w) => w.name === WEBHOOK_NAME);
