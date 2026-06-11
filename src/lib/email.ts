@@ -25,7 +25,7 @@ export async function triggerEmail(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, to, name, ...extras }),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(15000),
   });
 }
 
@@ -44,7 +44,7 @@ export async function triggerCampaign(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, name, amount, source }),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(15000),
   }).catch(e => console.error("Campaign webhook error:", e));
 }
 
@@ -69,6 +69,6 @@ export async function triggerDriveDocs(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, to, name, ...extras }),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(15000),
   });
 }
