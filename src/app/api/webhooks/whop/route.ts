@@ -15,15 +15,18 @@ export const runtime = "nodejs";
 
 const WHOP_FEE_RATE = 0.03; // 3% on free plan — set to 0 if on a paid Whop plan
 
-/** LPUSH that self-heals if the key holds a wrong type (deletes + retries). */
+/** LPUSH that self-heals if the key holds a wrong type (migrates existing entries). */
 async function kvSafeLpush(key: string, value: string): Promise<void> {
   try {
     await kv.lpush(key, value);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes("WRONGTYPE")) {
+      // Read the existing plain array before deleting so we don't lose old entries
+      const existing = (await kv.get<string[]>(key)) ?? [];
       await kv.del(key);
-      await kv.lpush(key, value);
+      const merged = [...new Set([...existing, value])];
+      if (merged.length > 0) await kv.lpush(key, ...merged);
     } else {
       throw e;
     }

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { kv } from "@vercel/kv";
+import { list } from "@vercel/blob";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -19,5 +20,29 @@ export async function GET(req: Request) {
   ]);
 
   if (!record) return Response.json(null);
-  return Response.json({ ...record as object, signature: signature ?? null, fileIds: fileIds ?? null });
+
+  // Lazy blob URL recovery: if the client submitted before blob URLs were persisted to KV,
+  // look them up from Vercel Blob storage by deterministic path prefix and cache them back.
+  let resolvedFileIds = fileIds ?? null;
+  if (fileIds && !fileIds.idFrontUrl) {
+    try {
+      const slug = email.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      const [frontResult, selfieResult] = await Promise.all([
+        list({ prefix: `id-verification/${slug}/id-front`, limit: 1 }),
+        list({ prefix: `id-verification/${slug}/selfie`,   limit: 1 }),
+      ]);
+      resolvedFileIds = {
+        ...fileIds,
+        idFrontUrl:   frontResult.blobs[0]?.url  ?? null,
+        selfieUrl:    selfieResult.blobs[0]?.url ?? null,
+        signatureUrl: fileIds.signatureUrl ?? null,
+      };
+      // Cache back to KV so subsequent loads are instant
+      kv.set(`sns:drive:file-ids:${email.toLowerCase()}`, resolvedFileIds).catch(() => {});
+    } catch {
+      // Blob list failure is non-fatal — fall back to Drive link placeholders
+    }
+  }
+
+  return Response.json({ ...record as object, signature: signature ?? null, fileIds: resolvedFileIds });
 }

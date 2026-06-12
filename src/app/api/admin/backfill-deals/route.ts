@@ -62,8 +62,21 @@ export async function POST() {
     deal.payouts = calculatePayouts(deal);
 
     await kv.set(`sns:deals:${dealId}`, deal);
-    const idx = (await kv.get<string[]>("sns:deals:index")) ?? [];
-    await kv.set("sns:deals:index", [dealId, ...idx]);
+    let existingIdx: string[] = [];
+    let isAlreadyList = false;
+    try {
+      const fromList = (await kv.lrange("sns:deals:index", 0, -1)) as string[];
+      if (fromList.length > 0) { existingIdx = fromList; isAlreadyList = true; }
+      else { existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? []; }
+    } catch {
+      existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? [];
+    }
+    if (!isAlreadyList && existingIdx.length > 0) {
+      await kv.del("sns:deals:index");
+      await kv.lpush("sns:deals:index", ...[dealId, ...existingIdx]);
+    } else {
+      await kv.lpush("sns:deals:index", dealId);
+    }
     await syncDealToSheets(deal);
     created++;
   }

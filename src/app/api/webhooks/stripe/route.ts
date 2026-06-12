@@ -65,7 +65,17 @@ export async function POST(req: Request) {
     };
     deal.payouts = calculatePayouts(deal);
     await kv.set(`sns:deals:${dealId}`, deal);
-    await kv.lpush("sns:deals:index", dealId);
+    // Migrate plain-array index to Redis List if needed (sync-leaderboard writes kv.set)
+    try {
+      await kv.lpush("sns:deals:index", dealId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("WRONGTYPE")) {
+        const existing = (await kv.get<string[]>("sns:deals:index")) ?? [];
+        await kv.del("sns:deals:index");
+        await kv.lpush("sns:deals:index", ...[...new Set([...existing, dealId])]);
+      } else { throw e; }
+    }
     // Dual-path: Make.com (primary) + direct Sheets (fallback while migrating)
     const dealPayload = {
       id:           deal.id,

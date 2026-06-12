@@ -110,9 +110,25 @@ async function runDashboardSync() {
       }
 
       if (newDealIds.length > 0) {
-        const existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? [];
-        const merged = [...new Set([...newDealIds, ...existingIdx])];
-        await kv.set("sns:deals:index", merged);
+        let existingIdx: string[] = [];
+        let isAlreadyList = false;
+        try {
+          const fromList = (await kv.lrange("sns:deals:index", 0, -1)) as string[];
+          if (fromList.length > 0) { existingIdx = fromList; isAlreadyList = true; }
+          else { existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? []; }
+        } catch {
+          existingIdx = (await kv.get<string[]>("sns:deals:index")) ?? [];
+        }
+        const existingSet = new Set(existingIdx);
+        const trulyNew = newDealIds.filter(id => !existingSet.has(id));
+        if (trulyNew.length > 0) {
+          if (!isAlreadyList && existingIdx.length > 0) {
+            await kv.del("sns:deals:index");
+            await kv.lpush("sns:deals:index", ...[...existingIdx, ...trulyNew]);
+          } else {
+            await kv.lpush("sns:deals:index", ...trulyNew);
+          }
+        }
       }
     }
   } catch (e) {
