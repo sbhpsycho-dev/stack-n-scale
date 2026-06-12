@@ -217,12 +217,10 @@ function OnboardingTab() {
                   <span className="text-muted-foreground w-12">Email</span>
                   <span className="font-medium break-all">{selected.email}</span>
                 </div>
-                {selected.phone && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground w-12">Phone</span>
-                    <span className="font-medium">{selected.phone}</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground w-12">Phone</span>
+                  <span className="font-medium">{selected.phone ?? <span className="text-muted-foreground">—</span>}</span>
+                </div>
                 {selected.reportedIncome && (
                   <div className="flex items-center gap-2 text-xs">
                     <span className="text-muted-foreground w-12">Income</span>
