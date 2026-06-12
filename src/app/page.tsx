@@ -140,8 +140,8 @@ function OnboardingTab() {
       fetch(`/api/onboarding/form-response?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`/api/onboarding/id-submission?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]).then(([f, id]: [unknown, unknown]) => {
-      setFormData((f && typeof f === "object" && "submittedAt" in f) ? f as OnboardingFormData : null);
-      setIdData((id && typeof id === "object" && "submittedAt" in id) ? id as IdSubmissionData : null);
+      setFormData((f && typeof f === "object") ? f as OnboardingFormData : null);
+      setIdData((id && typeof id === "object") ? id as IdSubmissionData : null);
     }).finally(() => setDetailLoading(false));
   }, [selected]);
 
@@ -184,12 +184,12 @@ function OnboardingTab() {
           <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
             <span className="text-lg font-bold text-orange-400">{(selected.name ?? "?").charAt(0).toUpperCase()}</span>
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-base font-bold">{selected.name ?? "Unknown"}</h2>
-            <p className="text-xs text-muted-foreground">Day {daysSince(selected.createdAt)} enrolled</p>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <Badge className={`text-[10px] ${STATUS_COLOR[selected.status] ?? "bg-muted text-muted-foreground border-border"}`}>{STATUS_LABELS[selected.status] ?? selected.status}</Badge>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Badge className={`text-[10px] ${STATUS_COLOR[selected.status] ?? "bg-muted text-muted-foreground border-border"}`}>{STATUS_LABELS[selected.status] ?? selected.status}</Badge>
+              <p className="text-xs text-muted-foreground">Day {daysSince(selected.createdAt)} enrolled</p>
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -272,38 +272,43 @@ function OnboardingTab() {
         )}
 
         {/* ── ID Verification Details ── */}
-        {(idData || selected.driveFolder?.idVerificationFolderId) && (
-          <Card className="bg-card border-border">
-            <CardContent className="px-4 py-4 space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Verification Details</p>
-              {idData && (
-                <>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Submitted</span>
-                    <span className="font-medium">{new Date(idData.submittedAt).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Consent</span>
-                    <Badge className={`text-[10px] ${idData.consentGiven ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
-                      {idData.consentGiven ? "Given" : "Missing"}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Signature</span>
-                    <span className="font-medium">{idData.hasSig ? "Included" : "Not provided"}</span>
-                  </div>
-                </>
-              )}
-              {selected.driveFolder?.idVerificationFolderId && (
-                <a href={`https://drive.google.com/drive/folders/${selected.driveFolder.idVerificationFolderId}`}
-                   target="_blank" rel="noreferrer"
-                   className="flex items-center gap-1 text-xs text-orange-400 hover:underline pt-1">
-                  View ID Documents <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <Card className="bg-card border-border">
+          <CardContent className="px-4 py-4 space-y-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Verification</p>
+            {idData ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Submitted</span>
+                  <span className="font-medium">{new Date(idData.submittedAt).toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Consent</span>
+                  <Badge className={`text-[10px] ${idData.consentGiven ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
+                    {idData.consentGiven ? "Given" : "Missing"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Signature</span>
+                  <span className="font-medium">{idData.hasSig ? "Included" : "Not provided"}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Status</span>
+                <Badge className={`text-[10px] ${idBadge[selected.idVerification] ?? "bg-muted text-muted-foreground border-border"}`}>
+                  {selected.idVerification}
+                </Badge>
+              </div>
+            )}
+            {selected.driveFolder?.idVerificationFolderId && (
+              <a href={`https://drive.google.com/drive/folders/${selected.driveFolder.idVerificationFolderId}`}
+                 target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1 text-xs text-orange-400 hover:underline pt-1">
+                View ID Documents <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </CardContent>
+        </Card>
 
         {/* ── Onboarding Form Answers ── */}
         {detailLoading ? (
@@ -344,7 +349,14 @@ function OnboardingTab() {
               ))}
             </CardContent>
           </Card>
-        ) : null}
+        ) : (
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Onboarding Form</p>
+              <p className="text-xs text-muted-foreground">No form submitted yet</p>
+            </CardContent>
+          </Card>
+        )}
 
       </motion.div>
     );
