@@ -428,28 +428,17 @@ function OnboardingTab() {
                   <button
                     key={client.email}
                     onClick={() => setSelected(client)}
-                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/40 transition-colors group text-left"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors group text-left"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-orange-400">
                           {(client.name ?? "?").charAt(0).toUpperCase()}
                         </span>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{client.name ?? "Unknown"}</p>
-                        <p className="text-xs text-muted-foreground truncate">{client.email}</p>
-                      </div>
+                      <p className="text-sm font-medium text-foreground">{client.name ?? "Unknown"}</p>
                     </div>
-                    <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                      <Badge className={`text-[10px] ${STATUS_COLOR[client.status]}`}>
-                        {STATUS_LABELS[client.status]}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                        Day {daysSince(client.createdAt)}
-                      </span>
-                      <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors rotate-180" />
-                    </div>
+                    <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors rotate-180" />
                   </button>
                 ))}
             </div>
