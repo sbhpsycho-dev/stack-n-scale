@@ -123,25 +123,33 @@ function OnboardingTab() {
     submittedAt: string;
   };
   type IdSubmissionData = { submittedAt: string; consentGiven: boolean; hasSig: boolean };
+  type PaymentRecord    = { date: string; amount: number; processor: string; offer: string };
 
   const [students, setStudents] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchErr, setFetchErr] = useState("");
   const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
   const [selected, setSelected] = useState<CoachingClient | null>(null);
-  const [formData, setFormData] = useState<OnboardingFormData | null>(null);
-  const [idData, setIdData]     = useState<IdSubmissionData | null>(null);
+  const [formData, setFormData]   = useState<OnboardingFormData | null>(null);
+  const [idData, setIdData]       = useState<IdSubmissionData | null>(null);
+  const [payments, setPayments]   = useState<PaymentRecord[]>([]);
+  const [totalPaid, setTotalPaid] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     if (!selected) return;
-    setFormData(null); setIdData(null); setDetailLoading(true);
+    setFormData(null); setIdData(null); setPayments([]); setTotalPaid(0); setDetailLoading(true);
     Promise.all([
       fetch(`/api/onboarding/form-response?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
       fetch(`/api/onboarding/id-submission?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([f, id]: [unknown, unknown]) => {
+      fetch(`/api/staff/client-payments?email=${encodeURIComponent(selected.email)}&name=${encodeURIComponent(selected.name ?? "")}`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([f, id, pay]: [unknown, unknown, unknown]) => {
       setFormData((f && typeof f === "object") ? f as OnboardingFormData : null);
       setIdData((id && typeof id === "object") ? id as IdSubmissionData : null);
+      if (pay && typeof pay === "object" && "totalPaid" in pay) {
+        setTotalPaid((pay as { totalPaid: number }).totalPaid);
+        setPayments(Array.isArray((pay as { payments: PaymentRecord[] }).payments) ? (pay as { payments: PaymentRecord[] }).payments : []);
+      }
     }).finally(() => setDetailLoading(false));
   }, [selected]);
 
@@ -158,14 +166,17 @@ function OnboardingTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  const JUNK_NAMES = /^(unknown|test|testing|test client|test user)$/i;
+  const realStudents = students.filter(c => c.name && c.name.trim() !== "" && !JUNK_NAMES.test(c.name.trim()));
+
   const counts = ONBOARDING_STAGES.reduce<Record<string, number>>((acc, s) => ({
     ...acc,
-    [s]: students.filter(c => c.status === s).length,
+    [s]: realStudents.filter(c => c.status === s).length,
   }), {});
 
   const filtered = filterStatus === "all"
-    ? students
-    : students.filter(c => c.status === filterStatus);
+    ? realStudents
+    : realStudents.filter(c => c.status === filterStatus);
 
   // ── Client profile view ──────────────────────────────────────────────────────
   if (selected) {
@@ -248,6 +259,33 @@ function OnboardingTab() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ── Payments ── */}
+        <Card className="bg-card border-border">
+          <CardContent className="px-4 py-4 space-y-3">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Payments</p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Total Paid</span>
+              <span className="text-sm font-bold text-emerald-400">
+                {totalPaid > 0 ? `$${totalPaid.toLocaleString()}` : "—"}
+              </span>
+            </div>
+            {payments.length > 0 && (
+              <div className="space-y-1.5 pt-1 border-t border-border">
+                {payments.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{p.date} · {p.processor}</span>
+                    <span className="font-medium">${p.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {payments.length === 0 && !detailLoading && (
+              <p className="text-xs text-muted-foreground">No payments on record</p>
+            )}
+          </CardContent>
+        </Card>
+
         {selected.driveFolder && (
           <Card className="bg-card border-border">
             <CardContent className="px-4 py-3 flex items-center justify-between">
@@ -369,7 +407,7 @@ function OnboardingTab() {
         <div>
           <h2 className="text-lg font-semibold">Students & Clients</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {students.length} student{students.length !== 1 ? "s" : ""} total
+            {realStudents.length} student{realStudents.length !== 1 ? "s" : ""} total
           </p>
         </div>
       </div>
