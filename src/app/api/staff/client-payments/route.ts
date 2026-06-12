@@ -16,7 +16,15 @@ export async function GET(req: Request) {
 
   if (!email && !name) return Response.json({ totalPaid: 0, paymentCount: 0, payments: [] });
 
-  const index = await kv.get<string[]>("sns:deals:index") ?? [];
+  // sns:deals:index is written by webhooks via lpush (Redis list) and by admin
+  // tools via kv.set(array). Try lrange first; fall back to get.
+  let index: string[] = [];
+  try {
+    const fromList = (await kv.lrange("sns:deals:index", 0, -1)) as string[];
+    index = fromList.length > 0 ? fromList : ((await kv.get<string[]>("sns:deals:index")) ?? []);
+  } catch {
+    index = (await kv.get<string[]>("sns:deals:index")) ?? [];
+  }
   if (!index.length) return Response.json({ totalPaid: 0, paymentCount: 0, payments: [] });
 
   const all = await Promise.all(index.map(id => kv.get<Deal>(`sns:deals:${id}`)));

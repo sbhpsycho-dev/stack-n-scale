@@ -169,6 +169,7 @@ async function handleWhop(req: Request) {
       id:           dealId,
       date:         dealDate.split("T")[0],
       clientName:   rawName,
+      clientEmail:  email,
       offer:        ((payload.data?.offer === "10K" ? "10K" : "5K")) as Deal["offer"],
       grossAmount,
       processor:    "whop",

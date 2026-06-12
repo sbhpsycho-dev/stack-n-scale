@@ -118,6 +118,7 @@ async function handleFanbasis(req: Request) {
       id:           dealId,
       date:         dealDate.split("T")[0],
       clientName:   rawName,
+      clientEmail:  email,
       offer:        ((payload as Record<string, string>).offer === "10K" ? "10K" : "5K") as Deal["offer"],
       grossAmount,
       processor:    "fanbasis",

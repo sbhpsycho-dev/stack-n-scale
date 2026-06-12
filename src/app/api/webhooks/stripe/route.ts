@@ -49,6 +49,7 @@ export async function POST(req: Request) {
       id:           dealId,
       date:         new Date(session.created * 1000).toISOString().split("T")[0],
       clientName:   rawName || "Unknown",
+      clientEmail:  email,
       offer:        (session.metadata?.offer === "10K" ? "10K" : "5K") as Deal["offer"],
       grossAmount,
       processor:    "stripe",
