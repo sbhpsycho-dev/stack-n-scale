@@ -4,7 +4,8 @@ import { kv } from "@vercel/kv";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "admin") {
+  const allowed = ["admin", "staff", "sales_exec", "executive"];
+  if (!session || !allowed.includes(session.user.role)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

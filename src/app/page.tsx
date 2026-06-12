@@ -116,11 +116,34 @@ class TabErrorBoundary extends React.Component<
 }
 
 function OnboardingTab() {
+  type OnboardingFormData = {
+    motivation: string; whySNS: string;
+    goal30Days: string; goal3Months: string; goal6Months: string; goal1Year: string;
+    biggestChallenge: string; successIn90Days: string; additionalNotes?: string;
+    submittedAt: string;
+  };
+  type IdSubmissionData = { submittedAt: string; consentGiven: boolean; hasSig: boolean };
+
   const [students, setStudents] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchErr, setFetchErr] = useState("");
   const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
   const [selected, setSelected] = useState<CoachingClient | null>(null);
+  const [formData, setFormData] = useState<OnboardingFormData | null>(null);
+  const [idData, setIdData]     = useState<IdSubmissionData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selected) return;
+    setFormData(null); setIdData(null); setDetailLoading(true);
+    Promise.all([
+      fetch(`/api/onboarding/form-response?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`/api/onboarding/id-submission?email=${encodeURIComponent(selected.email)}`).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([f, id]: [unknown, unknown]) => {
+      setFormData((f && typeof f === "object" && "submittedAt" in f) ? f as OnboardingFormData : null);
+      setIdData((id && typeof id === "object" && "submittedAt" in id) ? id as IdSubmissionData : null);
+    }).finally(() => setDetailLoading(false));
+  }, [selected]);
 
   useEffect(() => {
     fetch("/api/staff/students")
@@ -247,6 +270,82 @@ function OnboardingTab() {
             </CardContent>
           </Card>
         )}
+
+        {/* ── ID Verification Details ── */}
+        {(idData || selected.driveFolder?.idVerificationFolderId) && (
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-4 space-y-2">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Verification Details</p>
+              {idData && (
+                <>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Submitted</span>
+                    <span className="font-medium">{new Date(idData.submittedAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Consent</span>
+                    <Badge className={`text-[10px] ${idData.consentGiven ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
+                      {idData.consentGiven ? "Given" : "Missing"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Signature</span>
+                    <span className="font-medium">{idData.hasSig ? "Included" : "Not provided"}</span>
+                  </div>
+                </>
+              )}
+              {selected.driveFolder?.idVerificationFolderId && (
+                <a href={`https://drive.google.com/drive/folders/${selected.driveFolder.idVerificationFolderId}`}
+                   target="_blank" rel="noreferrer"
+                   className="flex items-center gap-1 text-xs text-orange-400 hover:underline pt-1">
+                  View ID Documents <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Onboarding Form Answers ── */}
+        {detailLoading ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-orange-500" /></div>
+        ) : formData ? (
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-4 space-y-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                Onboarding Form · {new Date(formData.submittedAt).toLocaleDateString()}
+              </p>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Goals</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { label: "30 Days",   value: formData.goal30Days   },
+                    { label: "3 Months",  value: formData.goal3Months  },
+                    { label: "6 Months",  value: formData.goal6Months  },
+                    { label: "1 Year",    value: formData.goal1Year    },
+                  ] as { label: string; value: string }[]).map(({ label, value }) => (
+                    <div key={label} className="bg-background rounded-md p-2.5 border border-border">
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+                      <p className="text-xs text-foreground leading-relaxed">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {([
+                { label: "Motivation",         value: formData.motivation      },
+                { label: "Why Stack N Scale",  value: formData.whySNS          },
+                { label: "Biggest Challenge",  value: formData.biggestChallenge },
+                { label: "Success in 90 Days", value: formData.successIn90Days  },
+                ...(formData.additionalNotes ? [{ label: "Additional Notes", value: formData.additionalNotes }] : []),
+              ] as { label: string; value: string }[]).map(({ label, value }) => (
+                <div key={label}>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">{label}</p>
+                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{value}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
+
       </motion.div>
     );
   }
