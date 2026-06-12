@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar, Download, ChevronLeft, FolderOpen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
@@ -97,6 +97,24 @@ function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
 
+class TabErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: string | null }
+> {
+  state = { error: null };
+  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-xs text-red-400">
+          Tab error: {this.state.error}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function OnboardingTab() {
   const [students, setStudents] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,8 +128,8 @@ function OnboardingTab() {
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         return r.json();
       })
-      .then((data: Array<CoachingClient & { progress: unknown }>) => {
-        setStudents(data);
+      .then((data: unknown) => {
+        setStudents(Array.isArray(data) ? (data as CoachingClient[]) : []);
       })
       .catch((e: unknown) => setFetchErr(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -1728,7 +1746,11 @@ export default function Dashboard() {
                   )}
 
                   {/* ── Client Info ── */}
-                  {masterSubTab === "client-info" && <OnboardingTab />}
+                  {masterSubTab === "client-info" && (
+                    <TabErrorBoundary>
+                      <OnboardingTab />
+                    </TabErrorBoundary>
+                  )}
 
                   {/* ── Client Managed (admin + sales_exec only) ── */}
                   {masterSubTab === "client-managed" && (isAdmin || isSalesExec) && (
