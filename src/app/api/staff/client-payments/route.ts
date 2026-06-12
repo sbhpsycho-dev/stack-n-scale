@@ -25,6 +25,18 @@ export async function GET(req: Request) {
   } catch {
     index = (await kv.get<string[]>("sns:deals:index")) ?? [];
   }
+  // Index empty — the deals index may be corrupted. Scan all deal keys directly and
+  // rebuild it as a background side effect so the next request is fast.
+  if (!index.length) {
+    const allKeys = await kv.keys("sns:deals:*");
+    index = allKeys.filter(k => k !== "sns:deals:index").map(k => k.replace("sns:deals:", ""));
+    if (index.length > 0) {
+      kv.del("sns:deals:index")
+        .then(() => kv.lpush("sns:deals:index", ...index))
+        .catch(() => {});
+    }
+  }
+
   if (!index.length) return Response.json({ totalPaid: 0, paymentCount: 0, payments: [] });
 
   const all = await Promise.all(index.map(id => kv.get<Deal>(`sns:deals:${id}`)));

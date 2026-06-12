@@ -341,20 +341,34 @@ function OnboardingTab() {
                   <div className="space-y-2 pt-2 border-t border-border">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Photos</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <a href={`https://drive.google.com/file/d/${idData.fileIds.frontId}/view`}
-                         target="_blank" rel="noreferrer" className="block">
-                        {idData.fileIds.idFrontUrl
-                          ? <img src={idData.fileIds.idFrontUrl} alt="ID Front" className="w-full rounded-md border border-border object-cover max-h-32" />
-                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>ID Front</div>
-                        }
-                      </a>
-                      <a href={`https://drive.google.com/file/d/${idData.fileIds.selfieId}/view`}
-                         target="_blank" rel="noreferrer" className="block">
-                        {idData.fileIds.selfieUrl
-                          ? <img src={idData.fileIds.selfieUrl} alt="Selfie" className="w-full rounded-md border border-border object-cover max-h-32" />
-                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>Selfie</div>
-                        }
-                      </a>
+                      {/* ID Front — only wrap in Drive link if we have a real Drive file ID */}
+                      {idData.fileIds.idFrontUrl ? (
+                        idData.fileIds.frontId
+                          ? <a href={`https://drive.google.com/file/d/${idData.fileIds.frontId}/view`} target="_blank" rel="noreferrer" className="block">
+                              <img src={idData.fileIds.idFrontUrl} alt="ID Front" className="w-full rounded-md border border-border object-cover max-h-32" />
+                            </a>
+                          : <img src={idData.fileIds.idFrontUrl} alt="ID Front" className="w-full rounded-md border border-border object-cover max-h-32" />
+                      ) : (
+                        idData.fileIds.frontId
+                          ? <a href={`https://drive.google.com/file/d/${idData.fileIds.frontId}/view`} target="_blank" rel="noreferrer" className="block">
+                              <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>ID Front</div>
+                            </a>
+                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-muted-foreground">No photo</div>
+                      )}
+                      {/* Selfie */}
+                      {idData.fileIds.selfieUrl ? (
+                        idData.fileIds.selfieId
+                          ? <a href={`https://drive.google.com/file/d/${idData.fileIds.selfieId}/view`} target="_blank" rel="noreferrer" className="block">
+                              <img src={idData.fileIds.selfieUrl} alt="Selfie" className="w-full rounded-md border border-border object-cover max-h-32" />
+                            </a>
+                          : <img src={idData.fileIds.selfieUrl} alt="Selfie" className="w-full rounded-md border border-border object-cover max-h-32" />
+                      ) : (
+                        idData.fileIds.selfieId
+                          ? <a href={`https://drive.google.com/file/d/${idData.fileIds.selfieId}/view`} target="_blank" rel="noreferrer" className="block">
+                              <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>Selfie</div>
+                            </a>
+                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-muted-foreground">No photo</div>
+                      )}
                     </div>
                     {idData.fileIds.signatureId && (
                       <a href={`https://drive.google.com/file/d/${idData.fileIds.signatureId}/view`}
@@ -556,6 +570,8 @@ export default function Dashboard() {
   const [kpiSyncing, setKpiSyncing] = useState(false);
   const [kpiSyncMsg, setKpiSyncMsg] = useState("");
   const [lastKpiSynced, setLastKpiSynced] = useState<string | null>(null);
+  const [fixHistoricalLoading, setFixHistoricalLoading] = useState(false);
+  const [fixHistoricalMsg, setFixHistoricalMsg] = useState("");
 
   useEffect(() => {
     if (authStatus === "unauthenticated") { router.replace("/login"); return; }
@@ -719,6 +735,23 @@ export default function Dashboard() {
       setTimeout(() => setKpiSyncMsg(""), 4000);
     }
   }
+  async function fixHistoricalData() {
+    setFixHistoricalLoading(true);
+    setFixHistoricalMsg("");
+    try {
+      const res  = await fetch("/api/admin/backfill-deal-emails", { method: "POST" });
+      const data = await res.json();
+      setFixHistoricalMsg(
+        `Index rebuilt (${data.totalDealsFound} deals). Emails added: ${data.emailBackfill.updated}. Skipped: ${data.emailBackfill.skipped}. Unmatched: ${data.emailBackfill.unmatched}.`
+      );
+    } catch {
+      setFixHistoricalMsg("Error running backfill.");
+    } finally {
+      setFixHistoricalLoading(false);
+      setTimeout(() => setFixHistoricalMsg(""), 10000);
+    }
+  }
+
   async function backfillDeals() {
     setKpiSyncing(true);
     setKpiSyncMsg("");
@@ -2299,6 +2332,20 @@ export default function Dashboard() {
                           className="gap-1.5 text-xs h-8 border-border shrink-0 ml-4">
                           <Download className="h-3.5 w-3.5" />
                           Backfill
+                        </Button>
+                      </div>
+
+                      {/* Fix Historical Data */}
+                      <div className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">Fix Historical Data</p>
+                          <p className="text-xs text-muted-foreground">Rebuild deals index + backfill client emails on old deals.</p>
+                          {fixHistoricalMsg && <p className="text-[10px] text-green-400 mt-1">{fixHistoricalMsg}</p>}
+                        </div>
+                        <Button size="sm" variant="outline" onClick={fixHistoricalData} disabled={fixHistoricalLoading}
+                          className="gap-1.5 text-xs h-8 border-border shrink-0 ml-4">
+                          <RefreshCw className={`h-3.5 w-3.5 ${fixHistoricalLoading ? "animate-spin" : ""}`} />
+                          {fixHistoricalLoading ? "Running…" : "Run"}
                         </Button>
                       </div>
 
