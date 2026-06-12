@@ -147,8 +147,9 @@ function OnboardingTab() {
       setFormData((f && typeof f === "object") ? f as OnboardingFormData : null);
       setIdData((id && typeof id === "object") ? id as IdSubmissionData : null);
       if (pay && typeof pay === "object" && "totalPaid" in pay) {
-        setTotalPaid((pay as { totalPaid: number }).totalPaid);
-        setPayments(Array.isArray((pay as { payments: PaymentRecord[] }).payments) ? (pay as { payments: PaymentRecord[] }).payments : []);
+        const p = pay as unknown as { totalPaid: number; payments: PaymentRecord[] };
+        setTotalPaid(p.totalPaid);
+        setPayments(Array.isArray(p.payments) ? p.payments : []);
       }
     }).finally(() => setDetailLoading(false));
   }, [selected]);
