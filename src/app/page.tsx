@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar, Download } from "lucide-react";
+import { Edit3, RotateCcw, LogOut, TrendingUp, TrendingDown, Minus, UserPlus, Users, Settings, RefreshCw, CheckCircle2, Circle, Loader2, Pencil, Check, X, Sliders, BookOpen, FileText, Video, Wrench, Layout, Target, Trash2, Plus, ExternalLink, BarChart2, Phone, Calendar, Download, ChevronLeft, FolderOpen } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -23,7 +23,7 @@ import { PipelineFunnelChart, StageBreakdownChart } from "@/components/charts/fu
 import { LeadsOverTimeChart, LeadsByCampaignChart, AdSpendSplitChart } from "@/components/charts/ads-charts";
 import { CallsPerRepChart, CloseRatePerRepChart, CashPerRepChart } from "@/components/charts/rep-charts";
 import { type ClientIntegrations } from "@/lib/integrations";
-import { SEED, BLANK } from "@/lib/sales-data";
+import { SEED, BLANK, type Rep } from "@/lib/sales-data";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { type DashboardConfig, DEFAULT_CONFIG, BUSINESS_PRESETS, type BusinessType, type KpiCardKey, KPI_CARD_LABELS, DEFAULT_KPI_VISIBILITY } from "@/lib/dashboard-config";
 import { type Resource, type ResourceType } from "@/lib/resources";
@@ -75,6 +75,24 @@ const SNS_STAFF = [
   { name: "Ken",    role: "Setter" },
 ];
 
+function PodiumSlot({ rep, rank, heightClass }: { rep: Rep; rank: number; heightClass: string }) {
+  const c = ({
+    1: { badge: "bg-yellow-400/20 text-yellow-400", bar: "bg-yellow-400/10 border-yellow-400/30" },
+    2: { badge: "bg-zinc-400/20 text-zinc-300",     bar: "bg-zinc-400/10  border-zinc-400/20"   },
+    3: { badge: "bg-amber-700/20 text-amber-600",   bar: "bg-amber-700/10 border-amber-700/20"  },
+  } as Record<number, { badge: string; bar: string }>)[rank] ?? { badge: "", bar: "" };
+  const medal = (["🥇","🥈","🥉"] as const)[rank - 1] ?? "";
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-[90px]">
+      <p className="text-[11px] font-semibold truncate max-w-[90px] text-center">{rep.name.split(" ")[0]}</p>
+      <p className="text-sm font-bold text-emerald-400">${rep.cashCollected.toLocaleString()}</p>
+      <div className={`w-full ${heightClass} rounded-t-lg border ${c.bar} flex items-center justify-center`}>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${c.badge}`}>{medal} #{rank}</span>
+      </div>
+    </div>
+  );
+}
+
 function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
@@ -82,15 +100,20 @@ function daysSince(iso: string) {
 function OnboardingTab() {
   const [students, setStudents] = useState<CoachingClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchErr, setFetchErr] = useState("");
   const [filterStatus, setFilterStatus] = useState<CoachingStatus | "all">("all");
+  const [selected, setSelected] = useState<CoachingClient | null>(null);
 
   useEffect(() => {
     fetch("/api/staff/students")
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json();
+      })
       .then((data: Array<CoachingClient & { progress: unknown }>) => {
         setStudents(data.filter(c => c.status !== "active" && c.status !== "alumni"));
       })
-      .catch(() => {})
+      .catch((e: unknown) => setFetchErr(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -103,6 +126,113 @@ function OnboardingTab() {
     ? students
     : students.filter(c => c.status === filterStatus);
 
+  // ── Client profile view ──────────────────────────────────────────────────────
+  if (selected) {
+    const idBadge: Record<string, string> = {
+      pending:   "bg-orange-500/15 text-orange-400 border-orange-500/30",
+      submitted: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+      approved:  "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+      rejected:  "bg-red-500/15 text-red-400 border-red-500/30",
+    };
+    return (
+      <motion.div key="profile" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
+        <button onClick={() => setSelected(null)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ChevronLeft className="h-3.5 w-3.5" />Back to Onboarding
+        </button>
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-orange-400">{selected.name.charAt(0).toUpperCase()}</span>
+          </div>
+          <div>
+            <h2 className="text-base font-bold">{selected.name}</h2>
+            <p className="text-xs text-muted-foreground">Day {daysSince(selected.createdAt)} enrolled</p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge className={`text-[10px] ${STATUS_COLOR[selected.status]}`}>{STATUS_LABELS[selected.status]}</Badge>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-4 space-y-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Contact</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground w-12">Email</span>
+                  <span className="font-medium break-all">{selected.email}</span>
+                </div>
+                {selected.phone && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground w-12">Phone</span>
+                    <span className="font-medium">{selected.phone}</span>
+                  </div>
+                )}
+                {selected.reportedIncome && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground w-12">Income</span>
+                    <span className="font-medium text-emerald-400">${selected.reportedIncome.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-4 space-y-3">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Onboarding</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">ID Verification</span>
+                  <Badge className={`text-[10px] ${idBadge[selected.idVerification] ?? "bg-muted text-muted-foreground border-border"}`}>
+                    {selected.idVerification}
+                  </Badge>
+                </div>
+                {selected.coachAssigned && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Coach</span>
+                    <span className="font-medium">{selected.coachAssigned}</span>
+                  </div>
+                )}
+                {selected.activeDate && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Active Since</span>
+                    <span className="font-medium">{selected.activeDate.slice(0, 10)}</span>
+                  </div>
+                )}
+                {selected.discordId && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Discord</span>
+                    <span className="font-medium font-mono text-xs">{selected.discordId}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        {selected.driveFolder && (
+          <Card className="bg-card border-border">
+            <CardContent className="px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs">
+                <FolderOpen className="h-3.5 w-3.5 text-orange-400" />
+                <span className="font-medium">Drive Folder</span>
+              </div>
+              <a href={selected.driveFolder.url} target="_blank" rel="noreferrer"
+                className="text-xs text-orange-400 hover:underline flex items-center gap-1">
+                Open <ExternalLink className="h-3 w-3" />
+              </a>
+            </CardContent>
+          </Card>
+        )}
+        {selected.rejectionReason && (
+          <Card className="bg-red-500/5 border-red-500/20">
+            <CardContent className="px-4 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-red-400 font-semibold mb-1">Rejection Reason</p>
+              <p className="text-xs text-muted-foreground">{selected.rejectionReason}</p>
+            </CardContent>
+          </Card>
+        )}
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div key="onboarding" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
       {/* Header */}
@@ -113,12 +243,13 @@ function OnboardingTab() {
             {students.length} client{students.length !== 1 ? "s" : ""} in progress
           </p>
         </div>
-        <Link href="/onboarding/clients">
-          <Button size="sm" variant="outline" className="text-xs gap-1.5">
-            <Layout className="h-3 w-3" />Full Kanban
-          </Button>
-        </Link>
       </div>
+
+      {fetchErr && (
+        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-xs text-red-400">
+          Failed to load clients: {fetchErr}
+        </div>
+      )}
 
       {/* Stage filter pills */}
       <div className="flex flex-wrap gap-2">
@@ -165,10 +296,10 @@ function OnboardingTab() {
               {[...filtered]
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map(client => (
-                  <Link
+                  <button
                     key={client.email}
-                    href={`/onboarding/clients/${encodeURIComponent(client.email)}`}
-                    className="flex items-center justify-between px-4 py-3.5 hover:bg-muted/40 transition-colors group"
+                    onClick={() => setSelected(client)}
+                    className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/40 transition-colors group text-left"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
@@ -188,9 +319,9 @@ function OnboardingTab() {
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                         Day {daysSince(client.createdAt)}
                       </span>
-                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                      <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors rotate-180" />
                     </div>
-                  </Link>
+                  </button>
                 ))}
             </div>
           )}
@@ -214,6 +345,9 @@ export default function Dashboard() {
   const [tab, setTab] = useState("dashboard");
   const [masterSubTab, setMasterSubTab] = useState<"overview" | "onboarding" | "client-managed" | "staff">("overview");
   const [leadwellExpanded, setLeadwellExpanded] = useState(false);
+  const [drillStaff, setDrillStaff] = useState<{ name: string; role: string } | null>(null);
+  const [drillEntries, setDrillEntries] = useState<DailyEntry[]>([]);
+  const [drillLoading, setDrillLoading] = useState(false);
   const [kpiSyncing, setKpiSyncing] = useState(false);
   const [kpiSyncMsg, setKpiSyncMsg] = useState("");
   const [lastKpiSynced, setLastKpiSynced] = useState<string | null>(null);
@@ -1065,6 +1199,13 @@ export default function Dashboard() {
                         <MetricCard label="Show Rate %"    value={r.showRatePct}  suffix="%"  variant="orange"  index={6} />
                         <MetricCard label="Close Rate %"   value={r.closeRatePct} suffix="%"  variant="green"   index={7} />
                       </div>
+                      {r.leaderboard.length >= 1 && (
+                        <div className="flex items-end justify-center gap-4 pt-2 pb-1">
+                          {r.leaderboard[1] && <PodiumSlot rep={r.leaderboard[1]} rank={2} heightClass="h-20" />}
+                          <PodiumSlot rep={r.leaderboard[0]} rank={1} heightClass="h-28" />
+                          {r.leaderboard[2] && <PodiumSlot rep={r.leaderboard[2]} rank={3} heightClass="h-16" />}
+                        </div>
+                      )}
                       <ChartCard title="Rep Leaderboard">
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm min-w-[560px]">
@@ -1686,47 +1827,139 @@ export default function Dashboard() {
                         </div>
                       )}
 
-                      {/* Sales Reps tier */}
-                      <div className="space-y-3">
-                        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Sales Reps</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {SNS_STAFF.map(({ name, role }) => {
-                            const repData = r.leaderboard.find(rep =>
-                              rep.name.toLowerCase().includes(name.toLowerCase())
-                            );
+                      {/* Sales Reps tier — with drill-in */}
+                      {drillStaff ? (
+                        <div className="space-y-4">
+                          <button onClick={() => { setDrillStaff(null); setDrillEntries([]); }}
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                            <ChevronLeft className="h-3.5 w-3.5" />Back to Staff
+                          </button>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                              <span className="text-base font-bold text-orange-400">{drillStaff.name.charAt(0)}</span>
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-semibold">{drillStaff.name}</h3>
+                              <p className="text-xs text-muted-foreground">{drillStaff.role}</p>
+                            </div>
+                            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-[10px]">Read-only</Badge>
+                          </div>
+                          {drillLoading ? (
+                            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-orange-500" /></div>
+                          ) : (() => {
+                            const currentMonth = new Date().toISOString().slice(0, 7);
+                            const mtd = drillEntries.filter(e => e.date.startsWith(currentMonth));
+                            const cash    = mtd.reduce((s, e) => s + (e.cashCollected ?? 0), 0);
+                            const closed  = mtd.reduce((s, e) => s + (e.closed        ?? 0), 0);
+                            const calls   = mtd.reduce((s, e) => s + (e.callsMade     ?? 0), 0);
+                            const answered= mtd.reduce((s, e) => s + (e.callsAnswered ?? 0), 0);
+                            const ansRate = calls > 0 ? Math.round(answered / calls * 100) : 0;
+                            const recent  = [...drillEntries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14);
                             return (
-                              <Card key={name} className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all">
-                                <CardContent className="px-4 py-4 space-y-3">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                      <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-semibold">{name}</p>
-                                      <p className="text-xs text-muted-foreground">{role}</p>
-                                    </div>
-                                  </div>
-                                  {repData ? (
-                                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                      <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
-                                      <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
-                                      <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
-                                    </div>
-                                  ) : (
-                                    <p className="text-[10px] text-muted-foreground">No leaderboard data yet — run Sync KPI to pull from GHL.</p>
-                                  )}
-                                  <Link href="/?tab=reps">
-                                    <Button size="sm" variant="outline" className="w-full h-7 text-xs gap-1.5 border-border hover:border-orange-500/30 hover:text-orange-400">
-                                      <ExternalLink className="h-3 w-3" />View Leaderboard
-                                    </Button>
-                                  </Link>
-                                </CardContent>
-                              </Card>
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {[
+                                    { label: "Cash MTD",    value: `$${cash.toLocaleString()}`,     cls: "text-emerald-400" },
+                                    { label: "Deals Closed",value: String(closed),                  cls: "text-orange-400"  },
+                                    { label: "Calls Made",  value: String(calls),                   cls: "text-foreground"  },
+                                    { label: "Answer Rate", value: `${ansRate}%`,                   cls: "text-foreground"  },
+                                  ].map(({ label, value, cls }) => (
+                                    <Card key={label} className="bg-card border-border">
+                                      <CardContent className="px-3 py-3 text-center">
+                                        <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                                        <p className={`text-base font-bold ${cls}`}>{value}</p>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                                {recent.length > 0 ? (
+                                  <Card className="bg-card border-border">
+                                    <CardHeader className="pb-2 pt-4 px-4">
+                                      <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Recent Activity</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-0">
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full text-xs min-w-[500px]">
+                                          <thead>
+                                            <tr className="text-left text-[10px] text-muted-foreground border-b border-border">
+                                              {["Date","Calls","Answered","Demos Set","Showed","Closed","Cash"].map(h => (
+                                                <th key={h} className="pb-2 px-4 font-medium">{h}</th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {recent.map(e => (
+                                              <tr key={e.date} className="border-b border-border/30 last:border-0 hover:bg-muted/30">
+                                                <td className="py-2 px-4 text-muted-foreground">{e.date}</td>
+                                                <td className="py-2 px-4">{e.callsMade ?? 0}</td>
+                                                <td className="py-2 px-4">{e.callsAnswered ?? 0}</td>
+                                                <td className="py-2 px-4">{e.demosSet ?? 0}</td>
+                                                <td className="py-2 px-4">{e.demosShowed ?? 0}</td>
+                                                <td className="py-2 px-4 text-orange-400">{e.closed ?? 0}</td>
+                                                <td className="py-2 px-4 text-emerald-400">${(e.cashCollected ?? 0).toLocaleString()}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground text-center py-6">No entries logged yet.</p>
+                                )}
+                              </div>
                             );
-                          })}
+                          })()}
                         </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Data updates live as reps log their daily numbers.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Sales Reps</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {SNS_STAFF.map(({ name, role }) => {
+                              const repData = r.leaderboard.find(rep =>
+                                rep.name.toLowerCase().includes(name.toLowerCase())
+                              );
+                              return (
+                                <Card key={name}
+                                  className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
+                                  onClick={() => {
+                                    setDrillStaff({ name, role });
+                                    setDrillLoading(true);
+                                    fetch(`/api/replog?target=${name.toLowerCase()}`)
+                                      .then(r => r.ok ? r.json() : [])
+                                      .then((entries: DailyEntry[]) => setDrillEntries(entries))
+                                      .catch(() => setDrillEntries([]))
+                                      .finally(() => setDrillLoading(false));
+                                  }}
+                                >
+                                  <CardContent className="px-4 py-4 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-semibold">{name}</p>
+                                        <p className="text-xs text-muted-foreground">{role}</p>
+                                      </div>
+                                    </div>
+                                    {repData ? (
+                                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                        <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
+                                        <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
+                                        <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-[10px] text-muted-foreground">No data yet — log numbers in My Numbers.</p>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground/50 text-center">Click to view detail →</p>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">Data updates live as reps log their daily numbers.</p>
+                        </div>
+                      )}
                     </div>
                   )}
 

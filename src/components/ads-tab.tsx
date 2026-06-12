@@ -203,6 +203,8 @@ export function AdsTab() {
   const [sortKey, setSortKey]   = useState<SortKey>("score");
   const [sortAsc, setSortAsc]   = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing]   = useState(false);
+  const [syncMsg, setSyncMsg]   = useState("");
 
   const load = async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -212,6 +214,25 @@ export function AdsTab() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const syncNow = async () => {
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      const res = await fetch("/api/admin/sync-ads", { method: "POST" });
+      const json = await res.json() as { ok: boolean; adCount?: number };
+      if (json.ok) {
+        setSyncMsg(`Synced ${json.adCount ?? 0} ads`);
+        await load(false);
+      } else {
+        setSyncMsg("Sync failed — check env vars");
+      }
+    } catch {
+      setSyncMsg("Network error");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -275,11 +296,24 @@ export function AdsTab() {
   }
   if (!ads.length) {
     return (
-      <div style={{ background: BG, borderRadius: 12, padding: 32, textAlign: "center" }}>
+      <div style={{ background: BG, borderRadius: 12, padding: 40, textAlign: "center" }}>
         <p style={{ color: "#555", fontSize: 13, margin: 0 }}>No ad data yet.</p>
-        <p style={{ color: "#444", fontSize: 11, marginTop: 6 }}>
-          Post to <code style={{ color: "#888" }}>/api/webhooks/ads-data</code> with Meta + GHL data to populate the scorecard.
+        <p style={{ color: "#444", fontSize: 11, marginTop: 6, marginBottom: 18 }}>
+          Pull live data from Meta + GHL to populate the scorecard.
         </p>
+        <button
+          onClick={syncNow}
+          disabled={syncing}
+          style={{
+            background: syncing ? "rgba(249,115,22,0.1)" : "rgba(249,115,22,0.15)",
+            color: "#f97316", border: "1px solid rgba(249,115,22,0.3)",
+            borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
+            cursor: syncing ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+          }}
+        >
+          {syncing ? "Syncing…" : "Sync Ads Data"}
+        </button>
+        {syncMsg && <p style={{ color: "#888", fontSize: 11, marginTop: 10 }}>{syncMsg}</p>}
       </div>
     );
   }
@@ -309,6 +343,15 @@ export function AdsTab() {
               {new Date(cache.computedAt).toLocaleTimeString()}
             </span>
           )}
+          <button onClick={syncNow} disabled={syncing} style={{
+            background: syncing ? "rgba(249,115,22,0.08)" : "rgba(249,115,22,0.12)",
+            border: "1px solid rgba(249,115,22,0.25)", borderRadius: 6,
+            padding: "5px 12px", cursor: syncing ? "not-allowed" : "pointer",
+            color: "#f97316", display: "flex", alignItems: "center", gap: 5,
+          }}>
+            <RefreshCw size={12} style={{ animation: syncing ? "spin 1s linear infinite" : undefined }} />
+            <span style={{ fontSize: 11 }}>{syncing ? "Syncing…" : "Sync"}</span>
+          </button>
           <button onClick={() => load(true)} disabled={refreshing} style={{
             background: "transparent", border: `1px solid ${BORDER}`, borderRadius: 6,
             padding: "5px 10px", cursor: "pointer", color: "#666", display: "flex", alignItems: "center", gap: 5,

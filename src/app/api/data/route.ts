@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { BLANK, type SalesData } from "@/lib/sales-data";
+import { BLANK, type SalesData, type Rep } from "@/lib/sales-data";
 import { STAFF_KV_KEY, type StaffMeta } from "@/lib/staff-registry";
 import type { DailyEntry } from "@/app/api/replog/route";
 
@@ -41,6 +41,33 @@ export async function GET(req: Request) {
     const liveLeads = mtdEntries.reduce((s, e) => s + (e.demosSet     ?? 0), 0);
     const liveYTD   = ytdEntries.reduce((s, e) => s + (e.cashCollected ?? 0), 0);
 
+    // Build per-rep live leaderboard from replog entries
+    const liveLeaderboard: Rep[] = staffList
+      .map((s, i) => {
+        const entries = replogArrays[i].filter(e => e.date.startsWith(currentMonth));
+        if (!entries.length) return null;
+        const callsMade     = entries.reduce((sum, e) => sum + (e.callsMade     ?? 0), 0);
+        const callsAnswered = entries.reduce((sum, e) => sum + (e.callsAnswered ?? 0), 0);
+        const demosSet      = entries.reduce((sum, e) => sum + (e.demosSet      ?? 0), 0);
+        const demosShowed   = entries.reduce((sum, e) => sum + (e.demosShowed   ?? 0), 0);
+        const pitched       = entries.reduce((sum, e) => sum + (e.pitched       ?? 0), 0);
+        const dealsClosed   = entries.reduce((sum, e) => sum + (e.closed        ?? 0), 0);
+        const cashCollected = entries.reduce((sum, e) => sum + (e.cashCollected ?? 0), 0);
+        const answerRate    = callsMade > 0 ? parseFloat((callsAnswered / callsMade * 100).toFixed(1)) : 0;
+        return { name: s.name, callsMade, callsAnswered, demosSet, demosShowed, pitched, dealsClosed, cashCollected, answerRate };
+      })
+      .filter((r): r is Rep => r !== null)
+      .sort((a, b) => b.cashCollected - a.cashCollected);
+
+    const topRepCash   = liveLeaderboard[0]?.cashCollected ?? 0;
+    const totalDealsL  = liveLeaderboard.reduce((s, r) => s + r.dealsClosed, 0);
+    const totalCashL   = liveLeaderboard.reduce((s, r) => s + r.cashCollected, 0);
+    const totalShowedL = liveLeaderboard.reduce((s, r) => s + r.demosShowed, 0);
+    const totalSetL    = liveLeaderboard.reduce((s, r) => s + r.demosSet, 0);
+    const avgDealSize  = totalDealsL  > 0 ? Math.round(totalCashL   / totalDealsL)   : 0;
+    const closeRatePct = totalShowedL > 0 ? parseFloat((totalDealsL / totalShowedL * 100).toFixed(1)) : 0;
+    const showRatePct  = totalSetL    > 0 ? parseFloat((totalShowedL / totalSetL  * 100).toFixed(1)) : 0;
+
     return Response.json({
       ...raw,
       _syncedMonth: currentMonth,
@@ -51,6 +78,14 @@ export async function GET(req: Request) {
         leadsThisMonth:      liveLeads,
         cashCollectedYTD:    Math.round(liveYTD),
       },
+      reps: liveLeaderboard.length ? {
+        ...raw.reps,
+        leaderboard:  liveLeaderboard,
+        topRepCash,
+        avgDealSize,
+        closeRatePct,
+        showRatePct,
+      } : raw.reps,
     });
   } catch {
     return Response.json(BLANK);
