@@ -61,12 +61,19 @@ async function discoverFieldIds(locationId: string): Promise<{
   };
 }
 
-async function discoverClosedStageId(locationId: string): Promise<string | null> {
+interface DiscoveredStage {
+  stageId: string | null;
+  pipelineName: string | null;
+  stageName: string | null;
+  allStageNames: string[];
+}
+
+async function discoverClosedStageId(locationId: string): Promise<DiscoveredStage> {
   const res = await fetch(
     `${GHL_BASE}/opportunities/pipelines?locationId=${locationId}`,
     { headers: ghlHeaders(), signal: AbortSignal.timeout(8_000) }
   );
-  if (!res.ok) return null;
+  if (!res.ok) return { stageId: null, pipelineName: null, stageName: null, allStageNames: [] };
 
   const json = await res.json() as { pipelines?: GHLPipeline[] };
   const pipelines = json.pipelines ?? [];
@@ -77,12 +84,14 @@ async function discoverClosedStageId(locationId: string): Promise<string | null>
     pipelines.find(p => p.name.toLowerCase().includes(targetName)) ??
     pipelines[0];
 
+  const allStageNames = (target?.stages ?? []).map(s => s.name);
+
   for (const stage of target?.stages ?? []) {
     if (stage.name.toLowerCase().includes("closed") || stage.name.toLowerCase().includes("won")) {
-      return stage.id;
+      return { stageId: stage.id, pipelineName: target?.name ?? null, stageName: stage.name, allStageNames };
     }
   }
-  return null;
+  return { stageId: null, pipelineName: target?.name ?? null, stageName: null, allStageNames };
 }
 
 // ── Opportunities fetch ───────────────────────────────────────────────────────
@@ -107,7 +116,7 @@ async function fetchWeekOpportunities(
   start: string,
   end: string,
   stageId: string | null
-): Promise<GHLOpportunity[]> {
+): Promise<{ opps: GHLOpportunity[]; rawCount: number }> {
   const params = new URLSearchParams({
     location_id: process.env.GHL_LOCATION_ID ?? "",
     limit: "100",
@@ -127,10 +136,11 @@ async function fetchWeekOpportunities(
   // GHL search doesn't support date filters — filter client-side by updatedAt
   const startMs = new Date(start).getTime();
   const endMs   = new Date(end).getTime();
-  return all.filter(opp => {
+  const opps = all.filter(opp => {
     const t = new Date(opp.updatedAt ?? opp.createdAt ?? 0).getTime();
     return t >= startMs && t <= endMs;
   });
+  return { opps, rawCount: all.length };
 }
 
 // ── Discord delivery ──────────────────────────────────────────────────────────
@@ -157,11 +167,11 @@ export async function GET(req: Request): Promise<Response> {
 
   // Discover IDs and fetch deals in parallel
   let setterFieldId: string | null, closerFieldId: string | null, collectedFieldId: string | null;
-  let stageId: string | null;
-  let rawOpps: GHLOpportunity[];
+  let discoveredStage: DiscoveredStage;
+  let rawFetch: { opps: GHLOpportunity[]; rawCount: number };
 
   try {
-    [{ setterFieldId, closerFieldId, collectedFieldId }, stageId, rawOpps] =
+    [{ setterFieldId, closerFieldId, collectedFieldId }, discoveredStage, rawFetch] =
       await Promise.all([
         discoverFieldIds(locationId),
         discoverClosedStageId(locationId),
@@ -171,11 +181,16 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: String(err) }, { status: 502 });
   }
 
+  const { stageId } = discoveredStage;
+
   // Re-fetch with the discovered stage ID if available (more precise than status:won)
-  let opportunities = rawOpps;
+  let opportunities = rawFetch.opps;
+  let rawCount = rawFetch.rawCount;
   if (stageId) {
     try {
-      opportunities = await fetchWeekOpportunities(start, end, stageId);
+      const stageFetch = await fetchWeekOpportunities(start, end, stageId);
+      opportunities = stageFetch.opps;
+      rawCount = stageFetch.rawCount;
     } catch {
       // Fall back to the already-fetched status:won results
     }
@@ -221,8 +236,12 @@ export async function GET(req: Request): Promise<Response> {
       debug: {
         weekStart: start,
         weekEnd: end,
-        opportunitiesFetched: opportunities.length,
+        rawCountFromGHL: rawCount,
+        afterDateFilter: opportunities.length,
+        discoveredPipeline: discoveredStage.pipelineName,
+        discoveredStageName: discoveredStage.stageName,
         discoveredStageId: stageId,
+        allStageNames: discoveredStage.allStageNames,
         discoveredFields: { setterFieldId, closerFieldId, collectedFieldId },
       },
     });
