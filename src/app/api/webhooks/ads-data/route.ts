@@ -184,7 +184,7 @@ export async function POST(req: Request) {
     return d.toISOString().slice(0, 10);
   });
 
-  type UnscoredAd = Omit<ScoredAd, "tier" | "score" | "recommendation">;
+  type UnscoredAd = Omit<ScoredAd, "tier" | "score" | "recommendation" | "cpl" | "verdict">;
   const unscoredAds: UnscoredAd[] = metaAds.map(metaRow => {
     const adKey    = norm(metaRow.ad_name);
     const spend    = parseFloat(metaRow.spend ?? "0");
