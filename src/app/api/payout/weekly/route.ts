@@ -1,5 +1,6 @@
 import { calculatePayout, formatReceipt, type Deal } from "@/lib/payout";
 import { sendDiscordDM } from "@/lib/discord";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 
@@ -129,7 +130,7 @@ async function sendToRecipient(userId: string, messages: string[]): Promise<void
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request): Promise<Response> {
-  if (req.headers.get("x-cron-secret") !== process.env.CRON_SECRET) {
+  if (!verifyCronSecret(req.headers.get("authorization"))) {
     return new Response("Unauthorized", { status: 401 });
   }
 
