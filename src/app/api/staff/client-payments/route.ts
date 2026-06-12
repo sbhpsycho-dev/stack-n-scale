@@ -21,10 +21,14 @@ export async function GET(req: Request) {
 
   const all = await Promise.all(index.map(id => kv.get<Deal>(`sns:deals:${id}`)));
 
-  const matched = (all.filter(Boolean) as Deal[]).filter(d =>
-    (email && d.clientEmail?.toLowerCase() === email) ||
-    (name  && d.clientName?.toLowerCase()  === name)
-  );
+  const matched = (all.filter(Boolean) as Deal[]).filter(d => {
+    const dealEmail = d.clientEmail?.toLowerCase();
+    const dealName  = d.clientName?.toLowerCase();
+    if (email && dealEmail && dealEmail === email) return true;
+    if (name  && dealName  && dealName  === name)  return true;
+    if (name  && dealName  && (dealName.includes(name) || name.includes(dealName))) return true;
+    return false;
+  });
 
   const payments = matched
     .sort((a, b) => b.date.localeCompare(a.date))

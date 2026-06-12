@@ -272,16 +272,19 @@ function OnboardingTab() {
               </span>
             </div>
             {payments.length > 0 && (
-              <div className="space-y-1.5 pt-1 border-t border-border">
+              <div className="space-y-2 pt-2 border-t border-border">
                 {payments.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">{p.date} · {p.processor}</span>
-                    <span className="font-medium">${p.amount.toLocaleString()}</span>
+                  <div key={i} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{p.offer} · {p.processor}</p>
+                      <p className="text-[10px] text-muted-foreground">{p.date}</p>
+                    </div>
+                    <span className="text-sm font-bold text-emerald-400">${p.amount.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
             )}
-            {payments.length === 0 && !detailLoading && (
+            {payments.length === 0 && totalPaid === 0 && !detailLoading && (
               <p className="text-xs text-muted-foreground">No payments on record</p>
             )}
           </CardContent>
@@ -503,7 +506,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState("dashboard");
   const [masterSubTab, setMasterSubTab] = useState<"overview" | "client-info" | "client-managed" | "staff">("overview");
   const [leadwellExpanded, setLeadwellExpanded] = useState(false);
-  type LeadwellStats = { cashMTD: number; cashYTD: number; dealsClosed: number; callsMade: number; demosSet: number; demosShowed: number; reps: { name: string; collections: number; sales: number; calls_made: number }[]; fetchedAt: string };
+  type LeadwellStats = { cashMTD: number; cashYTD: number; dealsClosed: number; callsMade: number; demosSet: number; demosShowed: number; reps: { name: string; collections: number; sales: number; calls_made: number; sets: number; shows: number }[]; fetchedAt: string };
   const [leadwellData, setLeadwellData] = useState<LeadwellStats | null>(null);
   const [leadwellLoading, setLeadwellLoading] = useState(false);
   const [leadwellError, setLeadwellError] = useState("");
@@ -1982,21 +1985,26 @@ export default function Dashboard() {
                                   </CardHeader>
                                   <CardContent className="p-0">
                                     <div className="overflow-x-auto">
-                                      <table className="w-full text-xs min-w-[400px]">
+                                      <table className="w-full text-xs min-w-[560px]">
                                         <thead>
                                           <tr className="text-left text-[10px] text-muted-foreground border-b border-border">
-                                            {["Rep","Cash","Deals","Calls"].map(h => (
-                                              <th key={h} className="pb-2 px-4 font-medium">{h}</th>
+                                            {["Rep","Calls","Sets","Shows","Show%","Deals","Cash"].map(h => (
+                                              <th key={h} className="pb-2 px-3 font-medium">{h}</th>
                                             ))}
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {leadwellData.reps.map((rep) => (
                                             <tr key={rep.name} className="border-b border-border/30 last:border-0 hover:bg-muted/20">
-                                              <td className="py-2 px-4 font-medium">{rep.name}</td>
-                                              <td className="py-2 px-4 text-emerald-400">${rep.collections.toLocaleString()}</td>
-                                              <td className="py-2 px-4 text-orange-400">{rep.sales}</td>
-                                              <td className="py-2 px-4">{rep.calls_made}</td>
+                                              <td className="py-2 px-3 font-medium">{rep.name}</td>
+                                              <td className="py-2 px-3">{rep.calls_made}</td>
+                                              <td className="py-2 px-3">{rep.sets}</td>
+                                              <td className="py-2 px-3">{rep.shows}</td>
+                                              <td className="py-2 px-3 text-muted-foreground">
+                                                {rep.sets > 0 ? `${Math.round((rep.shows / rep.sets) * 100)}%` : "—"}
+                                              </td>
+                                              <td className="py-2 px-3 text-orange-400">{rep.sales}</td>
+                                              <td className="py-2 px-3 text-emerald-400">${rep.collections.toLocaleString()}</td>
                                             </tr>
                                           ))}
                                         </tbody>

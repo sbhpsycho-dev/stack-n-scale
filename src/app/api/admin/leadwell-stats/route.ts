@@ -52,15 +52,17 @@ export async function GET() {
   const demosShowed = mtd.reduce((s, r) => s + Number(r.shows), 0);
 
   const repMap = new Map(staff.map(s => [s.id, s.name]));
-  const repTotals = new Map<string, { name: string; collections: number; sales: number; calls_made: number }>();
+  const repTotals = new Map<string, { name: string; collections: number; sales: number; calls_made: number; sets: number; shows: number }>();
   for (const row of mtd) {
     const name = repMap.get(row.staff_id) ?? row.staff_id;
-    const cur  = repTotals.get(row.staff_id) ?? { name, collections: 0, sales: 0, calls_made: 0 };
+    const cur  = repTotals.get(row.staff_id) ?? { name, collections: 0, sales: 0, calls_made: 0, sets: 0, shows: 0 };
     repTotals.set(row.staff_id, {
       name,
       collections: cur.collections + Number(row.collections),
       sales:       cur.sales       + Number(row.sales),
       calls_made:  cur.calls_made  + Number(row.calls_made),
+      sets:        cur.sets        + Number(row.sets),
+      shows:       cur.shows       + Number(row.shows),
     });
   }
   const reps = Array.from(repTotals.values()).sort((a, b) => b.collections - a.collections);
