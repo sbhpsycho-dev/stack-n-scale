@@ -137,7 +137,7 @@ function OnboardingTab() {
     return (
       <motion.div key="profile" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
         <button onClick={() => setSelected(null)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronLeft className="h-3.5 w-3.5" />Back to Onboarding
+          <ChevronLeft className="h-3.5 w-3.5" />Back to Client Info
         </button>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
@@ -288,7 +288,7 @@ function OnboardingTab() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-sm text-muted-foreground">
               {filterStatus === "all"
-                ? "No clients in onboarding right now."
+                ? "No clients yet."
                 : `No clients at ${STATUS_LABELS[filterStatus as CoachingStatus]} stage.`}
             </div>
           ) : (
@@ -344,7 +344,7 @@ export default function Dashboard() {
   const [editOpen, setEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState("dashboard");
-  const [masterSubTab, setMasterSubTab] = useState<"overview" | "onboarding" | "client-managed" | "staff">("overview");
+  const [masterSubTab, setMasterSubTab] = useState<"overview" | "client-info" | "client-managed" | "staff">("overview");
   const [leadwellExpanded, setLeadwellExpanded] = useState(false);
   type LeadwellStats = { cashMTD: number; cashYTD: number; dealsClosed: number; callsMade: number; demosSet: number; demosShowed: number; reps: { name: string; collections: number; sales: number; calls_made: number }[]; fetchedAt: string };
   const [leadwellData, setLeadwellData] = useState<LeadwellStats | null>(null);
@@ -1480,7 +1480,7 @@ export default function Dashboard() {
 
                   {/* Sub-navigation */}
                   <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit border border-border">
-                    {(["overview", "onboarding", ...(isAdmin || isSalesExec ? (["client-managed"] as const) : []), "staff"] as const).map((v) => (
+                    {(["overview", "client-info", ...(isAdmin || isSalesExec ? (["client-managed"] as const) : []), "staff"] as const).map((v) => (
                       <button
                         key={v}
                         onClick={() => setMasterSubTab(v)}
@@ -1490,7 +1490,7 @@ export default function Dashboard() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {v === "overview" ? "Overview" : v === "onboarding" ? "Onboarding" : v === "client-managed" ? "Client Managed" : "Staff Views"}
+                        {v === "overview" ? "Overview" : v === "client-info" ? "Client Info" : v === "client-managed" ? "Client Managed" : "Staff Views"}
                       </button>
                     ))}
                   </div>
@@ -1727,8 +1727,8 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* ── Onboarding ── */}
-                  {masterSubTab === "onboarding" && <OnboardingTab />}
+                  {/* ── Client Info ── */}
+                  {masterSubTab === "client-info" && <OnboardingTab />}
 
                   {/* ── Client Managed (admin + sales_exec only) ── */}
                   {masterSubTab === "client-managed" && (isAdmin || isSalesExec) && (
