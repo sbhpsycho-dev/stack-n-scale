@@ -304,11 +304,11 @@ function OnboardingTab() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-orange-400">
-                          {client.name.charAt(0).toUpperCase()}
+                          {(client.name ?? "?").charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{client.name}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{client.name ?? "Unknown"}</p>
                         <p className="text-xs text-muted-foreground truncate">{client.email}</p>
                       </div>
                     </div>
