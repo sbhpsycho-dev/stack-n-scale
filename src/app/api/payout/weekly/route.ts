@@ -38,16 +38,19 @@ interface GHLField    { id: string; name: string }
 interface GHLStage    { id: string; name: string }
 interface GHLPipeline { id: string; name: string; stages?: GHLStage[] }
 
-async function discoverFieldIds(locationId: string): Promise<{
+interface DiscoveredFields {
   setterFieldId: string | null;
   closerFieldId: string | null;
   collectedFieldId: string | null;
-}> {
+  allFieldNames: string[];
+}
+
+async function discoverFieldIds(locationId: string): Promise<DiscoveredFields> {
   const res = await fetch(
     `${GHL_BASE}/custom-fields?locationId=${locationId}`,
     { headers: ghlHeaders(), signal: AbortSignal.timeout(8_000) }
   );
-  if (!res.ok) return { setterFieldId: null, closerFieldId: null, collectedFieldId: null };
+  if (!res.ok) return { setterFieldId: null, closerFieldId: null, collectedFieldId: null, allFieldNames: [] };
 
   const json = await res.json() as { customFields?: GHLField[] };
   const fields = json.customFields ?? [];
@@ -58,6 +61,7 @@ async function discoverFieldIds(locationId: string): Promise<{
     setterFieldId:    find("setter"),
     closerFieldId:    find("closer"),
     collectedFieldId: find("collected") ?? find("cash"),
+    allFieldNames:    fields.map(f => f.name),
   };
 }
 
@@ -166,12 +170,12 @@ export async function GET(req: Request): Promise<Response> {
   const { start, end, monLabel, friLabel } = weekBounds();
 
   // Discover IDs and fetch deals in parallel
-  let setterFieldId: string | null, closerFieldId: string | null, collectedFieldId: string | null;
+  let setterFieldId: string | null, closerFieldId: string | null, collectedFieldId: string | null, allFieldNames: string[];
   let discoveredStage: DiscoveredStage;
   let rawFetch: { opps: GHLOpportunity[]; rawCount: number };
 
   try {
-    [{ setterFieldId, closerFieldId, collectedFieldId }, discoveredStage, rawFetch] =
+    [{ setterFieldId, closerFieldId, collectedFieldId, allFieldNames }, discoveredStage, rawFetch] =
       await Promise.all([
         discoverFieldIds(locationId),
         discoverClosedStageId(locationId),
@@ -242,7 +246,7 @@ export async function GET(req: Request): Promise<Response> {
         discoveredStageName: discoveredStage.stageName,
         discoveredStageId: stageId,
         allStageNames: discoveredStage.allStageNames,
-        discoveredFields: { setterFieldId, closerFieldId, collectedFieldId },
+        discoveredFields: { setterFieldId, closerFieldId, collectedFieldId, allFieldNames },
       },
     });
   }
