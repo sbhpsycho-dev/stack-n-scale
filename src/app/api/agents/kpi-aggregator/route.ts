@@ -210,7 +210,7 @@ export async function GET(req: Request) {
   // Net by processor (MTD)
   const byProcessor = new Map<string, number>();
   for (const d of dealsThisMonth) {
-    const label = d.processor === "fanbasis" ? "Fanbasis" : "Stripe";
+    const label = d.processor === "fanbasis" ? "Fanbasis" : d.processor === "whop" ? "Whop" : "Stripe";
     byProcessor.set(label, (byProcessor.get(label) ?? 0) + d.netAmount);
   }
   const netByProcessor = Array.from(byProcessor.entries()).map(([name, amount]) => ({ name, amount }));

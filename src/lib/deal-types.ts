@@ -4,7 +4,7 @@ export interface Deal {
   clientName: string;
   offer: "5K" | "10K";
   grossAmount: number;
-  processor: "fanbasis" | "stripe";
+  processor: "fanbasis" | "stripe" | "whop";
   processorFee: number;
   netAmount: number;
   leadSource: "ad" | "organic";

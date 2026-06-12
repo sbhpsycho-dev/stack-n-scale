@@ -20,7 +20,7 @@ export interface Lead {
   name: string;
   email: string;
   phone?: string;
-  source: "fanbasis" | "stripe";
+  source: "fanbasis" | "stripe" | "whop";
   state: LeadState;
   createdAt: string;
   updatedAt: string;

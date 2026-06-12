@@ -127,7 +127,7 @@ export async function triggerOnboarding(opts: {
     const leadId = randomUUID();
     const lead: Lead = {
       id: leadId, name: rawName, email,
-      source: (source ?? "stripe") as "fanbasis" | "stripe", state: "opted_in",
+      source: (source ?? "stripe") as "fanbasis" | "stripe" | "whop", state: "opted_in",
       createdAt: now, updatedAt: now, contactHistory: [],
     };
     await kv.set(`sns:leads:${leadId}`, lead);
@@ -139,7 +139,7 @@ export async function triggerOnboarding(opts: {
       driveFolderUrl: driveFolder?.url,
       skoolLink:      SKOOL_LINK,
     }).catch(e => console.error("Welcome email error:", e));
-    triggerCampaign(email, rawName, amountCents, (source ?? "stripe") as "fanbasis" | "stripe").catch(e => console.error("Campaign trigger error:", e));
+    triggerCampaign(email, rawName, amountCents, (source ?? "stripe") as "fanbasis" | "stripe" | "whop").catch(e => console.error("Campaign trigger error:", e));
 
     // Discord notifications
     const amountFormatted = `$${(amountCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;

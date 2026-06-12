@@ -33,7 +33,7 @@ export async function triggerCampaign(
   email: string,
   name: string,
   amount: number,
-  source: "stripe" | "fanbasis"
+  source: "stripe" | "fanbasis" | "whop"
 ) {
   const url = process.env.MAKE_CAMPAIGN_WEBHOOK_URL;
   if (!url) {

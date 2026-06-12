@@ -58,7 +58,7 @@ function PayoutPreview({ p }: { p: DealPayout }) {
 
 type FormData = {
   date: string; clientName: string; clientEmail: string; offer: "5K" | "10K";
-  grossAmount: string; contractValue: string; processor: "fanbasis" | "stripe";
+  grossAmount: string; contractValue: string; processor: "fanbasis" | "stripe" | "whop";
   processorFee: string; leadSource: "ad" | "organic";
   dmSetter: string; setter: string; closer: string; notes: string;
 };

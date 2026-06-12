@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MetricCard } from "@/components/metric-card";
+import { AdsTab } from "@/components/ads-tab";
 import Image from "next/image";
 import Link from "next/link";
 import { EditDataSheet } from "@/components/edit-data-sheet";
@@ -66,12 +67,12 @@ const STATUS_COLOR: Record<CoachingStatus, string> = {
   alumni:              "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
 };
 
-const LEADWELL_STAFF = [
-  { name: "Harneet", role: "Sales Director" },
-  { name: "Sylis",   role: "Setter" },
-  { name: "Izaiah",  role: "Setter" },
-  { name: "Celest",  role: "Setter" },
-  { name: "Chona",   role: "VA & Ops" },
+const SNS_STAFF = [
+  { name: "Callum", role: "Closer" },
+  { name: "Tahoe",  role: "Closer" },
+  { name: "Naomi",  role: "Closer" },
+  { name: "Elias",  role: "Setter" },
+  { name: "Ken",    role: "Setter" },
 ];
 
 function daysSince(iso: string) {
@@ -1039,100 +1040,7 @@ export default function Dashboard() {
             {/* ══════════════ ADS ══════════════ */}
             {tab === "ads" && config.tabs.ads && (
               <TabsContent value="ads">
-                <motion.div key="ads" variants={tabAnim} initial="initial" animate="animate" exit="exit" className="space-y-5">
-                  {config.widgets.adMetrics && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 font-semibold">Facebook Ads</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <MetricCard label="Ad Spend"      value={a.totalAdSpend} prefix="$" variant="orange" index={0} />
-                        <MetricCard label="Total Leads"   value={a.totalLeads}              variant="orange" index={1} />
-                        <MetricCard label="Cost Per Lead" value={a.cpl}          prefix="$" variant="orange" index={2} />
-                        <MetricCard label="ROAS"          value={a.roas}                    variant="orange" index={3} decimals={1} />
-                        <MetricCard label="CTR %"         value={a.ctr}          suffix="%" variant="orange" index={4} />
-                        <MetricCard label="CPC"           value={a.cpc}          prefix="$" variant="orange" index={5} decimals={2} />
-                      </div>
-                    </div>
-                  )}
-                  {config.widgets.adMetrics && <Separator className="bg-border/50" />}
-
-                  {config.widgets.adMetrics && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2 font-semibold">Instagram Ads</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <MetricCard label="Impressions" value={a.impressions} variant="default" index={0} />
-                        <MetricCard label="Reach"       value={a.reach}       variant="default" index={1} />
-                        <MetricCard label="Total Leads" value={a.totalLeads}  variant="default" index={2} />
-                        <MetricCard label="CPL"         value={a.instaCPL}    prefix="$" variant="default" index={3} />
-                      </div>
-                    </div>
-                  )}
-
-                  {config.widgets.leadsOverTime && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <ChartCard title="Leads Over Time">
-                          <LeadsOverTimeChart data={a.leadsOverTime} />
-                        </ChartCard>
-                        <ChartCard title="Leads by Campaign">
-                          <LeadsByCampaignChart data={a.leadsByCampaign} />
-                        </ChartCard>
-                      </div>
-                      {(d.leadsBySource?.length ?? 0) > 0 && (
-                        <ChartCard title="Leads by Source">
-                          <LeadsByCampaignChart data={(d.leadsBySource ?? []).map(s => ({ campaign: s.name, leads: s.amount }))} />
-                        </ChartCard>
-                      )}
-                    </div>
-                  )}
-
-                  {config.widgets.topAds && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ChartCard title="Ad Spend Split">
-                      <AdSpendSplitChart data={a.spendSplit} />
-                    </ChartCard>
-                    <ChartCard title="Top Performing Ads">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                              <th className="pb-2 font-medium">Ad</th>
-                              <th className="pb-2 font-medium text-right">Leads</th>
-                              <th className="pb-2 font-medium text-right">CPL</th>
-                              <th className="pb-2 font-medium text-right">ROAS</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {a.topAds.map((ad, i) => (
-                              <tr key={i} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
-                                <td className="py-2">{ad.name}</td>
-                                <td className="py-2 text-right">{ad.leads}</td>
-                                <td className="py-2 text-right text-muted-foreground">${ad.cpl.toFixed(2)}</td>
-                                <td className="py-2 text-right">
-                                  <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">
-                                    {ad.roas.toFixed(1)}x
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t border-border text-xs text-muted-foreground">
-                              <td className="pt-2 font-semibold text-foreground">Total</td>
-                              <td className="pt-2 text-right font-semibold text-foreground">
-                                {a.topAds.reduce((s, ad) => s + ad.leads, 0)}
-                              </td>
-                              <td className="pt-2 text-right">
-                                ${(a.topAds.reduce((s, ad) => s + ad.cpl, 0) / Math.max(a.topAds.length, 1)).toFixed(2)}
-                              </td>
-                              <td className="pt-2 text-right">{a.roas.toFixed(1)}x</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    </ChartCard>
-                  </div>
-                  )}
-                </motion.div>
+                <AdsTab />
               </TabsContent>
             )}
 
@@ -1782,7 +1690,7 @@ export default function Dashboard() {
                       <div className="space-y-3">
                         <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Sales Reps</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {LEADWELL_STAFF.map(({ name, role }) => {
+                          {SNS_STAFF.map(({ name, role }) => {
                             const repData = r.leaderboard.find(rep =>
                               rep.name.toLowerCase().includes(name.toLowerCase())
                             );
@@ -1818,7 +1726,7 @@ export default function Dashboard() {
                           })}
                         </div>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">Data updates live from GHL on each KPI sync.</p>
+                      <p className="text-[10px] text-muted-foreground">Data updates live as reps log their daily numbers.</p>
                     </div>
                   )}
 
