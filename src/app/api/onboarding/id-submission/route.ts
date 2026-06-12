@@ -12,11 +12,12 @@ export async function GET(req: Request) {
   const email = new URL(req.url).searchParams.get("email");
   if (!email) return Response.json(null);
 
-  const [record, signature] = await Promise.all([
+  const [record, signature, fileIds] = await Promise.all([
     kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`),
     kv.get<string>(`sns:onboarding:sig:id:${email.toLowerCase()}`),
+    kv.get<{ frontId: string; selfieId: string; signatureId: string | null }>(`sns:drive:file-ids:${email.toLowerCase()}`),
   ]);
 
   if (!record) return Response.json(null);
-  return Response.json({ ...record as object, signature: signature ?? null });
+  return Response.json({ ...record as object, signature: signature ?? null, fileIds: fileIds ?? null });
 }

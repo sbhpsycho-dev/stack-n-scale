@@ -122,7 +122,11 @@ function OnboardingTab() {
     biggestChallenge: string; successIn90Days: string; additionalNotes?: string;
     submittedAt: string;
   };
-  type IdSubmissionData = { submittedAt: string; consentGiven: boolean; hasSig: boolean };
+  type IdSubmissionData = {
+    submittedAt: string; consentGiven: boolean; hasSig: boolean;
+    signature: string | null;
+    fileIds: { frontId: string; selfieId: string; signatureId: string | null } | null;
+  };
   type PaymentRecord    = { date: string; amount: number; processor: string; offer: string };
 
   const [students, setStudents] = useState<CoachingClient[]>([]);
@@ -333,6 +337,38 @@ function OnboardingTab() {
                   <span className="text-muted-foreground">Signature</span>
                   <span className="font-medium">{idData.hasSig ? "Included" : "Not provided"}</span>
                 </div>
+                {idData.fileIds && (
+                  <div className="space-y-1.5 pt-2 border-t border-border">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Photos</p>
+                    <div className="flex flex-wrap gap-3">
+                      <a href={`https://drive.google.com/file/d/${idData.fileIds.frontId}/view`}
+                         target="_blank" rel="noreferrer"
+                         className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
+                        <ExternalLink className="h-3 w-3" /> ID Front
+                      </a>
+                      <a href={`https://drive.google.com/file/d/${idData.fileIds.selfieId}/view`}
+                         target="_blank" rel="noreferrer"
+                         className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
+                        <ExternalLink className="h-3 w-3" /> Selfie
+                      </a>
+                      {idData.fileIds.signatureId && (
+                        <a href={`https://drive.google.com/file/d/${idData.fileIds.signatureId}/view`}
+                           target="_blank" rel="noreferrer"
+                           className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
+                          <ExternalLink className="h-3 w-3" /> Signature File
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {idData.signature && (
+                  <div className="pt-2 border-t border-border">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">Signature</p>
+                    <div className="bg-white rounded-md p-2 inline-block">
+                      <img src={idData.signature} alt="Client signature" className="max-h-16 max-w-full" />
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex items-center justify-between text-xs">
