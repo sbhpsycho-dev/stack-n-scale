@@ -142,14 +142,20 @@ export async function GET(req: Request): Promise<Response> {
   const { start, end, monLabel, friLabel } = weekBounds();
 
   // Discover IDs and fetch deals in parallel
-  const [{ setterFieldId, closerFieldId, collectedFieldId }, stageId, rawOpps] =
-    await Promise.all([
-      discoverFieldIds(locationId),
-      discoverClosedStageId(locationId),
-      fetchWeekOpportunities(start, end, null).catch((err: unknown) => {
-        throw new Error(String(err));
-      }),
-    ]).catch(err => { throw err; });
+  let setterFieldId: string | null, closerFieldId: string | null, collectedFieldId: string | null;
+  let stageId: string | null;
+  let rawOpps: GHLOpportunity[];
+
+  try {
+    [{ setterFieldId, closerFieldId, collectedFieldId }, stageId, rawOpps] =
+      await Promise.all([
+        discoverFieldIds(locationId),
+        discoverClosedStageId(locationId),
+        fetchWeekOpportunities(start, end, null),
+      ]);
+  } catch (err) {
+    return Response.json({ ok: false, error: String(err) }, { status: 502 });
+  }
 
   // Re-fetch with the discovered stage ID if available (more precise than status:won)
   let opportunities = rawOpps;
