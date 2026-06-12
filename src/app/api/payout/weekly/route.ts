@@ -87,6 +87,8 @@ interface GHLOpportunity {
   monetaryValue?: number;
   status: string;
   assignedTo?: string;
+  updatedAt?: string;
+  createdAt?: string;
   contact?: { name?: string };
   customFields?: { id: string; fieldValue: string }[];
 }
@@ -102,8 +104,6 @@ async function fetchWeekOpportunities(
 ): Promise<GHLOpportunity[]> {
   const params = new URLSearchParams({
     location_id: process.env.GHL_LOCATION_ID ?? "",
-    startDate: start,
-    endDate: end,
     limit: "100",
     ...(stageId ? { pipeline_stage_id: stageId } : { status: "won" }),
   });
@@ -116,7 +116,15 @@ async function fetchWeekOpportunities(
   if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
 
   const json = await res.json() as { opportunities?: GHLOpportunity[] };
-  return json.opportunities ?? [];
+  const all = json.opportunities ?? [];
+
+  // GHL search doesn't support date filters — filter client-side by updatedAt
+  const startMs = new Date(start).getTime();
+  const endMs   = new Date(end).getTime();
+  return all.filter(opp => {
+    const t = new Date(opp.updatedAt ?? opp.createdAt ?? 0).getTime();
+    return t >= startMs && t <= endMs;
+  });
 }
 
 // ── Discord delivery ──────────────────────────────────────────────────────────
