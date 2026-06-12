@@ -51,7 +51,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 const ONBOARDING_STAGES: CoachingStatus[] = [
   "payment_received", "id_pending", "id_pending_review",
   "id_verified", "onboarding_form_sent", "onboarding_complete",
-  "coach_assigned", "kickoff_booked",
+  "coach_assigned", "kickoff_booked", "active", "alumni",
 ];
 
 const STATUS_COLOR: Record<CoachingStatus, string> = {
@@ -111,7 +111,7 @@ function OnboardingTab() {
         return r.json();
       })
       .then((data: Array<CoachingClient & { progress: unknown }>) => {
-        setStudents(data.filter(c => c.status !== "active" && c.status !== "alumni"));
+        setStudents(data);
       })
       .catch((e: unknown) => setFetchErr(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -238,9 +238,9 @@ function OnboardingTab() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Onboarding Pipeline</h2>
+          <h2 className="text-lg font-semibold">Students & Clients</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {students.length} client{students.length !== 1 ? "s" : ""} in progress
+            {students.length} student{students.length !== 1 ? "s" : ""} total
           </p>
         </div>
       </div>
