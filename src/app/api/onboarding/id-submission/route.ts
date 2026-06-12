@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const [record, signature, fileIds] = await Promise.all([
     kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`),
     kv.get<string>(`sns:onboarding:sig:id:${email.toLowerCase()}`),
-    kv.get<{ frontId: string; selfieId: string; signatureId: string | null }>(`sns:drive:file-ids:${email.toLowerCase()}`),
+    kv.get<{ frontId: string; selfieId: string; signatureId: string | null; idFrontUrl: string | null; selfieUrl: string | null; signatureUrl: string | null }>(`sns:drive:file-ids:${email.toLowerCase()}`),
   ]);
 
   if (!record) return Response.json(null);

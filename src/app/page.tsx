@@ -125,7 +125,7 @@ function OnboardingTab() {
   type IdSubmissionData = {
     submittedAt: string; consentGiven: boolean; hasSig: boolean;
     signature: string | null;
-    fileIds: { frontId: string; selfieId: string; signatureId: string | null } | null;
+    fileIds: { frontId: string; selfieId: string; signatureId: string | null; idFrontUrl: string | null; selfieUrl: string | null; signatureUrl: string | null } | null;
   };
   type PaymentRecord    = { date: string; amount: number; processor: string; offer: string };
 
@@ -338,27 +338,31 @@ function OnboardingTab() {
                   <span className="font-medium">{idData.hasSig ? "Included" : "Not provided"}</span>
                 </div>
                 {idData.fileIds && (
-                  <div className="space-y-1.5 pt-2 border-t border-border">
+                  <div className="space-y-2 pt-2 border-t border-border">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">ID Photos</p>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="grid grid-cols-2 gap-2">
                       <a href={`https://drive.google.com/file/d/${idData.fileIds.frontId}/view`}
-                         target="_blank" rel="noreferrer"
-                         className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
-                        <ExternalLink className="h-3 w-3" /> ID Front
+                         target="_blank" rel="noreferrer" className="block">
+                        {idData.fileIds.idFrontUrl
+                          ? <img src={idData.fileIds.idFrontUrl} alt="ID Front" className="w-full rounded-md border border-border object-cover max-h-32" />
+                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>ID Front</div>
+                        }
                       </a>
                       <a href={`https://drive.google.com/file/d/${idData.fileIds.selfieId}/view`}
+                         target="_blank" rel="noreferrer" className="block">
+                        {idData.fileIds.selfieUrl
+                          ? <img src={idData.fileIds.selfieUrl} alt="Selfie" className="w-full rounded-md border border-border object-cover max-h-32" />
+                          : <div className="w-full rounded-md border border-border bg-muted/30 flex items-center justify-center h-20 text-xs text-orange-400 gap-1"><ExternalLink className="h-3 w-3"/>Selfie</div>
+                        }
+                      </a>
+                    </div>
+                    {idData.fileIds.signatureId && (
+                      <a href={`https://drive.google.com/file/d/${idData.fileIds.signatureId}/view`}
                          target="_blank" rel="noreferrer"
                          className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
-                        <ExternalLink className="h-3 w-3" /> Selfie
+                        <ExternalLink className="h-3 w-3" /> Signature File
                       </a>
-                      {idData.fileIds.signatureId && (
-                        <a href={`https://drive.google.com/file/d/${idData.fileIds.signatureId}/view`}
-                           target="_blank" rel="noreferrer"
-                           className="flex items-center gap-1 text-xs text-orange-400 hover:underline">
-                          <ExternalLink className="h-3 w-3" /> Signature File
-                        </a>
-                      )}
-                    </div>
+                    )}
                   </div>
                 )}
                 {idData.signature && (

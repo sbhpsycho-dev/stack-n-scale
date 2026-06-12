@@ -35,6 +35,10 @@ export async function GET(req: Request) {
     if (email && dealEmail && dealEmail === email) return true;
     if (name  && dealName  && dealName  === name)  return true;
     if (name  && dealName  && (dealName.includes(name) || name.includes(dealName))) return true;
+    // First-name fallback for old deals where full name may differ slightly
+    const dealFirst   = dealName?.split(" ")[0];
+    const clientFirst = name.split(" ")[0];
+    if (dealFirst && clientFirst && dealFirst === clientFirst && clientFirst.length > 2) return true;
     return false;
   });
 

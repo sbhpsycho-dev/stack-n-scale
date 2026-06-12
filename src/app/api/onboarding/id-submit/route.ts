@@ -164,12 +164,15 @@ export async function POST(req: Request) {
           : Promise.resolve(null),
       ]);
 
-      // Store Drive file IDs in KV for reference
+      // Store Drive file IDs + Vercel Blob URLs in KV for reference
       await kv.set(`sns:drive:file-ids:${email}`, {
-        frontId: driveResults[0],
-        selfieId: driveResults[1],
-        signatureId: driveResults[2] ?? null,
-        uploadedAt: new Date().toISOString(),
+        frontId:      driveResults[0],
+        selfieId:     driveResults[1],
+        signatureId:  driveResults[2] ?? null,
+        idFrontUrl:   idFrontUrl   ?? null,
+        selfieUrl:    selfieUrl    ?? null,
+        signatureUrl: signatureUrl ?? null,
+        uploadedAt:   new Date().toISOString(),
       });
 
       // Drive confirmed — trigger email + Drive doc workflows
