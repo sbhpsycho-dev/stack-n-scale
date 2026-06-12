@@ -29,10 +29,11 @@ export async function GET(req: Request) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const target = new URL(req.url).searchParams.get("target");
-  if (target && session.user.role !== "admin") return new Response("Forbidden", { status: 403 });
-  const id = session.user.role === "admin" && target
+  const canTarget = ["admin", "sales_exec", "executive"].includes(session.user.role);
+  if (target && !canTarget) return new Response("Forbidden", { status: 403 });
+  const id = canTarget && target
     ? target
-    : session.user.role === "admin"
+    : canTarget
     ? "admin"
     : (session.user.clientId ?? "");
 

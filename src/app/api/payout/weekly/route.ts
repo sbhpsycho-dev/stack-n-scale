@@ -34,9 +34,9 @@ function weekBounds() {
 
 // ── GHL metadata discovery ────────────────────────────────────────────────────
 
-interface GHLField  { id: string; name: string }
-interface GHLStage  { id: string; name: string }
-interface GHLPipeline { stages?: GHLStage[] }
+interface GHLField    { id: string; name: string }
+interface GHLStage    { id: string; name: string }
+interface GHLPipeline { id: string; name: string; stages?: GHLStage[] }
 
 async function discoverFieldIds(locationId: string): Promise<{
   setterFieldId: string | null;
@@ -69,11 +69,17 @@ async function discoverClosedStageId(locationId: string): Promise<string | null>
   if (!res.ok) return null;
 
   const json = await res.json() as { pipelines?: GHLPipeline[] };
-  for (const pipeline of json.pipelines ?? []) {
-    for (const stage of pipeline.stages ?? []) {
-      if (stage.name.toLowerCase().includes("closed") || stage.name.toLowerCase().includes("won")) {
-        return stage.id;
-      }
+  const pipelines = json.pipelines ?? [];
+
+  // Target the configured sales pipeline by name; fall back to first pipeline
+  const targetName = (process.env.GHL_PIPELINE_NAME ?? "Revenue OS Pipeline").toLowerCase();
+  const target =
+    pipelines.find(p => p.name.toLowerCase().includes(targetName)) ??
+    pipelines[0];
+
+  for (const stage of target?.stages ?? []) {
+    if (stage.name.toLowerCase().includes("closed") || stage.name.toLowerCase().includes("won")) {
+      return stage.id;
     }
   }
   return null;

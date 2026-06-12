@@ -141,14 +141,14 @@ function OnboardingTab() {
         </button>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-            <span className="text-lg font-bold text-orange-400">{selected.name.charAt(0).toUpperCase()}</span>
+            <span className="text-lg font-bold text-orange-400">{(selected.name ?? "?").charAt(0).toUpperCase()}</span>
           </div>
           <div>
-            <h2 className="text-base font-bold">{selected.name}</h2>
+            <h2 className="text-base font-bold">{selected.name ?? "Unknown"}</h2>
             <p className="text-xs text-muted-foreground">Day {daysSince(selected.createdAt)} enrolled</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Badge className={`text-[10px] ${STATUS_COLOR[selected.status]}`}>{STATUS_LABELS[selected.status]}</Badge>
+            <Badge className={`text-[10px] ${STATUS_COLOR[selected.status] ?? "bg-muted text-muted-foreground border-border"}`}>{STATUS_LABELS[selected.status] ?? selected.status}</Badge>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -336,7 +336,8 @@ export default function Dashboard() {
   const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
   const isSalesExec = session?.user?.role === "sales_exec";
-  const isAdminView = isAdmin || isSalesExec;
+  const isExecutive = session?.user?.role === "executive";
+  const isAdminView = isAdmin || isSalesExec || isExecutive;
   const clientId = isAdminView ? "admin" : (session?.user?.clientId ?? null);
 
   const { data, update, reset, loading, refresh } = useSalesData(clientId);
@@ -345,6 +346,10 @@ export default function Dashboard() {
   const [tab, setTab] = useState("dashboard");
   const [masterSubTab, setMasterSubTab] = useState<"overview" | "onboarding" | "client-managed" | "staff">("overview");
   const [leadwellExpanded, setLeadwellExpanded] = useState(false);
+  type LeadwellStats = { cashMTD: number; cashYTD: number; dealsClosed: number; callsMade: number; demosSet: number; demosShowed: number; reps: { name: string; collections: number; sales: number; calls_made: number }[]; fetchedAt: string };
+  const [leadwellData, setLeadwellData] = useState<LeadwellStats | null>(null);
+  const [leadwellLoading, setLeadwellLoading] = useState(false);
+  const [leadwellError, setLeadwellError] = useState("");
   const [drillStaff, setDrillStaff] = useState<{ name: string; role: string } | null>(null);
   const [drillEntries, setDrillEntries] = useState<DailyEntry[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
@@ -478,6 +483,21 @@ export default function Dashboard() {
       setSyncingSource(null);
     }
   }
+
+  useEffect(() => {
+    if (!leadwellExpanded || !isAdminView) return;
+    const fetchLeadwell = () => {
+      setLeadwellLoading(prev => leadwellData === null ? true : prev);
+      setLeadwellError("");
+      fetch("/api/admin/leadwell-stats")
+        .then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e?.error ?? "Failed")))
+        .then((d: LeadwellStats) => { setLeadwellData(d); setLeadwellLoading(false); })
+        .catch((e: unknown) => { setLeadwellError(String(e)); setLeadwellLoading(false); });
+    };
+    fetchLeadwell();
+    const id = setInterval(fetchLeadwell, 30_000);
+    return () => clearInterval(id);
+  }, [leadwellExpanded, isAdminView]);
 
   async function syncKpiData() {
     setKpiSyncing(true);
@@ -1460,7 +1480,7 @@ export default function Dashboard() {
 
                   {/* Sub-navigation */}
                   <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit border border-border">
-                    {(["overview", "onboarding", "client-managed", "staff"] as const).map((v) => (
+                    {(["overview", "onboarding", ...(isAdmin || isSalesExec ? (["client-managed"] as const) : []), "staff"] as const).map((v) => (
                       <button
                         key={v}
                         onClick={() => setMasterSubTab(v)}
@@ -1644,6 +1664,7 @@ export default function Dashboard() {
                                   <option value="dm_setter">DM Setter</option>
                                   <option value="coach">Coach</option>
                                   <option value="sales_exec">Sales Manager</option>
+                                  <option value="executive">Executive</option>
                                 </select>
                               </div>
                               <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">
@@ -1709,15 +1730,15 @@ export default function Dashboard() {
                   {/* ── Onboarding ── */}
                   {masterSubTab === "onboarding" && <OnboardingTab />}
 
-                  {/* ── Client Managed ── */}
-                  {masterSubTab === "client-managed" && (
+                  {/* ── Client Managed (admin + sales_exec only) ── */}
+                  {masterSubTab === "client-managed" && (isAdmin || isSalesExec) && (
                     <div className="space-y-4">
                       <div>
                         <h2 className="text-base font-bold flex items-center gap-2">
                           <Users className="h-4 w-4 text-orange-400" />
                           Client Managed
                         </h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">Read-only view of managed client dashboards. Data is live — no edits can be made from here.</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Live read-only view of Leadwell client metrics. Refreshes every 30 s.</p>
                       </div>
 
                       {!leadwellExpanded ? (
@@ -1742,29 +1763,89 @@ export default function Dashboard() {
                           </CardContent>
                         </Card>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold">Leadwell</span>
                               <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Read Only</Badge>
-                              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Live</Badge>
+                              {leadwellData && (
+                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">
+                                  Live · {Math.round((Date.now() - new Date(leadwellData.fetchedAt).getTime()) / 60000)}m ago
+                                </Badge>
+                              )}
                             </div>
                             <Button size="sm" variant="ghost" onClick={() => setLeadwellExpanded(false)}
                               className="h-7 text-xs text-muted-foreground gap-1">
                               <X className="h-3.5 w-3.5" />Close
                             </Button>
                           </div>
-                          <div className="relative rounded-lg overflow-hidden border border-border">
-                            <iframe
-                              src="https://leadwell-dashboard.vercel.app"
-                              className="w-full h-[720px]"
-                              title="Leadwell Dashboard (read-only)"
-                            />
-                            <div className="absolute inset-0 z-10" />
-                          </div>
-                          <p className="text-[10px] text-muted-foreground text-center">
-                            Interaction disabled. Data updates live from GHL.
-                          </p>
+
+                          {leadwellLoading && !leadwellData && (
+                            <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-orange-500" /></div>
+                          )}
+
+                          {leadwellError && (
+                            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2.5 text-xs text-red-400">
+                              {leadwellError.includes("not configured")
+                                ? "LEADWELL_SUPABASE_URL and LEADWELL_SUPABASE_SERVICE_KEY env vars not set."
+                                : `Failed to load: ${leadwellError}`}
+                            </div>
+                          )}
+
+                          {leadwellData && (
+                            <>
+                              {/* KPI row */}
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                                {[
+                                  { label: "Cash MTD",    value: `$${leadwellData.cashMTD.toLocaleString()}`,   cls: "text-emerald-400" },
+                                  { label: "Cash YTD",    value: `$${leadwellData.cashYTD.toLocaleString()}`,   cls: "text-emerald-400" },
+                                  { label: "Deals Closed",value: String(leadwellData.dealsClosed),               cls: "text-orange-400"  },
+                                  { label: "Calls Made",  value: String(leadwellData.callsMade),                 cls: "text-foreground"  },
+                                  { label: "Demos Set",   value: String(leadwellData.demosSet),                  cls: "text-foreground"  },
+                                  { label: "Showed",      value: String(leadwellData.demosShowed),               cls: "text-foreground"  },
+                                ].map(({ label, value, cls }) => (
+                                  <Card key={label} className="bg-card border-border">
+                                    <CardContent className="px-3 py-3 text-center">
+                                      <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                                      <p className={`text-base font-bold ${cls}`}>{value}</p>
+                                    </CardContent>
+                                  </Card>
+                                ))}
+                              </div>
+
+                              {/* Rep breakdown */}
+                              {leadwellData.reps.length > 0 && (
+                                <Card className="bg-card border-border">
+                                  <CardHeader className="pb-2 pt-4 px-4">
+                                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Rep Breakdown — MTD</CardTitle>
+                                  </CardHeader>
+                                  <CardContent className="p-0">
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-xs min-w-[400px]">
+                                        <thead>
+                                          <tr className="text-left text-[10px] text-muted-foreground border-b border-border">
+                                            {["Rep","Cash","Deals","Calls"].map(h => (
+                                              <th key={h} className="pb-2 px-4 font-medium">{h}</th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {leadwellData.reps.map((rep) => (
+                                            <tr key={rep.name} className="border-b border-border/30 last:border-0 hover:bg-muted/20">
+                                              <td className="py-2 px-4 font-medium">{rep.name}</td>
+                                              <td className="py-2 px-4 text-emerald-400">${rep.collections.toLocaleString()}</td>
+                                              <td className="py-2 px-4 text-orange-400">{rep.sales}</td>
+                                              <td className="py-2 px-4">{rep.calls_made}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1915,47 +1996,50 @@ export default function Dashboard() {
                         <div className="space-y-3">
                           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Sales Reps</p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {SNS_STAFF.map(({ name, role }) => {
-                              const repData = r.leaderboard.find(rep =>
-                                rep.name.toLowerCase().includes(name.toLowerCase())
-                              );
-                              return (
-                                <Card key={name}
-                                  className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
-                                  onClick={() => {
-                                    setDrillStaff({ name, role });
-                                    setDrillLoading(true);
-                                    fetch(`/api/replog?target=${name.toLowerCase()}`)
-                                      .then(r => r.ok ? r.json() : [])
-                                      .then((entries: DailyEntry[]) => setDrillEntries(entries))
-                                      .catch(() => setDrillEntries([]))
-                                      .finally(() => setDrillLoading(false));
-                                  }}
-                                >
-                                  <CardContent className="px-4 py-4 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                      <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-                                        <span className="text-sm font-bold text-orange-400">{name.charAt(0)}</span>
+                            {staffList
+                              .filter(s => !["sales_exec", "admin", "owner", "executive"].includes(s.role ?? ""))
+                              .map((s) => {
+                                const repData = r.leaderboard.find(rep =>
+                                  rep.name.toLowerCase().includes(s.name.toLowerCase())
+                                );
+                                const roleLabel = s.role === "closer" ? "Closer" : s.role === "setter" ? "Setter" : s.role === "dm_setter" ? "DM Setter" : s.role === "coach" ? "Coach" : (s.role ?? "Staff");
+                                return (
+                                  <Card key={s.id}
+                                    className="bg-card border-border hover:border-orange-500/30 hover:-translate-y-0.5 transition-all cursor-pointer"
+                                    onClick={() => {
+                                      setDrillStaff({ name: s.name, role: roleLabel });
+                                      setDrillLoading(true);
+                                      fetch(`/api/replog?target=${s.id}`)
+                                        .then(r => r.ok ? r.json() : [])
+                                        .then((entries: DailyEntry[]) => setDrillEntries(entries))
+                                        .catch(() => setDrillEntries([]))
+                                        .finally(() => setDrillLoading(false));
+                                    }}
+                                  >
+                                    <CardContent className="px-4 py-4 space-y-3">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-full bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                                          <span className="text-sm font-bold text-orange-400">{s.name.charAt(0)}</span>
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-semibold">{s.name}</p>
+                                          <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                                        </div>
                                       </div>
-                                      <div>
-                                        <p className="text-sm font-semibold">{name}</p>
-                                        <p className="text-xs text-muted-foreground">{role}</p>
-                                      </div>
-                                    </div>
-                                    {repData ? (
-                                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                                        <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
-                                        <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
-                                        <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
-                                      </div>
-                                    ) : (
-                                      <p className="text-[10px] text-muted-foreground">No data yet — log numbers in My Numbers.</p>
-                                    )}
-                                    <p className="text-[10px] text-muted-foreground/50 text-center">Click to view detail →</p>
-                                  </CardContent>
-                                </Card>
-                              );
-                            })}
+                                      {repData ? (
+                                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                          <div><p className="text-muted-foreground">Calls</p><p className="font-bold text-foreground">{repData.callsMade}</p></div>
+                                          <div><p className="text-muted-foreground">Closed</p><p className="font-bold text-orange-400">{repData.dealsClosed}</p></div>
+                                          <div><p className="text-muted-foreground">Cash</p><p className="font-bold text-emerald-400">${repData.cashCollected.toLocaleString()}</p></div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-[10px] text-muted-foreground">No data yet — log numbers in My Numbers.</p>
+                                      )}
+                                      <p className="text-[10px] text-muted-foreground/50 text-center">Click to view detail →</p>
+                                    </CardContent>
+                                  </Card>
+                                );
+                              })}
                           </div>
                           <p className="text-[10px] text-muted-foreground">Data updates live as reps log their daily numbers.</p>
                         </div>

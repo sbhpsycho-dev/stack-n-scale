@@ -48,7 +48,7 @@ export const authOptions: NextAuthOptions = {
           if (staffRegistry) {
             const staff = staffRegistry.find((s) => verifyPassword(pw, s.password));
             if (staff) {
-              const role = staff.role === "sales_exec" ? "sales_exec" : "staff";
+              const role = staff.role === "sales_exec" ? "sales_exec" : staff.role === "executive" ? "executive" : "staff";
               return { id: staff.id, name: staff.name, role, clientId: staff.id, sheetId: staff.sheetId ?? null };
             }
           }

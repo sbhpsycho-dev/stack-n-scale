@@ -286,34 +286,11 @@ export function AdsTab() {
     ? parseFloat((summary.spendMTD / summary.totalLeads).toFixed(2))
     : 0;
 
-  // ── Empty / loading state ──────────────────────────────────────────────────
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={{ background: BG, minHeight: 300, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p style={{ color: "#555", fontSize: 13 }}>Loading scorecard…</p>
-      </div>
-    );
-  }
-  if (!ads.length) {
-    return (
-      <div style={{ background: BG, borderRadius: 12, padding: 40, textAlign: "center" }}>
-        <p style={{ color: "#555", fontSize: 13, margin: 0 }}>No ad data yet.</p>
-        <p style={{ color: "#444", fontSize: 11, marginTop: 6, marginBottom: 18 }}>
-          Pull live data from Meta + GHL to populate the scorecard.
-        </p>
-        <button
-          onClick={syncNow}
-          disabled={syncing}
-          style={{
-            background: syncing ? "rgba(249,115,22,0.1)" : "rgba(249,115,22,0.15)",
-            color: "#f97316", border: "1px solid rgba(249,115,22,0.3)",
-            borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
-            cursor: syncing ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-          }}
-        >
-          {syncing ? "Syncing…" : "Sync Ads Data"}
-        </button>
-        {syncMsg && <p style={{ color: "#888", fontSize: 11, marginTop: 10 }}>{syncMsg}</p>}
       </div>
     );
   }
@@ -386,10 +363,26 @@ export function AdsTab() {
             </span>
           </div>
 
-          {/* Ad cards grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
-            {sorted.map(ad => <AdCard key={ad.name} ad={ad} />)}
-          </div>
+          {/* Ad cards grid — or empty prompt */}
+          {sorted.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+              {sorted.map(ad => <AdCard key={ad.name} ad={ad} />)}
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "40px 20px" }}>
+              <p style={{ color: "#555", fontSize: 13, margin: "0 0 8px" }}>No Meta ads synced yet.</p>
+              <p style={{ color: "#444", fontSize: 11, marginBottom: 18 }}>Click Sync in the header to pull data from Meta + GHL.</p>
+              <button onClick={syncNow} disabled={syncing} style={{
+                background: syncing ? "rgba(249,115,22,0.08)" : "rgba(249,115,22,0.15)",
+                color: "#f97316", border: "1px solid rgba(249,115,22,0.3)",
+                borderRadius: 8, padding: "8px 20px", fontSize: 12, fontWeight: 600,
+                cursor: syncing ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              }}>
+                {syncing ? "Syncing…" : "Sync Ads Data"}
+              </button>
+              {syncMsg && <p style={{ color: "#888", fontSize: 11, marginTop: 10 }}>{syncMsg}</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -473,7 +466,13 @@ export function AdsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...ads].sort((a, b) => b.score - a.score).map((ad, i) => (
+                  {ads.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: "20px 12px", textAlign: "center", color: "#444", fontSize: 11 }}>
+                        No data — sync to populate
+                      </td>
+                    </tr>
+                  ) : [...ads].sort((a, b) => b.score - a.score).map((ad, i) => (
                     <tr key={ad.name} style={{ borderBottom: i < ads.length - 1 ? `1px solid ${BORDER}` : undefined }}>
                       <td style={{ padding: "8px 12px", color: "#c9d1d9", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad.name}</td>
                       <td style={{ padding: "8px 12px", textAlign: "right", fontFamily: "monospace", fontWeight: 700, color: verdictColor[ad.verdict] }}>{ad.score}</td>
@@ -488,6 +487,36 @@ export function AdsTab() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* ── GHL Pipeline ── */}
+          <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "14px 16px" }}>
+            <p style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 12, fontWeight: 600 }}>GHL Pipeline</p>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {[
+                { label: "Total Leads",    value: String(summary?.totalLeads       ?? 0) },
+                { label: "Qualified",      value: String(summary?.qualifiedLeads   ?? 0) },
+                { label: "Booked Calls",   value: String(summary?.bookedCalls      ?? 0) },
+                { label: "Total Spend",    value: fmt$(summary?.spendMTD           ?? 0) },
+                { label: "ROAS",           value: `${(summary?.roas ?? 0).toFixed(2)}x`  },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${BORDER}`, borderRadius: 8, padding: "10px 16px", minWidth: 90 }}>
+                  <p style={{ fontSize: 10, color: "#555", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</p>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: "#c9d1d9", margin: 0, fontFamily: "monospace" }}>{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Google Ads (placeholder) ── */}
+          <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "14px 16px", opacity: 0.6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <p style={{ fontSize: 10, color: "#555", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600, margin: 0 }}>Google Ads</p>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#555", background: "rgba(255,255,255,0.05)", border: `1px solid ${BORDER}`, borderRadius: 4, padding: "1px 6px", letterSpacing: "0.1em" }}>
+                COMING SOON
+              </span>
+            </div>
+            <p style={{ fontSize: 11, color: "#444", margin: 0 }}>Connect a Google Ads account to track spend, CPL, and lead quality alongside Meta.</p>
           </div>
 
         </div>

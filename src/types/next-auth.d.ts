@@ -7,13 +7,13 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      role: "admin" | "client" | "staff" | "biz_client" | "sales_exec";
+      role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" | "executive";
       clientId: string | null;
       sheetId?: string | null;
     };
   }
   interface User {
-    role: "admin" | "client" | "staff" | "biz_client" | "sales_exec";
+    role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" | "executive";
     clientId: string | null;
     sheetId?: string | null;
   }
@@ -21,7 +21,7 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role: "admin" | "client" | "staff" | "biz_client" | "sales_exec";
+    role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" | "executive";
     clientId: string | null;
     sheetId?: string | null;
   }

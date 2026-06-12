@@ -36,6 +36,34 @@ export async function GET(req: Request) {
     const mtdEntries  = allEntries.filter(e => e.date.startsWith(currentMonth));
     const ytdEntries  = allEntries.filter(e => e.date.startsWith(currentYear));
 
+    function toIsoWeek(dateStr: string): string {
+      const d = new Date(dateStr + "T00:00:00Z");
+      const day = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - day);
+      const jan1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const wk = Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + 1) / 7);
+      return `${d.getUTCFullYear()}-W${String(wk).padStart(2, "0")}`;
+    }
+
+    type WeekBucket = { callsMade: number; callsAnswered: number; demosSet: number; demosShowed: number; pitched: number; closed: number };
+    const weekMap = new Map<string, WeekBucket>();
+    for (const e of allEntries) {
+      const wk = toIsoWeek(e.date);
+      const cur = weekMap.get(wk) ?? { callsMade: 0, callsAnswered: 0, demosSet: 0, demosShowed: 0, pitched: 0, closed: 0 };
+      weekMap.set(wk, {
+        callsMade:     cur.callsMade     + (e.callsMade     ?? 0),
+        callsAnswered: cur.callsAnswered + (e.callsAnswered ?? 0),
+        demosSet:      cur.demosSet      + (e.demosSet      ?? 0),
+        demosShowed:   cur.demosShowed   + (e.demosShowed   ?? 0),
+        pitched:       cur.pitched       + (e.pitched       ?? 0),
+        closed:        cur.closed        + (e.closed        ?? 0),
+      });
+    }
+    const liveFunnelByWeek = Array.from(weekMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([week, v]) => ({ week, ...v }));
+
     const liveCash  = mtdEntries.reduce((s, e) => s + (e.cashCollected ?? 0), 0);
     const liveDeals = mtdEntries.reduce((s, e) => s + (e.closed       ?? 0), 0);
     const liveLeads = mtdEntries.reduce((s, e) => s + (e.demosSet     ?? 0), 0);
@@ -86,6 +114,10 @@ export async function GET(req: Request) {
         closeRatePct,
         showRatePct,
       } : raw.reps,
+      pipeline: {
+        ...(raw.pipeline ?? {}),
+        funnelByWeek: liveFunnelByWeek.length ? liveFunnelByWeek : (raw.pipeline?.funnelByWeek ?? []),
+      },
     });
   } catch {
     return Response.json(BLANK);
