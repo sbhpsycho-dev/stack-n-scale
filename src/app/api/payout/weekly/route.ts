@@ -208,7 +208,18 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   if (deals.length === 0 && needsReview.length === 0) {
-    return Response.json({ ok: true, message: "No closed deals this week", deals: 0 });
+    return Response.json({
+      ok: true,
+      message: "No closed deals this week",
+      deals: 0,
+      debug: {
+        weekStart: start,
+        weekEnd: end,
+        opportunitiesFetched: opportunities.length,
+        discoveredStageId: stageId,
+        discoveredFields: { setterFieldId, closerFieldId, collectedFieldId },
+      },
+    });
   }
 
   const result   = calculatePayout(deals, needsReview);
