@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import type { CoachingClient } from "@/lib/coaching-types";
 import { appendToSheet, getOrCreateDriveFolder, uploadTextToDrive } from "@/lib/drive";
@@ -117,41 +118,12 @@ export async function POST(req: Request) {
       await kv.set(clientKey, { ...existing, status: "onboarding_complete" });
     }
 
-    // Trigger Make.com Onboarding Form scenario (non-blocking)
-    triggerScenario("MAKE_ONBOARDING_FORM_WEBHOOK_URL", {
-      name,
-      email: email.toLowerCase(),
-      ghlContactId: existing?.ghlContactId ?? null,
-      submittedAt,
-      motivation,
-      whySNS,
-      goal30Days,
-      goal3Months,
-      goal6Months,
-      goal1Year,
-      biggestChallenge,
-      successIn90Days,
-      additionalNotes: additionalNotes ?? "",
-    }).catch(() => {});
-
-    // 3. Append to Google Sheets (non-blocking)
-    const sheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
-    if (sheetId) {
-      const san = sanitizeForSheets;
-      appendToSheet(sheetId, [
-        submittedAt, san(name), san(email), san(motivation), san(whySNS),
-        san(goal30Days), san(goal3Months), san(goal6Months), san(goal1Year),
-        san(biggestChallenge), san(successIn90Days), san(additionalNotes ?? ""),
-      ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
-    }
-
     const formData = {
       motivation, whySNS, goal30Days, goal3Months,
       goal6Months, goal1Year, biggestChallenge, successIn90Days,
       additionalNotes: additionalNotes ?? "",
     };
 
-    // Build base64 file of form content for Make.com Drive upload
     const formText = [
       `ONBOARDING FORM — ${name}`,
       `Email: ${email}`,
@@ -183,61 +155,92 @@ export async function POST(req: Request) {
     ].join("\n");
     const formFile = Buffer.from(formText, "utf8").toString("base64");
 
-    // 4. Create Drive folder + upload form doc.
-    let onboardingFolderId: string | undefined;
-    let notesFolderId: string | undefined;
+    // Snapshot values needed in after() — capture before returning
+    const capturedEmail = email.toLowerCase();
+    const capturedName = name;
+    const capturedExisting = existing;
+    const capturedGhlContactId = existing?.ghlContactId ?? null;
+    const capturedSheetId = process.env.GOOGLE_SHEETS_ONBOARDING_ID;
 
-    try {
-      const folder = await getOrCreateDriveFolder(clientKey, existing?.name || name);
-      onboardingFolderId = folder.onboardingFolderId;
-      notesFolderId      = folder.notesFolderId;
-      await uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+    // Return success immediately — all slow external calls go in after()
+    after(async () => {
+      // Make.com Onboarding Form scenario
+      triggerScenario("MAKE_ONBOARDING_FORM_WEBHOOK_URL", {
+        name: capturedName,
+        email: capturedEmail,
+        ghlContactId: capturedGhlContactId,
+        submittedAt,
+        motivation,
+        whySNS,
+        goal30Days,
+        goal3Months,
+        goal6Months,
+        goal1Year,
+        biggestChallenge,
+        successIn90Days,
+        additionalNotes: additionalNotes ?? "",
+      }).catch(() => {});
 
-      // Drive confirmed — trigger Drive docs Make.com scenario with real folder IDs
-      triggerDriveDocs("form_received", email, name, { onboardingFolderId, notesFolderId, formData, formFile })
-        .catch(e => console.error("Drive docs error:", e));
-    } catch (driveError) {
-      await kv.set(`sns:drive:failed:${email.toLowerCase()}`, {
-        error: driveError instanceof Error ? driveError.message : String(driveError),
-        failedAt: new Date().toISOString(),
-      });
-      sendErrorAlert("Drive folder/upload failed — onboarding form", driveError, { email, name }).catch(() => {});
-      // Drive failure logged; client still gets 200 — admin can retry via /api/onboarding/retry-upload
-    }
+      // Append to Google Sheets
+      if (capturedSheetId) {
+        const san = sanitizeForSheets;
+        appendToSheet(capturedSheetId, [
+          submittedAt, san(capturedName), san(capturedEmail), san(motivation), san(whySNS),
+          san(goal30Days), san(goal3Months), san(goal6Months), san(goal1Year),
+          san(biggestChallenge), san(successIn90Days), san(additionalNotes ?? ""),
+        ], "Onboarding Forms!A:L").catch(e => console.error("Sheets error:", e));
+      }
 
-    // Always send confirmation email regardless of Drive outcome
-    triggerEmail("form_received", email, name, { onboardingFolderId, notesFolderId, formData })
-      .catch(e => console.error("Form received email error:", e));
+      // Drive folder creation + doc upload
+      let onboardingFolderId: string | undefined;
+      let notesFolderId: string | undefined;
 
-    // 5. Discord — create private channel, welcome in #general, store channel for OAuth
-    let discordOAuthUrl: string | null = null;
-    if (BOT_TOKEN && GUILD_ID && CAELUM_ID) {
       try {
-        const channelSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const folder = await getOrCreateDriveFolder(clientKey, capturedExisting?.name || capturedName);
+        onboardingFolderId = folder.onboardingFolderId;
+        notesFolderId      = folder.notesFolderId;
+        await uploadTextToDrive(folder.onboardingFolderId, "Onboarding Form.txt", formText);
+
+        triggerDriveDocs("form_received", capturedEmail, capturedName, { onboardingFolderId, notesFolderId, formData, formFile })
+          .catch(e => console.error("Drive docs error:", e));
+      } catch (driveError) {
+        await kv.set(`sns:drive:failed:${capturedEmail}`, {
+          error: driveError instanceof Error ? driveError.message : String(driveError),
+          failedAt: new Date().toISOString(),
+        });
+        sendErrorAlert("Drive folder/upload failed — onboarding form", driveError, { email: capturedEmail, name: capturedName }).catch(() => {});
+      }
+
+      // Always send confirmation email
+      triggerEmail("form_received", capturedEmail, capturedName, { onboardingFolderId, notesFolderId, formData })
+        .catch(e => console.error("Form received email error:", e));
+
+      // Discord — create private channel
+      if (!BOT_TOKEN || !GUILD_ID || !CAELUM_ID) return;
+      try {
+        const channelSlug = capturedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
         const channelName = `client-${channelSlug}`;
         const botUser = await discordRequest("/users/@me", "GET") as { id: string };
 
-        // Create private 1-on-1 channel (admins + bot only; customer added after OAuth)
         const overwrites = [
-          { id: GUILD_ID,    type: 0, deny: "1024" },      // deny everyone
-          { id: CAELUM_ID,  type: 1, allow: "3072" },     // Caelum: VIEW + SEND
-          { id: botUser.id, type: 1, allow: "3072" },     // bot: VIEW + SEND
+          { id: GUILD_ID,    type: 0, deny: "1024" },
+          { id: CAELUM_ID,  type: 1, allow: "3072" },
+          { id: botUser.id, type: 1, allow: "3072" },
           ...(ADMIN2_ID ? [{ id: ADMIN2_ID, type: 1, allow: "3072" }] : []),
           ...(EVAN_ID   ? [{ id: EVAN_ID,   type: 1, allow: "3072" }] : []),
         ];
         const channel = await discordRequest(`/guilds/${GUILD_ID}/channels`, "POST", {
           name: channelName,
           type: 0,
-          topic: `Private channel for ${name}`,
+          topic: `Private channel for ${capturedName}`,
           permission_overwrites: overwrites,
         }) as { id: string };
 
-        // Post intake summary in private channel (fire-and-forget — saves ~1s off the 10s cap)
         const sd = sanitizeDiscord;
         discordRequest(`/channels/${channel.id}/messages`, "POST", {
           content: [
-            `📋 **New Client Intake — ${sd(name)}**`,
-            `📧 ${sd(email)}`,
+            `📋 **New Client Intake — ${sd(capturedName)}**`,
+            `📧 ${sd(capturedEmail)}`,
             ``,
             `**What motivated you to get started?**`, sd(motivation),
             ``,
@@ -258,17 +261,16 @@ export async function POST(req: Request) {
           ].join("\n"),
         }).catch(() => {});
 
-        // Welcome in #general student chat
         if (GENERAL_CH) {
           discordRequest(`/channels/${GENERAL_CH}/messages`, "POST", {
-            content: `👋 Welcome **${sanitizeDiscord(name)}** to Stack N Scale Enterprises! We're glad to have you. Check your email to connect your private channel.`,
+            content: `👋 Welcome **${sanitizeDiscord(capturedName)}** to Stack N Scale Enterprises! We're glad to have you. Check your email to connect your private channel.`,
           }).catch(() => {});
         }
 
-        // Build OAuth URL — use a random state token (not the email) to prevent email exposure
+        let discordOAuthUrl: string | null = null;
         if (CLIENT_ID) {
           const stateToken = crypto.randomUUID();
-          await kv.set(`sns:oauth:state:${stateToken}`, email.toLowerCase(), { ex: 60 * 60 * 24 * 7 }); // 7-day TTL
+          await kv.set(`sns:oauth:state:${stateToken}`, capturedEmail, { ex: 60 * 60 * 24 * 7 });
           const params = new URLSearchParams({
             client_id: CLIENT_ID,
             redirect_uri: `${APP_URL}/api/discord/connect`,
@@ -279,33 +281,32 @@ export async function POST(req: Request) {
           discordOAuthUrl = `https://discord.com/oauth2/authorize?${params}`;
         }
 
-        // Store channel ID + OAuth URL so id-submit can send the link after both forms complete
-        await kv.set(`sns:onboarding:discord:${email.toLowerCase()}`, {
+        await kv.set(`sns:onboarding:discord:${capturedEmail}`, {
           channelId: channel.id,
           channelName,
           discordOAuthUrl,
         });
 
-        // If ID was already submitted before the form, both sides are now done
-        const idRecord = await kv.get(`sns:onboarding:id-submit:${email.toLowerCase()}`);
+        // If ID was already submitted before the form, send Discord link
+        const idRecord = await kv.get(`sns:onboarding:id-submit:${capturedEmail}`);
         if (idRecord) {
           if (discordOAuthUrl) {
             const freshClient = await kv.get<CoachingClient>(clientKey);
-            triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
+            triggerEmail("discord_link", capturedEmail, capturedName, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
               .catch(e => console.error("Discord link email error (form-side):", e));
           }
           if (BOILER_ROOM_CH) {
             discordRequest(`/channels/${BOILER_ROOM_CH}/messages`, "POST", {
-              content: `**${sanitizeDiscord(name)}'s** forms are in and ready for next steps. ✅`,
+              content: `**${sanitizeDiscord(capturedName)}'s** forms are in and ready for next steps. ✅`,
             }).catch(e => console.error("Boiler Room notification error:", e));
           }
         }
       } catch (discordErr) {
         console.error("Discord error:", discordErr);
       }
-    }
+    });
 
-    return Response.json({ ok: true, discordOAuthUrl }, { headers: CORS_HEADERS });
+    return Response.json({ ok: true }, { headers: CORS_HEADERS });
   } catch (err) {
     console.error("Onboarding form error:", err);
     return Response.json({ ok: false, error: "Server error" }, { status: 500, headers: CORS_HEADERS });

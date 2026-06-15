@@ -20,8 +20,8 @@ function FileField({ label, name, onChange, accept = "image/*" }: {
       setFileError("Please upload an image file (JPG, PNG, HEIC, etc.).");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setFileError("File must be under 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      setFileError("File must be under 2MB. Tip: screenshots or compressed photos work great.");
       return;
     }
     setFileError(null);
@@ -215,7 +215,6 @@ export default function IdSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [discordOAuthUrl, setDiscordOAuthUrl] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -238,7 +237,6 @@ export default function IdSubmitPage() {
       const res = await fetch("/api/onboarding/id-submit", { method: "POST", body: fd });
       const json = await res.json();
       if (json.ok) {
-        setDiscordOAuthUrl(json.discordOAuthUrl ?? null);
         setDone(true);
       } else {
         setError(json.error ?? "Something went wrong. Please try again.");
@@ -272,26 +270,9 @@ export default function IdSubmitPage() {
             <p style={{ margin: "0 0 16px", fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
               Your identity verification documents have been received.
             </p>
-            <p style={{ margin: discordOAuthUrl ? "0 0 36px" : 0, fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
-              {discordOAuthUrl
-                ? "You're all set — connect your Discord below to access your private channel and the student community."
-                : "Our team will review your submission and be in touch shortly."}
+            <p style={{ margin: 0, fontSize: 15, color: "#a09070", lineHeight: 1.9 }}>
+              Our team will review your submission and be in touch shortly. If your onboarding form is also complete, you&apos;ll receive a Discord invite link via email.
             </p>
-            {discordOAuthUrl && (
-              <a
-                href={discordOAuthUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-block", background: gold, color: "#0a0a0a",
-                  textDecoration: "none", fontSize: 12, letterSpacing: "3px",
-                  textTransform: "uppercase", padding: "16px 40px", borderRadius: 2,
-                  fontWeight: 600,
-                }}
-              >
-                Connect Discord →
-              </a>
-            )}
           </div>
           <div style={{ padding: "24px 48px", borderTop: "1px solid #1e1e1e", textAlign: "center" }}>
             <p style={{ margin: 0, fontSize: 11, color: "#3a3a3a", letterSpacing: 1 }}>
