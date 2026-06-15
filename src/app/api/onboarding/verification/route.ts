@@ -29,9 +29,11 @@ export async function POST(req: Request) {
   const clientName = client.name as string;
 
   if (action === "approve") {
-    await updateContact(ghlContactId, {
-      customField: [{ id: "id_verification_status", value: "approved" }],
-    });
+    if (ghlContactId) {
+      await updateContact(ghlContactId, {
+        customField: [{ id: "id_verification_status", value: "approved" }],
+      }).catch(e => console.error("GHL updateContact (approve):", e));
+    }
     await kv.set(clientKey, { ...client, idVerification: "approved", status: "id_verified" });
     triggerEmail("approval", clientEmail, clientName).catch(console.error);
     triggerScenario("MAKE_VERIFICATION_WEBHOOK_URL", {
@@ -77,12 +79,14 @@ export async function POST(req: Request) {
   }
 
   if (action === "reject") {
-    await updateContact(ghlContactId, {
-      customField: [
-        { id: "id_verification_status", value: "rejected" },
-        { id: "id_rejection_reason", value: notes ?? "" },
-      ],
-    });
+    if (ghlContactId) {
+      await updateContact(ghlContactId, {
+        customField: [
+          { id: "id_verification_status", value: "rejected" },
+          { id: "id_rejection_reason", value: notes ?? "" },
+        ],
+      }).catch(e => console.error("GHL updateContact (reject):", e));
+    }
     await kv.set(clientKey, {
       ...client,
       idVerification: "rejected",
