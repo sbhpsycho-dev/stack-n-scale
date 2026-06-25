@@ -67,8 +67,14 @@ const optionalSchema = z.object({
   MAKE_NEW_LEAD_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
   MAKE_CHECKIN_ALERT_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
   MAKE_STAFF_ONBOARDING_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
+  MAKE_DISCORD_JOIN_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
   MAKE_API_KEY: z.string().optional(),
   MAKE_TEAM_ID: z.string().optional(),
+
+  // ── Whop payment automation (Supabase idempotency + payments log) ─────
+  SUPABASE_URL: z.string().url().optional().or(z.literal("")),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  DISCORD_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
 });
 
 type RequiredEnv = z.infer<typeof envSchema>;

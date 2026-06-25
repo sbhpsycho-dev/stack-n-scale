@@ -221,6 +221,9 @@ export async function POST(req: Request) {
             await kv.set(`sns:onboarding:discord:${email}`, { ...discordRecord, discordOAuthUrl });
             triggerEmail("discord_link", email, name, { discordOAuthUrl, driveFolderUrl: existing?.driveFolder?.url })
               .catch(e => console.error("Discord link email error:", e));
+            // Auto-send the "Join the Discord" email via Make (both forms now complete)
+            triggerScenario("MAKE_DISCORD_JOIN_WEBHOOK_URL", { email, name, discordUrl: discordOAuthUrl })
+              .catch(() => {});
             fetch(`${DISCORD_API}/channels/${discordRecord.channelId}/messages`, {
               method: "POST",
               headers: { Authorization: `Bot ${BOT_TOKEN}`, "Content-Type": "application/json" },

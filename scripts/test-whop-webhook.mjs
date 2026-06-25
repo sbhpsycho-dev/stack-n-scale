@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "crypto";
 
 const SECRET = "ws_65f808b6d055a874018d67fc42d53e080c12a9c61b546fec53af6c5c38b4d2a6";
-const URL    = "https://stack-n-scale.vercel.app/api/webhooks/whop";
+const URL    = process.env.WHOP_TEST_URL ?? "https://stack-n-scale.vercel.app/api/whop-webhook";
 
 const payload = {
   event: "payment_succeeded",

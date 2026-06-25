@@ -29,6 +29,37 @@ export async function triggerEmail(
   });
 }
 
+/**
+ * Like triggerEmail, but returns whether Make.com accepted the request (res.ok)
+ * and never throws. Use where per-email success/failure must be recorded
+ * (e.g. the Whop webhook's `payments` row + the "New Client" Discord embed).
+ */
+export async function triggerEmailTracked(
+  type: EmailType,
+  to: string,
+  name: string,
+  extras?: Parameters<typeof triggerEmail>[3]
+): Promise<boolean> {
+  const url = process.env.MAKE_EMAIL_WEBHOOK_URL;
+  if (!url) {
+    console.warn("MAKE_EMAIL_WEBHOOK_URL not set — skipping email");
+    return false;
+  }
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, to, name, ...extras }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) console.error(`[email] ${type} → Make.com returned ${res.status}`);
+    return res.ok;
+  } catch (e) {
+    console.error(`[email] ${type} send failed:`, e);
+    return false;
+  }
+}
+
 export async function triggerCampaign(
   email: string,
   name: string,

@@ -294,6 +294,9 @@ export async function POST(req: Request) {
             const freshClient = await kv.get<CoachingClient>(clientKey);
             triggerEmail("discord_link", capturedEmail, capturedName, { discordOAuthUrl, driveFolderUrl: freshClient?.driveFolder?.url })
               .catch(e => console.error("Discord link email error (form-side):", e));
+            // Auto-send the "Join the Discord" email via Make (both forms now complete)
+            triggerScenario("MAKE_DISCORD_JOIN_WEBHOOK_URL", { email: capturedEmail, name: capturedName, discordUrl: discordOAuthUrl })
+              .catch(() => {});
           }
           if (BOILER_ROOM_CH) {
             discordRequest(`/channels/${BOILER_ROOM_CH}/messages`, "POST", {

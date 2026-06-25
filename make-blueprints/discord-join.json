@@ -1,0 +1,73 @@
+{
+  "name": "SNS — Onboarding Complete → Join Discord Email",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "YOUR_MAKE_WEBHOOK_ID",
+        "maxResults": 1
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "restore": {
+          "parameters": {
+            "hook": { "label": "Onboarding Complete" }
+          }
+        },
+        "parameters": [
+          {
+            "name": "hook",
+            "type": "hook:gateway-respond",
+            "label": "Webhook",
+            "required": true
+          }
+        ],
+        "expect": [
+          { "name": "email",      "type": "text", "label": "Customer Email" },
+          { "name": "name",       "type": "text", "label": "Customer Name" },
+          { "name": "discordUrl", "type": "text", "label": "Discord Invite URL" }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "module": "google-email:ActionSendEmail",
+      "version": 1,
+      "parameters": { "__IMTCONN__": "YOUR_GMAIL_CONNECTION_ID" },
+      "mapper": {
+        "to": "{{1.email}}",
+        "subject": "You're In — Join the Stack N Scale Discord",
+        "content": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:48px 0;\"><tr><td align=\"center\"><table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#111111;border:1px solid #1e1e1e;border-radius:4px;\"><tr><td style=\"padding:40px 48px 32px;border-bottom:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;letter-spacing:4px;color:#c8902a;text-transform:uppercase;\">Stack N Scale Enterprises</p><h1 style=\"margin:0;font-size:28px;font-weight:400;color:#f5f0e8;letter-spacing:1px;\">You're In.</h1></td></tr><tr><td style=\"padding:40px 48px;\"><p style=\"margin:0 0 24px;font-size:16px;color:#c8b89a;line-height:1.8;\">Dear {{1.name}},</p><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">Your identity verification and onboarding form are both complete — everything's confirmed. The last step is joining your private Discord, where your coach, your community, and all of your resources live.</p><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:16px 0 36px;\"><a href=\"{{1.discordUrl}}\" style=\"display:inline-block;background:#c8902a;color:#0a0a0a;text-decoration:none;font-size:12px;letter-spacing:3px;text-transform:uppercase;padding:16px 40px;border-radius:2px;font-weight:600;\">Join the Discord</a></td></tr></table><p style=\"margin:0 0 20px;font-size:15px;color:#a09070;line-height:1.9;\">This link is personal to you — it connects your account and drops you straight into your private channel. Your coach will reach out there to book your kickoff call.</p><p style=\"margin:0 0 36px;font-size:15px;color:#a09070;line-height:1.9;\">If the button doesn't work, copy and paste this link into your browser:<br><span style=\"color:#6a5a40;font-size:13px;word-break:break-all;\">{{1.discordUrl}}</span></p><p style=\"margin:0 0 4px;font-size:14px;color:#c8b89a;\">Warm regards,</p><p style=\"margin:0;font-size:14px;color:#c8902a;letter-spacing:1px;\">Stack N Scale Enterprises</p></td></tr><tr><td style=\"padding:24px 48px;border-top:1px solid #1e1e1e;text-align:center;\"><p style=\"margin:0 0 8px;font-size:11px;color:#3a3a3a;letter-spacing:1px;\">STACK N SCALE ENTERPRISES &nbsp;&middot;&nbsp; PRIVATE MEMBER CORRESPONDENCE</p><a href=\"https://www.skool.com/stack-n-scale-enterprises-2384\" style=\"color:#c8902a;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Georgia',serif;\">stacknscale.com</a></td></tr></table></td></tr></table></body></html>",
+        "contentType": "html"
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 },
+        "restore": {
+          "parameters": {
+            "__IMTCONN__": { "label": "Gmail" }
+          }
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": true,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": { "orphans": [] },
+    "zone": "us2.make.com"
+  }
+}
