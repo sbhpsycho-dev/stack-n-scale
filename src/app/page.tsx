@@ -1896,6 +1896,7 @@ export default function Dashboard() {
                                   <option value="coach">Coach</option>
                                   <option value="sales_exec">Sales Manager</option>
                                   <option value="executive">Executive</option>
+                                  <option value="va">VA (no payout access)</option>
                                 </select>
                               </div>
                               <Button size="sm" disabled={staffSaving || !newStaffName.trim() || !newStaffPassword.trim()} onClick={addStaff} className="h-8 bg-orange-500 hover:bg-orange-600 text-white text-xs">

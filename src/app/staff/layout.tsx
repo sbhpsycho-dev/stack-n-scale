@@ -24,7 +24,7 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
   }
 
   const role = session?.user?.role;
-  if (status !== "authenticated" || (role !== "admin" && role !== "staff")) return null;
+  if (status !== "authenticated" || (role !== "admin" && role !== "staff" && role !== "va")) return null;
 
   return (
     <div className="min-h-screen bg-background">

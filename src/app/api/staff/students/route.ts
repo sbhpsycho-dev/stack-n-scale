@@ -5,7 +5,7 @@ import { type CoachingClient, type StudentProgress } from "@/lib/coaching-types"
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  const allowed = ["admin", "staff", "sales_exec", "executive"];
+  const allowed = ["admin", "staff", "sales_exec", "executive", "va"];
   if (!session || !allowed.includes(session.user.role)) {
     return new Response("Unauthorized", { status: 401 });
   }

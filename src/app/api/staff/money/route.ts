@@ -17,7 +17,8 @@ function getWeekStart(date: Date = new Date()): Date {
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== "admin" && session.user.role !== "staff")) {
+  // Admin-only — company financials: gross, net, take-home, per-role payout totals.
+  if (!session || session.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 

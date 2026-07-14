@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
@@ -109,6 +111,18 @@ function DealRow({ deal, onPaid }: { deal: Deal; onPaid: (id: string) => void })
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function PayoutsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const isAdmin = session?.user?.role === "admin";
+
+  // Admin-only page — shows every recipient's commissions and Evan's take-home.
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated" || (status === "authenticated" && !isAdmin)) {
+      router.replace("/staff");
+    }
+  }, [status, isAdmin, router]);
+
   const [weekId, setWeekId] = useState(getWeekId());
   const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);

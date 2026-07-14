@@ -18,7 +18,10 @@ function authGuard(session: Session | null) {
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (authGuard(session)) return new Response("Unauthorized", { status: 401 });
+  // Admin-only — every deal row carries its full payout split, incl. Evan's take-home.
+  if (!session || session.user.role !== "admin") {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const from      = searchParams.get("from");

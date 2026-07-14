@@ -48,7 +48,13 @@ export const authOptions: NextAuthOptions = {
           if (staffRegistry) {
             const staff = staffRegistry.find((s) => verifyPassword(pw, s.password));
             if (staff) {
-              const role = staff.role === "sales_exec" ? "sales_exec" : staff.role === "executive" ? "executive" : "staff";
+              // `va` is a low-privilege role: students/resources only, no payout data.
+              // Everything else still collapses to "staff".
+              const role =
+                staff.role === "sales_exec" ? "sales_exec" :
+                staff.role === "executive"  ? "executive"  :
+                staff.role === "va"         ? "va"         :
+                "staff";
               return { id: staff.id, name: staff.name, role, clientId: staff.id, sheetId: staff.sheetId ?? null };
             }
           }
@@ -80,7 +86,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role     = (user as { role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" }).role;
+        token.role     = (user as { role: "admin" | "client" | "staff" | "biz_client" | "sales_exec" | "executive" | "va" }).role;
         token.clientId = (user as { clientId: string | null }).clientId;
         token.sheetId  = (user as { sheetId?: string | null }).sheetId ?? null;
       }

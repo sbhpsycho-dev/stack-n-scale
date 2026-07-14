@@ -6,7 +6,8 @@ import { getWeekId, getWeekBounds } from "@/lib/payout-calc";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user.role !== "admin" && session.user.role !== "staff")) {
+  // Admin-only — exposes every recipient's commissions and Evan's take-home.
+  if (!session || session.user.role !== "admin") {
     return new Response("Unauthorized", { status: 401 });
   }
 

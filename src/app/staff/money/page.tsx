@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PayoutSplitChart } from "@/components/charts/payout-charts";
@@ -65,8 +66,18 @@ function CC({ title, children }: { title: string; children: React.ReactNode }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function MoneyPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const isAdmin = session?.user?.role === "admin";
+
+  // Admin-only page — company financials: gross, take-home, and every rep's commissions.
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated" || (status === "authenticated" && !isAdmin)) {
+      router.replace("/staff");
+    }
+  }, [status, isAdmin, router]);
+
   const [data, setData] = useState<MoneyData | null>(null);
   const [expenses, setExpenses] = useState<ExpenseSummary | null>(null);
   const [loading, setLoading] = useState(true);

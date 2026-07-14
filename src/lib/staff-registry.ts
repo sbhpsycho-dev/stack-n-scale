@@ -8,7 +8,7 @@ export type StaffMeta = {
   createdAt: string;
   sheetId?: string;     // personal Google Sheet ID
   discordId?: string;   // Discord user ID (e.g. "203848577349648384")
-  role?: "dm_setter" | "setter" | "closer" | "coach" | "admin" | "owner" | "sales_exec" | "executive";
+  role?: "dm_setter" | "setter" | "closer" | "coach" | "admin" | "owner" | "sales_exec" | "executive" | "va";
 };
 
 export const STAFF_KV_KEY = "sns-staff-registry";

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Plus, Download, X } from "lucide-react";
@@ -321,6 +323,18 @@ function exportCSV(deals: Deal[]) {
 }
 
 export default function DealsPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const isAdmin = session?.user?.role === "admin";
+
+  // Admin-only page — each deal row exposes the full payout split, incl. Evan's take-home.
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated" || (status === "authenticated" && !isAdmin)) {
+      router.replace("/staff");
+    }
+  }, [status, isAdmin, router]);
+
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
