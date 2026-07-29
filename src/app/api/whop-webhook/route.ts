@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { kv } from "@vercel/kv";
 import { randomUUID } from "crypto";
-import { createContact } from "@/lib/ghl";
+import { createContact, syncStudentOpportunitySafe } from "@/lib/ghl";
 import { triggerEmailTracked, triggerCampaign } from "@/lib/email";
 import { setupClientFolder } from "@/lib/drive";
 import type { CoachingClient } from "@/lib/coaching-types";
@@ -106,8 +106,10 @@ async function handleWhop(req: Request) {
 
   // Parse: name, email, amount, plan
   const paymentId   = payload.data?.id;
-  const amountCents = payload.data?.final_amount ?? 0;
-  const amount      = amountCents / 100;
+  // Whop sends `final_amount` in DOLLARS (e.g. 1500 = $1,500), not cents. Fall back to
+  // `amount` for payload shapes that use it (mirrors the refund/dispute handlers).
+  const amount      = payload.data?.final_amount ?? payload.data?.amount ?? 0;
+  const amountCents = Math.round(amount * 100);
   const user        = payload.data?.user;
   const email       = user?.email?.toLowerCase().trim();
   const rawName     = (user?.name ?? user?.username ?? "").trim();
@@ -289,25 +291,29 @@ async function processOnboarding(
   }
 
   // Record-only mode (called by the Make.com scenario, which sends emails + Discord itself):
-  // stop here so we don't double-notify the client. Deal/client/lead + payments row are persisted.
-  if (skipNotify) return;
+  // skip notifications so we don't double-notify the client. Deal/client/lead + payments row are
+  // persisted above, and the GHL opportunity sync below still runs (it's data, not a notification).
+  if (!skipNotify) {
+    // ── 4. Two emails (tracked) ──────────────────────────────────────────────────
+    const APP_URL = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
+    const idVerificationUrl = `${APP_URL}/onboarding/id-submit?email=${encodeURIComponent(email)}&name=${encodeURIComponent(rawName)}`;
+    const driveFolderUrl = existing?.driveFolder?.url;
 
-  // ── 4. Two emails (tracked) ──────────────────────────────────────────────────
-  const APP_URL = (process.env.NEXTAUTH_URL ?? "https://stack-n-scale.vercel.app").replace(/\/$/, "");
-  const idVerificationUrl = `${APP_URL}/onboarding/id-submit?email=${encodeURIComponent(email)}&name=${encodeURIComponent(rawName)}`;
-  const driveFolderUrl = existing?.driveFolder?.url;
+    // a) ID Verification email (onboarding forms live in the Make.com template)
+    flags.idEmailOk = await triggerEmailTracked("id_verification_request", email, rawName, { idVerificationUrl });
+    // b) Welcome email (school/login link via Skool)
+    flags.welcomeEmailOk = await triggerEmailTracked("welcome", email, rawName, { skoolLink: SKOOL_LINK, driveFolderUrl });
+    triggerCampaign(email, rawName, amountCents, "whop").catch(e => console.error("Campaign trigger error:", e));
 
-  // a) ID Verification email (onboarding forms live in the Make.com template)
-  flags.idEmailOk = await triggerEmailTracked("id_verification_request", email, rawName, { idVerificationUrl });
-  // b) Welcome email (school/login link via Skool)
-  flags.welcomeEmailOk = await triggerEmailTracked("welcome", email, rawName, { skoolLink: SKOOL_LINK, driveFolderUrl });
-  triggerCampaign(email, rawName, amountCents, "whop").catch(e => console.error("Campaign trigger error:", e));
+    // ── 5. "New Client" Discord embed → DISCORD_WEBHOOK_URL ──────────────────────
+    flags.discordOk = await postNewClientEmbed({ rawName, email, tier, amount, planName, ...flags });
 
-  // ── 5. "New Client" Discord embed → DISCORD_WEBHOOK_URL ──────────────────────
-  flags.discordOk = await postNewClientEmbed({ rawName, email, tier, amount, planName, ...flags });
+    // Preserved legacy notifications (payment / deal-closed / new-client channels).
+    await postLegacyNotifications(rawName, email, amount);
+  }
 
-  // Preserved legacy notifications (payment / deal-closed / new-client channels).
-  await postLegacyNotifications(rawName, email, amount);
+  // ── 6. GHL Student-pipeline opportunity sync (runs in both notify modes) ──────
+  await syncStudentOpportunitySafe({ email, rawName, amountCents, phone: undefined, source: "whop" });
 }
 
 /** Builds + posts the brief's "New Client" embed. VIP is visually distinct. */

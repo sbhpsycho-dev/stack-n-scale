@@ -8,6 +8,6 @@ export default withAuth({
 // (CRON_SECRET, webhook signatures, CORS, public onboarding forms)
 export const config = {
   matcher: [
-    "/((?!api/auth|api/data|api/webhooks|api/cron|api/agents|api/payout|api/onboarding/form|api/onboarding/id-submit|login|onboarding|_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico|webp|jpg|jpeg)$).*)",
+    "/((?!api/auth|api/data|api/webhooks|api/whop-webhook|api/cron|api/agents|api/payout|api/onboarding/form|api/onboarding/id-submit|login|onboarding|_next/static|_next/image|favicon.ico|.*\\.(?:png|svg|ico|webp|jpg|jpeg)$).*)",
   ],
 };
